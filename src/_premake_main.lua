@@ -49,7 +49,9 @@
 	function _ErrorHandler ( errobj )
 		print("Error:")
     	--for k,v in pairs(_G) do print("GLOBAL:" , k,v) end
+    	print("Errobj : " .. type(errobj) .. " length : " .. #errobj )
     	print(debug.traceback(errobj,2))
+    	print(debug.traceback())
     	return false
 	end
 	
