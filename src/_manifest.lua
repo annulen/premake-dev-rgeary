@@ -82,4 +82,8 @@
 		
 		-- Clean action
 		"actions/clean/_clean.lua",
+
+		-- Ninja build action
+		"actions/ninja/_ninja.lua",
+		"actions/ninja/ninja_solution.lua",
 	}

@@ -685,7 +685,15 @@
 		scope = "config",
 		kind = "string-list",
 		tokens = true,
-	}		
+	}
+	
+	-- custom rule to create settings only for ninja build files
+	api.register {
+	 	name = "rawninja",
+	 	scope = "config",
+	 	kind = "string-list",
+	 	tokens = true,
+	} 		
 
 	api.register {
 		name = "objdir",
