@@ -19,7 +19,7 @@
 
 	local function injectplatform(platform)
 		if not platform then return true end
-		platform = premake.checkvalue(platform, premake.fields.platforms.allowed)
+		platform = premake.api.checkvalue(platform, premake.fields.platforms.allowed)
 		
 		for sln in premake.solution.each() do
 			local platforms = sln.platforms or { }
@@ -166,4 +166,3 @@
 		return 0
 
 	end
-	
