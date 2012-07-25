@@ -265,6 +265,13 @@ int process_option(lua_State* L, const char* arg)
 		scripts_path = value;
 	}
 
+	/* Set verbose debug error messages */
+	int verboseErrors = (strcmp(key, "debug") == 0);
+	if( verboseErrors ) {
+		lua_pushboolean(L, verboseErrors);
+		lua_setglobal(L, "_VERBOSE_ERRORS");
+	}
+
 	return OKAY;
 }
 

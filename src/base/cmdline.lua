@@ -89,3 +89,8 @@
 		description = "Display version information"
 	}
 	
+	newoption
+	{
+		trigger		= "debug",
+		description = "Display full stack trace for errors"
+	}
