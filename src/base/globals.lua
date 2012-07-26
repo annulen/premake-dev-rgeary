@@ -181,3 +181,28 @@
 		return c
 	end
 	
+--
+-- Map/Select function. Performs fn(key,value) on each element in a table, returns as a list 
+--
+
+	function map(table,fn)
+	  rv = {}
+	  for key,value in pairs(table) do
+	  	table.insert(rv, fn(key,value))
+	  end
+	  return rv
+	end
+
+--
+-- Map/Select function. Performs fn(value) for each numeric keyed element in a table, returns as a list 
+--
+
+	function imap(table,fn)
+	  rv = {}
+	  for _,value in ipairs(table) do
+	  	table.insert(rv, fn(value))
+	  end
+	  return rv
+	end
+
+	
