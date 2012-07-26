@@ -168,3 +168,16 @@
 		return builtin_type(t)
 	end
 	
+	
+--
+-- Count the number of elements in an associative table
+--
+
+	function count(table)
+		local c = 0
+		for _,_ in pairs(table) do
+			c = c + 1
+		end
+		return c
+	end
+	
