@@ -624,6 +624,24 @@ void luaG_errormsg (lua_State *L) {
     incr_top(L);
     luaD_call(L, L->top - 2, 1);  /* call it */
   }
+  else
+  {
+    lua_getglobal(L, "_VERBOSE_ERRORS");
+    int verboseErrors = lua_toboolean(L, -1);
+    lua_pop(L, 1);
+    if( verboseErrors )
+    {
+      lua_getfield(L, LUA_GLOBALSINDEX, "_ErrorHandler");
+      if (!lua_isfunction(L, -1)) {
+        lua_pop(L, 1);
+      }
+      else {
+        lua_pushvalue(L, 1);
+        lua_call(L, 1, 1);
+        lua_pop(L, 1);
+      }
+    }
+  }
   luaD_throw(L, LUA_ERRRUN);
 }
 
