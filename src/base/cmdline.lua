@@ -94,3 +94,9 @@
 		trigger		= "debug",
 		description = "Display full stack trace for errors"
 	}
+	
+	newoption
+	{
+		trigger		= "debugger",
+		description = "Attach to the Koneki DBGp debugger"
+	}

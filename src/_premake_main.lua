@@ -70,6 +70,17 @@
 --
 
 	function _premake_main(scriptpath)
+
+		if(_OPTIONS["debugger"] ) then
+			local debuggerIP = _OPTIONS["debugger"]
+			if(debuggerIP=='') then debuggerIP = '127.0.0.1'; end
+			print("Waiting to connect to debugger on " .. tostring(debuggerIP) .. ':10000')
+			print('LUA_PATH = ' .. (os.getenv('LUA_PATH') or ""))
+			print('LUA_CPATH = ' .. (os.getenv('LUA_CPATH') or ""))
+			local connection = require("debugger")
+			connection(debuggerIP,10000)
+			print('Connected to debugger')
+		end
 		
 		-- if running off the disk (in debug mode), load everything 
 		-- listed in _manifest.lua; the list divisions make sure
