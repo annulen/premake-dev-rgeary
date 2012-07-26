@@ -45,13 +45,23 @@
 		return true
 	end
 	
-
+	local _HandlingError = 0
 	function _ErrorHandler ( errobj )
-		print("Error:")
-    	--for k,v in pairs(_G) do print("GLOBAL:" , k,v) end
-    	print("Errobj : " .. type(errobj) .. " length : " .. #errobj )
-    	print(debug.traceback(errobj,2))
-    	print(debug.traceback())
+		if( _HandlingError == 0 ) then
+		 	_HandlingError = 1
+		    local errStr = tostring(errobj) or ""
+		    if( type(errobj)=='table' ) then
+		      errStr = "Table: {" .. table.concat(errobj, ',') .. "}"
+		    end
+			print("Error: \"" .. errStr .. "\"")
+	    	--for k,v in pairs(_G) do print("GLOBAL:" , k,v) end
+	    	if( type(errobj)=='thread' ) then
+	    		print(debug.traceback(errobj))
+	    	else
+	    		print(debug.traceback('',2))
+	    	end
+	    	_HandlingError = 0
+	    end
     	return false
 	end
 	
