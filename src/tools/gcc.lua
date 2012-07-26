@@ -9,6 +9,8 @@
 	local project = premake5.project
 	local config = premake5.config
 	
+-- Register toolset
+    premake.Toolset.allToolsets["gcc"] = gcc
 
 --
 -- GCC flags for specific systems and architectures.

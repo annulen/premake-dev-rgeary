@@ -22,6 +22,7 @@
 		"base/project.lua",
 		"base/config.lua",
 		"base/bake.lua",
+		"base/toolset.lua",
 		"base/api.lua",
 		"base/cmdline.lua",
 		"base/validate.lua",

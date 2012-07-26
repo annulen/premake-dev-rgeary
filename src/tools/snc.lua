@@ -9,6 +9,8 @@
 	local gcc = premake.tools.gcc
 	local config = premake5.config
 	
+-- Register toolset
+    premake.Toolset.allToolsets["snc"] = snc
 
 --
 -- SNC flags for specific systems and architectures.

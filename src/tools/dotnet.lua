@@ -8,6 +8,8 @@
 	premake.dotnet = { }
 	premake.dotnet.namestyle = "windows"
 	
+-- Register toolset
+    premake.Toolset.allToolsets["dotnet"] = premake.dotnet
 
 --
 -- Translation of Premake flags into CSC flags

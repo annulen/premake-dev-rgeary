@@ -809,9 +809,7 @@
 		name = "toolset",
 		scope = "config",
 		kind = "string",
-		allowed = {
-			"gcc"
-		},
+		allowed = premake.Toolset.getToolsetNames()
 	}
 
 	api.register {
