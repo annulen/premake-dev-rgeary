@@ -1,6 +1,8 @@
 syntax: glob
 
 .DS_Store
+.buildpath
+.cproject
 
 build
 bin
