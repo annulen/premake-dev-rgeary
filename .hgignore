@@ -3,6 +3,7 @@ syntax: glob
 .DS_Store
 .buildpath
 .cproject
+.orig
 
 build
 bin
