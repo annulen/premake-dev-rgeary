@@ -49,7 +49,6 @@
 		return result
 	end
 
-
 --
 -- Flattens out the build settings for a particular build configuration and
 -- platform pairing, and returns the result.
@@ -77,10 +76,15 @@
 		-- use that to further filter the results
 		local cfg = oven.bake(prj, prj.solution, filter, "system")
 		filter.system = cfg.system or system or premake.action.current().os or os.get()
-				
+		system = system or cfg.system
+		if architecture == nil and os.is64bit() then
+			architecture = 'x86_64'
+		end
+		
 		cfg = oven.bake(prj, prj.solution, filter)
 		cfg.solution = prj.solution
 		cfg.project = prj
+		cfg.system = cfg.system or system
 		cfg.architecture = cfg.architecture or architecture
 		
 		-- fill in any calculated values
@@ -88,7 +92,6 @@
 
 		return cfg
 	end
-
 
 --
 -- Builds a list of build configuration/platform pairs for a project,

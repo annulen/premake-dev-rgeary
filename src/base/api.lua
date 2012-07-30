@@ -1,3 +1,4 @@
+
 --
 -- api.lua
 -- Implementation of the solution, project, and configuration APIs.
@@ -189,17 +190,25 @@
 			end
 		end 
 			
+		-- If allowed it set to nil, allow everything. 
+		-- But if allowed is a function returning nil, it's a failure
 		if allowed then
+			local allowedValues = allowed
 			if type(allowed) == "function" then
-				return allowed(value)
-			else
-				for _,v in ipairs(allowed) do
+				allowedValues = allowed(value)
+			end
+			if type(allowedValues) == "string" then
+				allowedValues = { allowedValues }
+			end
+			if type(allowedValues) == "table" then
+				for _,v in ipairs(allowedValues) do
 					if value:lower() == v:lower() then
 						return v
 					end
 				end
-				return nil, "invalid value '" .. value .. "'"
 			end
+			return nil, "invalid value '" .. value .. "'"
+
 		else
 			return value
 		end
@@ -512,6 +521,7 @@
 		scope = "config",
 		kind  = "string-list",
 		allowed = {
+			"AddPhonyHeaderDependency",		 -- for Makefiles
 			"DebugEnvsDontMerge",
 			"DebugEnvsInherit",
 			"EnableSSE",
@@ -809,7 +819,8 @@
 		name = "toolset",
 		scope = "config",
 		kind = "string",
-		allowed = premake.Toolset.getToolsetNames()
+		-- set allowed to a function so it will be evaluated later when all the toolsets have been loaded
+		allowed = function() return getSubTableNames(premake.tools); end 
 	}
 
 	api.register {

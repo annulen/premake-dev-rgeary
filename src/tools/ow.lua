@@ -7,9 +7,6 @@
 	premake.ow = { }
 	premake.ow.namestyle = "windows"
 	
--- Register toolset
-    premake.Toolset.allToolsets["ow"] = premake.ow
-	
 --
 -- Set default tools
 --

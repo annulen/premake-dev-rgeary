@@ -14,6 +14,9 @@
 	premake5 = { }
 	premake.tools = { }
 
+-- Top level namespace for abstract base class definitions 
+	premake.abstract = { }
+
 	
 -- The list of supported platforms; also update list in cmdline.lua
 
@@ -173,9 +176,9 @@
 -- Count the number of elements in an associative table
 --
 
-	function count(table)
+	function count(t)
 		local c = 0
-		for _,_ in pairs(table) do
+		for _,_ in pairs(t) do
 			c = c + 1
 		end
 		return c
@@ -185,9 +188,9 @@
 -- Map/Select function. Performs fn(key,value) on each element in a table, returns as a list 
 --
 
-	function map(table,fn)
+	function map(t,fn)
 	  rv = {}
-	  for key,value in pairs(table) do
+	  for key,value in pairs(t) do
 	  	table.insert(rv, fn(key,value))
 	  end
 	  return rv
@@ -197,12 +200,79 @@
 -- Map/Select function. Performs fn(value) for each numeric keyed element in a table, returns as a list 
 --
 
-	function imap(table,fn)
+	function imap(t,fn)
 	  rv = {}
-	  for _,value in ipairs(table) do
+	  for _,value in ipairs(t) do
 	  	table.insert(rv, fn(value))
 	  end
 	  return rv
 	end
 
+--
+-- Returns the keys in a table. Or the sequence numbers if it's a sequence
+--
+  
+	function getKeys(t)
+		rv = {}
+		for k,_ in pairs(t) do
+			table.insert(rv, k)
+		end
+		return rv
+	end
 	
+
+--
+-- Returns the values in a table or sequence
+--
+  
+	function getValues(t)
+		rv = {}
+		for _,v in pairs(t) do
+			table.insert(rv, v)
+		end
+		return rv
+	end
+	
+--
+-- Returns the names of all the functions in the table
+--
+
+	function getFunctionNames(t)
+		rv = {}
+		for k,v in pairs(t) do
+			if( type(v) == "function" ) then
+				table.insert(rv, k)
+			end
+		end
+		return rv
+	end
+	
+--
+-- Returns the names of all the tables in the table
+--
+
+	function getSubTableNames(t)
+		rv = {}
+		for k,v in pairs(t) do
+			local typeV = builtin_type(v)
+			if( typeV == "table" ) then
+				table.insert(rv, k)
+			end
+		end
+		return rv
+	end
+		
+--
+-- 'Inherit' functions & members from a base table. Performs a shallow copy of a table.
+--
+	function inheritFrom(t, derivedClassName)
+		rv = {}
+		for k,v in pairs(t) do
+			rv[k] = v
+		end
+		-- Optional, but useful for error messages
+		if( derivedClassName ) then
+			setmetatable( rv, { __type = derivedClassName } ) 
+		end
+		return rv
+	end

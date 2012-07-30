@@ -5,10 +5,7 @@
 --
 
 	
-	premake.msc = { }
-	local msc = premake.msc
+	premake.tools.msc = { }
+	local msc = premake.tools.msc
 	msc.namestyle = "windows"
-
--- Register toolset
-    premake.Toolset.allToolsets["msc"] = msc
 	
