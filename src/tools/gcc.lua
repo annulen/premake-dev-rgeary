@@ -88,6 +88,18 @@
 		NoExceptions   = "-fno-exceptions",
 		NoRTTI         = "-fno-rtti",
 	}
+	
+--
+-- Get CFlags
+--
+	function gcc:getcflags(cfg)
+		local cflags = self.super.getcflags(self, cfg)
+		 
+		if cfg.system ~= premake.WINDOWS and cfg.kind == premake.SHAREDLIB then
+			table.insert(cflags, "-fPIC")
+		end
+		return cflags
+	end
 
 --
 -- Decorate defines for the GCC command line.

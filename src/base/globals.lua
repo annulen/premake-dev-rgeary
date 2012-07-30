@@ -270,6 +270,9 @@
 		for k,v in pairs(t) do
 			rv[k] = v
 		end
+		if rv.super == nil then
+			rv.super = t
+		end
 		-- Optional, but useful for error messages
 		if( derivedClassName ) then
 			setmetatable( rv, { __type = derivedClassName } ) 

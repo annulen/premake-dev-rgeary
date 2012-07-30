@@ -83,11 +83,6 @@
 		cfgflags = table.translate(cfg.flags, self.cflags)
 		cflags = table.join(cflags, cfgflags)
 
-		-- 
-		if cfg.system ~= premake.WINDOWS and cfg.kind == premake.SHAREDLIB then
-			table.insert(cflags, "-fPIC")
-		end
-
 		return cflags
 	end	
 	

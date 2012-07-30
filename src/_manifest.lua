@@ -41,6 +41,7 @@
 		"tools/msc.lua",
 		"tools/ow.lua",
 		"tools/snc.lua",
+		"tools/icc.lua",
 
 		-- CodeBlocks action
 		"actions/codeblocks/_codeblocks.lua",
