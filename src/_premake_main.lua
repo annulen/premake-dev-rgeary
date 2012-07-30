@@ -60,6 +60,7 @@
 	    	else
 	    		print(debug.traceback('',2))
 	    	end
+	    	print('')
 	    	_HandlingError = 0
 	    end
     	return false
@@ -75,10 +76,8 @@
 			local debuggerIP = _OPTIONS["debugger"]
 			if(debuggerIP=='') then debuggerIP = '127.0.0.1'; end
 			print("Waiting to connect to debugger on " .. tostring(debuggerIP) .. ':10000')
-			print('LUA_PATH = ' .. (os.getenv('LUA_PATH') or ""))
-			print('LUA_CPATH = ' .. (os.getenv('LUA_CPATH') or ""))
 			local connection = require("debugger")
-			connection(debuggerIP,10000)
+			connection(debuggerIP,10000, nil, 100)
 			print('Connected to debugger')
 		end
 		
