@@ -84,4 +84,8 @@
 		
 		-- Clean action
 		"actions/clean/_clean.lua",
+		
+		-- Print action
+		"actions/print/_print.lua",
+		
 	}
