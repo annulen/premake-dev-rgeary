@@ -91,7 +91,7 @@
 			end
 			
 			-- does it need a value?
-			if (opt.value and value == "") then
+			if (opt.value and string.sub(opt.value,1,1) ~= '[' and value == "") then
 				return false, "no value specified for option '" .. key .. "'"
 			end
 			
