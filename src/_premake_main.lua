@@ -51,7 +51,9 @@
 		 	_HandlingError = 1
 		    local errStr = tostring(errobj) or ""
 		    if( type(errobj)=='table' ) then
-		      errStr = "Table: {" .. table.concat(errobj, ',') .. "}"
+		      errStr = "Table: {" ..
+		      	table.concat(map(errobj, function (k,v) return '[' .. tostring(k) .. '] = ' .. tostring(v); end)
+		      	, ',') .. "}"
 		    end
 			print("Error: \"" .. errStr .. "\"")
 	    	--for k,v in pairs(_G) do print("GLOBAL:" , k,v) end
@@ -72,13 +74,22 @@
 
 	function _premake_main(scriptpath)
 
-		if(_OPTIONS["debugger"] ) then
-			local debuggerIP = _OPTIONS["debugger"]
+		if(_OPTIONS["attach"] ) then
+			local debuggerIP = _OPTIONS["attach"]
 			if(debuggerIP=='') then debuggerIP = '127.0.0.1'; end
 			print("Waiting to connect to debugger on " .. tostring(debuggerIP) .. ':10000')
 			local connection = require("debugger")
 			connection(debuggerIP,10000, nil, 100)
 			print('Connected to debugger')
+		elseif(_OPTIONS["tryattach"] ) then
+			local debuggerIP = _OPTIONS["tryattach"]
+			if(debuggerIP=='') then debuggerIP = '127.0.0.1'; end
+			--print("Listening for debugger on " .. tostring(debuggerIP) .. ':10000')
+			local connection = require("debugger")
+			local ok, err = xpcall(function() connection(debuggerIP,10000, nil, 0); end, function(errobj) end)
+			if ok then
+				print('Connected to debugger')
+			end
 		end
 		
 		-- if running off the disk (in debug mode), load everything 
@@ -92,7 +103,19 @@
 			end
 		end
 		
-
+		-- Expose flags as root level objects, so you can write "flags { Symbols }"
+		local field = premake.fields["flags"]
+		for _,v in pairs(field.allowed) do
+			_G[v] = v
+		end
+		
+		-- Search for a system-level premake4-system.lua file
+		local systemScript = os.getenv("PREMAKE_PATH")
+		local systemScriptFullpath = systemScript .. '/' .. "premake-" .. _PREMAKE_VERSION .. '-system.lua'
+		if( os.isfile(systemScriptFullpath) ) then
+			dofile(systemScriptFullpath)
+		end 
+		
 		-- Set up the environment for the chosen action early, so side-effects
 		-- can be picked up by the scripts.
 

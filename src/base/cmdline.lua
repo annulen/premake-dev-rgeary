@@ -97,6 +97,14 @@
 	
 	newoption
 	{
-		trigger		= "debugger",
-		description = "Attach to the Koneki DBGp debugger"
+		trigger		= "attach",
+		value		= "[ip]",
+		description = "Attach to the Eclipse Koneki DBGp debugger. IP address optional."
 	}
+
+	newoption
+	{
+		trigger		= "tryattach",
+		value		= "[ip]",
+		description = "Try attaching to the debugger, but don't wait. IP address optional."
+	}	
