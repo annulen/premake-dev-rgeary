@@ -16,6 +16,9 @@
 
 -- Top level namespace for abstract base class definitions 
 	premake.abstract = { }
+	
+-- Top level namespace for actions
+	premake.actions = { }
 
 	
 -- The list of supported platforms; also update list in cmdline.lua
@@ -66,7 +69,6 @@
 			namestyle       = "windows",
 		},
 	}
-
 
 --
 -- A replacement for Lua's built-in dofile() function, this one sets the
@@ -160,7 +162,7 @@
 -- "__type" field from the metatable.
 --
 
-	local builtin_type = type	
+	builtin_type = type	
 	function type(t)
 		local mt = getmetatable(t)
 		if (mt) then
@@ -178,8 +180,10 @@
 
 	function count(t)
 		local c = 0
-		for _,_ in pairs(t) do
-			c = c + 1
+		if t then
+			for _,_ in pairs(t) do
+				c = c + 1
+			end
 		end
 		return c
 	end
@@ -190,8 +194,10 @@
 
 	function map(t,fn)
 	  rv = {}
-	  for key,value in pairs(t) do
-	  	table.insert(rv, fn(key,value))
+	  if t then
+		  for key,value in pairs(t) do
+		  	table.insert(rv, fn(key,value))
+		  end
 	  end
 	  return rv
 	end
@@ -202,8 +208,10 @@
 
 	function imap(t,fn)
 	  rv = {}
-	  for _,value in ipairs(t) do
-	  	table.insert(rv, fn(value))
+	  if( t ) then
+		  for _,value in ipairs(t) do
+		  	table.insert(rv, fn(value))
+		  end
 	  end
 	  return rv
 	end
@@ -214,8 +222,10 @@
   
 	function getKeys(t)
 		rv = {}
-		for k,_ in pairs(t) do
-			table.insert(rv, k)
+		if t then
+			for k,_ in pairs(t) do
+				table.insert(rv, k)
+			end
 		end
 		return rv
 	end
@@ -227,21 +237,38 @@
   
 	function getValues(t)
 		rv = {}
-		for _,v in pairs(t) do
-			table.insert(rv, v)
+		if t then
+			for _,v in pairs(t) do
+				table.insert(rv, v)
+			end
 		end
 		return rv
 	end
 	
+--
+-- Returns the values for integer keyed entries in a table
+--
+  
+	function getIValues(t)
+		rv = {}
+		if t then
+			for _,v in ipairs(t) do
+				table.insert(rv, v)
+			end
+		end
+		return rv
+	end
 --
 -- Returns the names of all the functions in the table
 --
 
 	function getFunctionNames(t)
 		rv = {}
-		for k,v in pairs(t) do
-			if( type(v) == "function" ) then
-				table.insert(rv, k)
+		if t then
+			for k,v in pairs(t) do
+				if( type(v) == "function" ) then
+					table.insert(rv, k)
+				end
 			end
 		end
 		return rv
@@ -253,11 +280,32 @@
 
 	function getSubTableNames(t)
 		rv = {}
-		for k,v in pairs(t) do
-			local typeV = builtin_type(v)
-			if( typeV == "table" ) then
-				table.insert(rv, k)
+		if t then
+			for k,v in pairs(t) do
+				local typeV = builtin_type(v)
+				if( typeV == "table" ) then
+					table.insert(rv, k)
+				end
 			end
+		end
+		return rv
+	end
+	
+--
+-- Returns true if the object contains a list of strings
+--
+	function isStringSeq(t)
+		local rv = false
+		if( #t>0 ) then
+			rv = true
+			for _,v in ipairs(t) do
+				if type(v) ~= 'string' then
+					rv = false
+					break
+				end
+			end
+		else
+			rv = false
 		end
 		return rv
 	end
@@ -278,4 +326,51 @@
 			setmetatable( rv, { __type = derivedClassName } ) 
 		end
 		return rv
+	end
+
+	function prepend(a,b)
+		return concat(b,a)
+	end
+	
+	function concat(a,b)
+		local atype = builtin_type(a)
+		local btype = builtin_type(b)
+		local rv = {}
+		
+		if a == nil then
+			rv = b
+		elseif b == nil then
+			rv = a
+		elseif atype == "table" then
+			if btype == "string" then
+				-- Concatenate b on to each element of a
+				for k,v in pairs(a) do
+					if( type(v) == "string" ) then
+						rv[k] = v .. b
+					end
+				end
+			elseif btype == "table" then
+				-- Concatenate b on to a, ie. Assuming no overwrites, #(a++b) == #a + #b
+				for k,v in pairs(a) do
+					rv[k] = v
+				end
+				for k,v in pairs(b) do
+					rv[k] = v
+				end
+			end
+		elseif( btype == "table" ) then
+			if atype == "string" then
+				-- Prepend a on to each element of b
+				for k,v in pairs(b) do
+					if( type(v) == "string" ) then
+						rv[k] = a ..v
+					end
+				end
+			end
+		end
+		return rv
+	end
+	
+	function mkstring(t, delimiter)
+		return table.concat(t, delimiter)
 	end
