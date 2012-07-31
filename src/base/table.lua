@@ -240,15 +240,17 @@
 
 	function table.translate(arr, translation)
 		local result = { }
-		for _, value in ipairs(arr) do
-			local tvalue
-			if type(translation) == "function" then
-				tvalue = translation(value)
-			else
-				tvalue = translation[value]
-			end
-			if (tvalue) then
-				table.insert(result, tvalue)
+		if( translation ~= nil ) then
+			for _, value in ipairs(arr) do
+				local tvalue
+				if type(translation) == "function" then
+					tvalue = translation(value)
+				else
+					tvalue = translation[value]
+				end
+				if (tvalue) then
+					table.insert(result, tvalue)
+				end
 			end
 		end
 		return result
