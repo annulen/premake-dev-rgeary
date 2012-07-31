@@ -62,6 +62,47 @@
 	end
 
 
+--
+-- Scan the well-known system locations for a particular binary.
+--
+
+	function os.findbin(binname, hintPath)
+		local formats = {} 
+		local path = os.getenv("PATH") or ""
+		
+		if os.isfile(binname) then
+			return binname
+		end
+		
+		if( hintPath ) then
+			table.insert(path, 1, hintPath)
+		end
+				
+		local firstArg = string.find(binname, ' ')
+		if firstArg then
+			binname = string.sub(binname,1,firstArg-1)
+		end
+
+		-- assemble a search path, depending on the platform
+		if os.is("windows") then
+			formats = { "%s.exe", "%s.com", "%s" }
+		elseif os.is("haiku") then
+			formats = { "%s" }
+		else
+			if os.is("macosx") then
+				formats = { "%s", "%s.app" }
+			else
+				formats = { "%s" }
+			end
+		end
+
+		for _, fmt in ipairs(formats) do
+			local name = string.format(fmt, binname)
+			local result = os.pathsearch(name, path)
+			if result then return result end
+		end
+	end
+
 
 --
 -- Retrieve the current operating system ID string.
