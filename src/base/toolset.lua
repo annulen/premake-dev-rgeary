@@ -5,22 +5,59 @@
 --   and the table
 --	  sysflags, 
 
-	premake.abstract.tools = {}
-	local tools = premake.abstract.tools
+	premake.abstract.toolset = {}
+	local toolset = premake.abstract.toolset
 	
+	toolset.tooldir = nil
+		
+--
+-- Get tool binary path
+--
+	function toolset:getBinary(cfg, toolname)
+		if not toolname then
+			error("No tool name specified, can't find binary")
+		end
+		
+		-- Get the name of the binary from the toolname
+		
+		local toolbin = self:getsysflag(cfg, toolname)
+		if toolbin == nil or toolbin == ''  then
+			
+			-- Special default case for linker, use the C / C++ binary instead
+			if toolname == 'link' then
+				local cc = iif(cfg.project.language == "C", "cc", "cxx")
+				return self:getBinary(cfg, cc)
+			else
+				return nil
+			end
+			
+		else
+		 	-- Find the binary
+		 	
+			local path = os.findbin(toolbin, self.tooldir)
+			local fullpath
+			if path then
+				fullpath = path .. '/' .. toolbin
+			else
+				fullpath = toolbin
+			end
+			return fullpath
+		end
+	end
+		
 --
 -- Select a default toolset for the appropriate platform / source type
 --
 
-	function tools:getdefault(cfg)	
+	function toolset:getdefault(cfg)	
 	end
 	
 --
 -- Gets a sysflag as a single string
 --
 	
-	function tools:getsysflag(cfg, field)
-		rv = self:getsysflags(cfg, field, true)
+	function toolset:getsysflag(cfg, field)
+		local rv = self:getsysflags(cfg, field, true)
 		return rv
 	end
 	
@@ -28,8 +65,8 @@
 -- Gets sysflags as a list
 --
 
-	function tools:getsysflags(cfg, field, overrideNotMerge)
-		local result = {}
+	function toolset:getsysflags(cfg, field, overrideNotMerge)
+		local result = iif(overrideNotMerge, '', {})
 		
 		if( field == nil ) then
 			error('field == nil, did you call getsysflags with . instead of :?')
@@ -62,11 +99,11 @@
 -- Returns list of CPPFLAGS (C PreProcessor flags) for a specific configuration.
 --
 
-	function tools:getcppflags(cfg)
+	function toolset:getcppflags(cfg)
 		local cppflags = self:getsysflags(cfg, 'cppflags')
 
 		-- Add flags from the configuration
-		cfgflags = table.translate(cfg.flags, self.cflags)
+		local cfgflags = table.translate(cfg.flags, self.cppflags)
 		cppflags = table.join(cppflags, cfgflags)
 
 		return cppflags
@@ -76,11 +113,11 @@
 -- Returns list of C flags for a specific configuration.
 --
 
-	function tools:getcflags(cfg)
+	function toolset:getcflags(cfg)
 		local cflags = self:getsysflags(cfg, 'cflags')
 
 		-- Add flags from the configuration
-		cfgflags = table.translate(cfg.flags, self.cflags)
+		local cfgflags = table.translate(cfg.flags, self.cflags)
 		cflags = table.join(cflags, cfgflags)
 
 		return cflags
@@ -90,28 +127,41 @@
 -- Returns list of C++ flags for a specific configuration.
 --
 
-	function tools:getcxxflags(cfg)
+	function toolset:getcxxflags(cfg)
 		local flags = table.translate(cfg.flags, self.cxxflags)
 		flags = table.join(flags, self:getsysflags(cfg, 'cxxflags'))
 		return flags
 	end
 	
 --
+-- Returns a concat of all the compiler flags for the config
+--
+	function toolset:getcompilerflags(cfg)
+		local flags = table.join(self:getcppflags(cfg), self:getcflags(cfg), self:getcxxflags(cfg))
+		flags = table.join(flags, self:getdefines(cfg.defines), self:getincludedirs(cfg), cfg.buildoptions)
+		return table.concat(flags, ' ')
+	end
+	
+--
 -- Abstract functions
 --
 
-	function tools:getdefines(defines)
-		error("tools:getdefines not undefined")
+	function toolset:getdefines(defines)
+		error("toolset:getdefines not defined for " .. type(self))
 	end
 
-	function tools:getincludedirs(defines)
-		error("tools:getincludedirs not undefined")
+	function toolset:getincludedirs(cfg)
+		error("toolset:getincludedirs not defined for " .. type(self))
 	end
 	
-	function tools:getldflags(cfg)
-		error("tools:getldflags not undefined")
+	function toolset:getresourcedirs(cfg)
+		error("toolset:getresourcedirs not defined for " .. type(self))
+	end
+
+	function toolset:getldflags(cfg)
+		error('toolset:getldflags undefined for ' .. type(self))
 	end
 	
-	function tools:getlinks(cfg, systemonly)
-		error("tools:getlinks not undefined")
+	function toolset:getlinks(cfg, systemonly)
+		error("toolset:getlinks not defined for " .. type(self))
 	end	

@@ -251,14 +251,14 @@
 
 	function cpp.flags(cfg, toolset)
 		_p('  DEFINES   += %s', table.concat(toolset:getdefines(cfg.defines), " "))
-		_p('  INCLUDES  += %s', table.concat(make.esc(toolset:getincludedirs(cfg, cfg.includedirs), " ")))
+		_p('  INCLUDES  += %s', table.concat(make.esc(toolset:getincludedirs(cfg), " ")))
 		_p('  CPPFLAGS  += %s $(DEFINES) $(INCLUDES)', table.concat(toolset:getcppflags(cfg), " "))
 		_p('  CFLAGS    += $(CPPFLAGS) $(ARCH) %s', table.concat(table.join(toolset:getcflags(cfg), cfg.buildoptions), " "))
 		_p('  CXXFLAGS  += $(CFLAGS) %s', table.concat(toolset:getcxxflags(cfg), " "))
 		_p('  LDFLAGS   += %s', table.concat(table.join(toolset:getldflags(cfg), cfg.linkoptions), " "))
 	
-		local resflags = table.join(toolset:getdefines(cfg.resdefines), toolset:getincludedirs(cfg, cfg.resincludedirs), cfg.resoptions)
-		_p('  RESFLAGS  += $(DEFINES) $(INCLUDES) %s', table.concat(resflags, " "))
+		local resFlags = table.join(toolset:getdefines(cfg.resdefines), toolset:getresourcedirs(cfg), cfg.resoptions)
+		_p('  RESFLAGS  += $(DEFINES) $(INCLUDES) %s', table.concat(resFlags, " "))
 	end
 
 
@@ -284,7 +284,8 @@
 			-- Had trouble linking to certain static libs, so $(OBJECTS) moved up.
 			-- $(LDFLAGS) moved: https://sf.net/tracker/?func=detail&aid=3430158&group_id=71616&atid=531880
 			local cc = iif(cfg.project.language == "C", "CC", "CXX")
-			_p('  LINKCMD    = $(%s) -o $(TARGET) $(OBJECTS) $(RESOURCES) $(ARCH) $(LIBS) $(LDFLAGS)', cc)
+			local linkCmd = toolset:getBinary(cfg, 'link') or "$("..cc..")"
+			_p('  LINKCMD    = %s -o $(TARGET) $(OBJECTS) $(RESOURCES) $(ARCH) $(LIBS) $(LDFLAGS)', linkCmd)
 		end
 	end
 
@@ -477,7 +478,7 @@
 
 	function cpp.toolconfig(cfg, toolset)
 		-- Need to always output these as we could alternate compilers between configurations
-		_p('  CC         = %s', toolset:getsysflag(cfg,'cc'))
-		_p('  CXX        = %s', toolset:getsysflag(cfg,'cxx'))
-		_p('  AR         = %s', toolset:getsysflag(cfg,'ar'))
+		_p('  CC         = %s', toolset:getBinary(cfg,'cc'))
+		_p('  CXX        = %s', toolset:getBinary(cfg,'cxx'))
+		_p('  AR         = %s', toolset:getBinary(cfg,'ar'))
 	end
