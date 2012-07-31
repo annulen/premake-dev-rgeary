@@ -46,9 +46,29 @@
 		if not name then
 			error("missing name", 2)
 		end
-		
-		if _G[name] then
-			error("name in use", 2)
+
+		-- Create the list of aliases
+		local names = { field.name }
+		if field.namealiases then
+			names = table.join(names, field.namealiases)
+		end
+
+		for _,n in ipairs(names) do		
+			if _G[n] then
+				error('name '..n..' in use', 2)
+			end
+			
+			-- add create a setter function for it
+			_G[n] = function(value)
+				return api.callback(field, value)
+			end
+			
+			-- list values also get a removal function
+			if api.islistfield(field) and not api.iskeyedfield(field) then
+				_G["remove" .. n] = function(value)
+					return api.remove(field, value)
+				end
+			end
 		end
 
 		-- make sure there is a handler available for this kind of value
@@ -56,21 +76,10 @@
 		if not api["set" .. kind] then
 			error("invalid kind '" .. kind .. "'", 2)
 		end
-		
+					
 		-- add this new field to my master list
 		premake.fields[field.name] = field
 		
-		-- add create a setter function for it
-		_G[name] = function(value)
-			return api.callback(field, value)
-		end
-		
-		-- list values also get a removal function
-		if api.islistfield(field) and not api.iskeyedfield(field) then
-			_G["remove" .. name] = function(value)
-				return api.remove(field, value)
-			end
-		end
 	end
 
 
@@ -103,6 +112,10 @@
 		-- right now, ignore calls with no value; later might want to
 		-- return the current baked value
 		if not value then return end
+		
+		if builtin_type(value) == 'table' and count(value)==0 then
+			error("Can't set \"" .. field.name .. '\" with value {} - did you forget to add quotes around the value? ')
+		end
 		
 		local target = api.gettarget(field.scope)
 		
@@ -430,6 +443,7 @@
 		scope = "config",
 		kind = "string-list",
 		tokens = true,
+		namealiases = { "compileoptions" },
 	}
 
 	api.register {
@@ -521,17 +535,27 @@
 		scope = "config",
 		kind  = "string-list",
 		allowed = {
-			"AddPhonyHeaderDependency",		 -- for Makefiles
+			"AddPhonyHeaderDependency",		 -- for Makefiles, requires CreateDependencyFile
+			"CreateDependencyFile",
+			"CreateDependencyFileIncludeSystem",	-- include system headers in the .d file
 			"DebugEnvsDontMerge",
 			"DebugEnvsInherit",
 			"EnableSSE",
 			"EnableSSE2",
+			"EnableSSE3",
+			"EnableSSE41",
+			"EnableSSE42",
+			"EnableAVX",
 			"ExtraWarnings",
 			"FatalWarnings",
 			"FloatFast",
 			"FloatStrict",
+			"InlineDisabled",
+			"InlineExplicitOnly",
+			"InlineAnything",
 			"Managed",
 			"MFC",
+			"ThreadingMulti",		-- Multithreaded system libs
 			"NativeWChar",
 			"No64BitChecks",
 			"NoEditAndContinue",
@@ -548,6 +572,7 @@
 			"Optimize",
 			"OptimizeSize",
 			"OptimizeSpeed",
+			"OptimizeOff",
 			"SEH",
 			"StaticRuntime",
 			"Symbols",
@@ -559,6 +584,7 @@
 			Optimise = 'Optimize',
 			OptimiseSize = 'OptimizeSize',
 			OptimiseSpeed = 'OptimizeSpeed',
+			OptimiseOff = 'OptimizeOff',
 		},
 	}
 
