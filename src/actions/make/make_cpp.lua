@@ -251,7 +251,7 @@
 
 	function cpp.flags(cfg, toolset)
 		_p('  DEFINES   += %s', table.concat(toolset:getdefines(cfg.defines), " "))
-		_p('  INCLUDES  += %s', table.concat(make.esc(toolset:getincludedirs(cfg), " ")))
+		_p('  INCLUDES  += %s', table.concat(make.esc(toolset:getincludedirs(cfg)), " "))
 		_p('  CPPFLAGS  += %s $(DEFINES) $(INCLUDES)', table.concat(toolset:getcppflags(cfg), " "))
 		_p('  CFLAGS    += $(CPPFLAGS) $(ARCH) %s', table.concat(table.join(toolset:getcflags(cfg), cfg.buildoptions), " "))
 		_p('  CXXFLAGS  += $(CFLAGS) %s', table.concat(toolset:getcxxflags(cfg), " "))
@@ -270,8 +270,11 @@
 		local flags = toolset:getlinks(cfg)
 		_p('  LIBS      += %s', table.concat(flags, " "))
 		
-		local deps = config.getlinks(cfg, "siblings", "fullpath")
-		_p('  LDDEPS    += %s', table.concat(make.esc(deps), " "))
+		-- Comment this out as it's unnecessary (you've already linked to projects with -l), 
+		--   and it causes make -n to fail
+		
+		--local deps = config.getlinks(cfg, "siblings", "fullpath")
+		--_p('  LDDEPS    += %s', table.concat(make.esc(deps)), " ")
 
 		if cfg.kind == premake.STATICLIB then
 			if cfg.architecture == premake.UNIVERSAL then
