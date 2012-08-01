@@ -159,7 +159,8 @@
 	end
 
 	function toolset:getldflags(cfg)
-		error('toolset:getldflags undefined for ' .. type(self))
+		local flags = table.translate(cfg.flags, self.ldflags)
+		return flags
 	end
 	
 	function toolset:getlinks(cfg, systemonly)

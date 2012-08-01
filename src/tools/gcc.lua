@@ -80,9 +80,8 @@ gcc.cflags = {
 	OptimizeSpeed  = "-O3",
 	OptimizeOff    = "-O0",
 	Symbols        = "-g",
-	ThreadingMulti = "-pthreads",
+	ThreadingMulti = "-pthread",
 }
-
 
 --
 -- CXX (C++) Flag mappings
@@ -91,6 +90,13 @@ gcc.cflags = {
 gcc.cxxflags = {
 	NoExceptions   = "-fno-exceptions",
 	NoRTTI         = "-fno-rtti",
+}
+
+-- Linker flag mappings
+gcc.ldflags = {
+	ThreadingMulti = '-pthread',
+	StdlibShared   = '-shared-libgcc',
+	StdlibStatic   = '-static-libgcc -static-stdlibc++',
 }
 
 --
@@ -127,6 +133,7 @@ function gcc:getincludedirs(cfg)
 	for _, dir in ipairs(dirs) do
 		table.insert(result, "-I" .. project.getrelative(cfg.project, dir))
 	end
+	
 	return result
 end
 
@@ -147,7 +154,7 @@ end
 --
 
 function gcc:getldflags(cfg)
-	local flags = {}
+	local flags = self.super.getldflags(self, cfg)
 
 	-- Scan the list of linked libraries. If any are referenced with
 	-- paths, add those to the list of library search paths
@@ -207,6 +214,8 @@ function gcc:getlinks(cfg, systemonly)
 					-- name if one is present
 					table.insert(result, project.getrelative(cfg.project, link.linktarget.abspath))
 				else
+				 	-- Don't use path when linking shared libraries, otherwise loader will always expect the same
+				 	-- folder structure
 					table.insert(result, "-l" .. link.linktarget.basename)
 				end
 			end

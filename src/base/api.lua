@@ -575,6 +575,8 @@
 			"OptimizeOff",
 			"SEH",
 			"StaticRuntime",
+			"StdlibShared",			-- Use shared standard libraries
+			"StdlibStatic",			-- Use static standard libraries
 			"Symbols",
 			"Unicode",
 			"Unsafe",

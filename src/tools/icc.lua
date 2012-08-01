@@ -45,11 +45,16 @@
 		OptimizeSpeed  = "-O3",
 		OptimizeOff    = "-O0",
 		Symbols        = "-g",
-		ThreadingMulti = "-pthreads",
+		ThreadingMulti = "-pthread",
 	}
 	icc.cxxflags = {
 		NoExceptions   = "-fno-exceptions",
 		NoRTTI         = "-fno-rtti",
+	}
+	icc.ldflags = {
+		ThreadingMulti = '-pthread',
+		StdlibShared   = '-shared-libgcc',
+		StdlibStatic   = '-static-libgcc',		-- Might not work, test final binary with ldd. See http://www.trilithium.com/johan/2005/06/static-libstdc/
 	}
 
 	-- Same as gcc		
@@ -62,7 +67,7 @@
 	icc.getlinks = gcc.getlinks
 	
 	function icc:getldflags(cfg)
-		local flags = {}
+		local flags = self.super.getldflags(self, cfg)
 		
 		-- Scan the list of linked libraries. If any are referenced with
 		-- paths, add those to the list of library search paths
@@ -86,7 +91,7 @@
 			end
 		end
 	
-		local sysflags = icc:getsysflags(cfg, 'ldflags')
+		local sysflags = self:getsysflags(cfg, 'ldflags')
 		flags = table.join(flags, sysflags)
 		
 		return flags
@@ -109,6 +114,8 @@
 						-- name if one is present
 						table.insert(result, project.getrelative(cfg.project, link.linktarget.abspath))
 					else
+					 	-- Don't use path when linking shared libraries, otherwise loader will always expect the same
+					 	-- folder structure
 						table.insert(result, "-l" .. link.linktarget.basename)
 					end
 				end
