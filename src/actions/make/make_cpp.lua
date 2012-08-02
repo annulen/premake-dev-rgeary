@@ -252,7 +252,7 @@
 	function cpp.flags(cfg, toolset)
 		_p('  DEFINES   += %s', table.concat(toolset:getdefines(cfg.defines), " "))
 		_p('  INCLUDES  += %s', table.concat(make.esc(toolset:getincludedirs(cfg)), " "))
-		_p('  CPPFLAGS  += %s $(DEFINES) $(INCLUDES)', table.concat(toolset:getcppflags(cfg), " "))
+		_p('  CPPFLAGS  += %s $(DEFINES) $(INCLUDES)', table.concat(toolset:getcmdflags(cfg, 'cpp'), " "))
 		_p('  CFLAGS    += $(CPPFLAGS) $(ARCH) %s', table.concat(table.join(toolset:getcflags(cfg), cfg.buildoptions), " "))
 		_p('  CXXFLAGS  += $(CFLAGS) %s', table.concat(toolset:getcxxflags(cfg), " "))
 		_p('  LDFLAGS   += %s', table.concat(table.join(toolset:getldflags(cfg), cfg.linkoptions), " "))

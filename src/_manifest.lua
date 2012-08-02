@@ -10,6 +10,7 @@
 	return
 	{
 		-- core files
+		"base/seq.lua",
 		"base/os.lua",
 		"base/path.lua",
 		"base/string.lua",
@@ -87,5 +88,8 @@
 		
 		-- Print action
 		"actions/print/_print.lua",
-		
+
+		-- Ninja build action
+		"actions/ninja/_ninja.lua",
+		"actions/ninja/ninja_solution.lua",
 	}

@@ -100,18 +100,6 @@ gcc.ldflags = {
 }
 
 --
--- Get CFlags
---
-function gcc:getcflags(cfg)
-	local cflags = self.super.getcflags(self, cfg)
-
-	if cfg.system ~= premake.WINDOWS and cfg.kind == premake.SHAREDLIB then
-		table.insert(cflags, "-fPIC")
-	end
-	return cflags
-end
-
---
 -- Decorate defines for the GCC command line.
 --
 
@@ -149,48 +137,49 @@ function gcc:getresourcedirs(cfg)
 	return result
 end
 
---
--- Return a list of LDFLAGS for a specific configuration.
---
-
-function gcc:getldflags(cfg)
-	local flags = self.super.getldflags(self, cfg)
-
-	-- Scan the list of linked libraries. If any are referenced with
-	-- paths, add those to the list of library search paths
-	for _, dir in ipairs(config.getlinks(cfg, "all", "directory")) do
-		table.insert(flags, '-L' .. dir)
-	end
-
-	if not cfg.flags.Symbols then
-		-- OS X has a bug, see http://lists.apple.com/archives/Darwin-dev/2006/Sep/msg00084.html
-		if cfg.system == premake.MACOSX then
-			table.insert(flags, "-Wl,-x")
-		else
-			table.insert(flags, "-s")
+function gcc:getcmdflags(cfg, toolName)
+	local cmdflags = self.super.getcmdflags(cfg, toolName)
+	
+	if toolName == 'cc' then
+		if cfg.system ~= premake.WINDOWS and cfg.kind == premake.SHAREDLIB then
+			table.insert(cmdflags, "-fPIC")
+		end
+	else if( toolName == 'link' ) then
+		-- Return a list of LDFLAGS for a specific configuration.
+	
+		-- Scan the list of linked libraries. If any are referenced with
+		-- paths, add those to the list of library search paths
+		for _, dir in ipairs(config.getlinks(cfg, "all", "directory")) do
+			table.insert(cmdflags, '-L' .. dir)
+		end
+	
+		if not cfg.flags.Symbols then
+			-- OS X has a bug, see http://lists.apple.com/archives/Darwin-dev/2006/Sep/msg00084.html
+			if cfg.system == premake.MACOSX then
+				table.insert(cmdflags, "-Wl,-x")
+			else
+				table.insert(cmdflags, "-s")
+			end
+		end
+	
+		if cfg.kind == premake.SHAREDLIB then
+			if cfg.system == premake.MACOSX then
+				cmdflags = table.join(cmdflags, { "-dynamiclib", "-flat_namespace" })
+			else
+				table.insert(cmdflags, "-shared")
+			end
+	
+			if cfg.system == "windows" and not cfg.flags.NoImportLib then
+				table.insert(cmdflags, '-Wl,--out-implib="' .. cfg.linktarget.fullpath .. '"')
+			end
+		end
+	
+		if cfg.kind == premake.WINDOWEDAPP and cfg.system == premake.WINDOWS then
+			table.insert(cmdflags, "-mwindows")
 		end
 	end
-
-	if cfg.kind == premake.SHAREDLIB then
-		if cfg.system == premake.MACOSX then
-			flags = table.join(flags, { "-dynamiclib", "-flat_namespace" })
-		else
-			table.insert(flags, "-shared")
-		end
-
-		if cfg.system == "windows" and not cfg.flags.NoImportLib then
-			table.insert(flags, '-Wl,--out-implib="' .. cfg.linktarget.fullpath .. '"')
-		end
-	end
-
-	if cfg.kind == premake.WINDOWEDAPP and cfg.system == premake.WINDOWS then
-		table.insert(flags, "-mwindows")
-	end
-
-	local sysflags = gcc:getsysflags(cfg, 'ldflags')
-	flags = table.join(flags, sysflags)
-
-	return flags
+	
+	return cmdflags
 end
 
 

@@ -374,3 +374,31 @@
 	function mkstring(t, delimiter)
 		return table.concat(t, delimiter)
 	end
+	
+	function toSet(vs)
+		if type(vs) == 'string' then
+			-- Convert string to hashset
+			local t = {}
+			t[vs] = 1
+			return t
+		else if type(vs) == 'function' then
+			-- assume it's an iterator function
+			kvs = {}
+			for k,v in vs do
+				kvs.v = 1
+			end
+			return kvs
+		end
+		if #vs > 0 then
+			-- Convert sequence to hashset
+			kvs = {}
+			for _,v in ipairs(vs) do
+				kvs.v = 1
+			end
+			return kvs
+		else
+			return vs
+		end
+	end
+	
+	

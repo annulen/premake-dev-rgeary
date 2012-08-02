@@ -1,6 +1,13 @@
 --
 -- Toolset helper functions
 --
+--	Toolsets contain tools
+--   Tools have a binary (toolset:getBinary)
+--   Tools can have flags (toolget:getcmdflags), which can be set via self.sysflags.{arch/system} 
+--		or by mapping to configuration flags (eg self.cflags)  
+--   Tools can also have defines, includes and directly entered flags {buildoptions / linkoptions}
+
+
 --   A toolset (eg. gcc) should define the functions :
 --   and the table
 --	  sysflags, 
@@ -14,8 +21,11 @@
 -- Get tool binary path
 --
 	function toolset:getBinary(cfg, toolname)
+		if type(cfg) ~= 'table' then
+			error("toolset:getBinary : No config specified ")
+		end
 		if not toolname then
-			error("No tool name specified, can't find binary")
+			error("toolset:getBinary : No tool name specified")
 		end
 		
 		-- Get the name of the binary from the toolname
@@ -25,7 +35,7 @@
 			
 			-- Special default case for linker, use the C / C++ binary instead
 			if toolname == 'link' then
-				local cc = iif(cfg.project.language == "C", "cc", "cxx")
+				local cc = iif(cfg.projectcfg.project.language == "C", "cc", "cxx")
 				return self:getBinary(cfg, cc)
 			else
 				return nil
@@ -96,41 +106,34 @@
 	end
 
 --
--- Returns list of CPPFLAGS (C PreProcessor flags) for a specific configuration.
+-- Returns flags to pass to the tool at the the command line
 --
+	toolset.getflags = {}
 
-	function toolset:getcppflags(cfg)
-		local cppflags = self:getsysflags(cfg, 'cppflags')
+	function toolset:getflags(cfg, toolName)
+		local toolsysflags = 
+		if toolName == 'cpp' then
+			-- Add flags from the configuration & flags from sysflags
+			local cfgflags = table.translate(cfg.flags, self.cppflags)
+			cppflags = table.join(cfgflags, self:getsysflags(cfg, 'cppflags'))
 
-		-- Add flags from the configuration
-		local cfgflags = table.translate(cfg.flags, self.cppflags)
-		cppflags = table.join(cppflags, cfgflags)
-
-		return cppflags
-	end
+			return cppflags
+		elseif toolName == 'cc' then
+			local cfgflags = table.translate(cfg.flags, self.cflags)
+			cflags = table.join(cfgflagsm, self:getsysflags(cfg, 'cflags'))
 	
---
--- Returns list of C flags for a specific configuration.
---
-
-	function toolset:getcflags(cfg)
-		local cflags = self:getsysflags(cfg, 'cflags')
-
-		-- Add flags from the configuration
-		local cfgflags = table.translate(cfg.flags, self.cflags)
-		cflags = table.join(cflags, cfgflags)
-
-		return cflags
-	end	
-	
---
--- Returns list of C++ flags for a specific configuration.
---
-
-	function toolset:getcxxflags(cfg)
-		local flags = table.translate(cfg.flags, self.cxxflags)
-		flags = table.join(flags, self:getsysflags(cfg, 'cxxflags'))
-		return flags
+			return cflags
+		else if toolName == 'cxx' then
+			local flags = table.translate(cfg.flags, self.cxxflags)
+			flags = table.join(flags, self:getsysflags(cfg, 'cxxflags'))
+			return flags
+		else if toolName == 'link' then
+			local flags = table.translate(cfg.flags, self.ldflags)
+			flags = table.join(flags, self:getsysflags(cfg, 'ldflags'))
+			return flags
+		else
+			error('Unrecognised tool name ' .. toolName)
+		end
 	end
 	
 --
@@ -158,11 +161,21 @@
 		error("toolset:getresourcedirs not defined for " .. type(self))
 	end
 
-	function toolset:getldflags(cfg)
-		local flags = table.translate(cfg.flags, self.ldflags)
-		return flags
-	end
-	
 	function toolset:getlinks(cfg, systemonly)
 		error("toolset:getlinks not defined for " .. type(self))
-	end	
+	end
+	
+--
+-- Bring it all together in to a command line
+--  eg. from make, call this with (cfg, 'cc', '$INCLUDES $DEFINES', '$@', '$<')
+--  The toolset should override this if it wants to specify outputs & inputs differently on the command line
+--   eg. for gcc, output is specified with "-o". For csc, it is "/out:"
+--
+	function toolset:getCommandLine(cfg, toolName, extraFlags, outputs, inputs)
+		local toolCmd = self:getBinary(cfg, toolName)
+		local cmdflags = toolset.getcmdflags[toolname](self, cfg)
+		
+		local parts = { toolCmd, cmdflags, extraFlags, outputs, inputs }
+		local cmd = table.concat(parts, ' ')
+		return cmd
+	end

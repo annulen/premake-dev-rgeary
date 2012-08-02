@@ -233,7 +233,8 @@
 		local i = 0
 		return function()
 			i = i + 1
-			if i > #sln.configs then
+			if i > #sln.configs
+			 then
 				return nil
 			else
 				return sln.configs[i]
