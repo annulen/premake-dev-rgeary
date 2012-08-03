@@ -381,7 +381,7 @@
 			local t = {}
 			t[vs] = 1
 			return t
-		else if type(vs) == 'function' then
+		elseif type(vs) == 'function' then
 			-- assume it's an iterator function
 			kvs = {}
 			for k,v in vs do
