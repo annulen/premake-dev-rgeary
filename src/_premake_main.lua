@@ -110,7 +110,7 @@
 		end
 		
 		-- Search for a system-level premake4-system.lua file
-		local systemScript = os.getenv("PREMAKE_PATH")
+		local systemScript = os.getenv("PREMAKE_PATH") or ''
 		local systemScriptFullpath = systemScript .. '/' .. "premake-" .. _PREMAKE_VERSION .. '-system.lua'
 		if( os.isfile(systemScriptFullpath) ) then
 			dofile(systemScriptFullpath)
