@@ -47,15 +47,15 @@
 	
 	local _HandlingError = 0
 	function _ErrorHandler ( errobj )
-		if( _HandlingError == 0 ) then
+		if( (errobj ~= nil) and _HandlingError == 0 ) then
 		 	_HandlingError = 1
-		    local errStr = tostring(errobj) or ""
+		    local errStr = tostring(errobj) or "("..type(errobj)..")"
 		    if( type(errobj)=='table' ) then
 		      errStr = "Table: {" ..
 		      	table.concat(map(errobj, function (k,v) return '[' .. tostring(k) .. '] = ' .. tostring(v); end)
 		      	, ',') .. "}"
 		    end
-			print("Error: \"" .. errStr .. "\"")
+			print("MyError: \"" .. errStr .. "\"")
 	    	--for k,v in pairs(_G) do print("GLOBAL:" , k,v) end
 	    	if( type(errobj)=='thread' ) then
 	    		print(debug.traceback(errobj))

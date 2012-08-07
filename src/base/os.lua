@@ -159,11 +159,11 @@
 			arch = arch:lower()
 			for _, hosttype in ipairs(_64BitHostTypes) do
 				if arch:find(hosttype) then
-					hostIs64Bit = true
-					break
+					hostIs64bit = true
+					return true
 				end
 			end
-			return false
+			hostIs64bit = false
 		end
 		return hostIs64bit 
 	end
