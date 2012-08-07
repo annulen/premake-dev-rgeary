@@ -5,6 +5,8 @@
 local ninja = premake.actions.ninja
 local solution = premake.solution
 local project = premake5.project
+local definedToolsets = {}
+local nextProjectCfgUID = 1				-- number referencing a unique project configuration 
 
 function ninja.generate_solution(sln)
   
@@ -12,21 +14,95 @@ function ninja.generate_solution(sln)
 	_p('# Ninja build is available to download at http://martine.github.com/ninja/')
 	_p('# Type "ninja help" for usage help')
 	_p('')
+	_p('# Solution ' .. sln.name)
+	_p('')
 	
-	ninja.writeEnvironment(sln)
-	local cfgs = solution.eachconfig(sln)
-	ninja.writeToolsets(cfgs)
+	--ninja.writeEnvironment(sln)
+	--for _,cfg in sln.getConfigs():each() do
+	--	_p('subninja ' .. cfg.objdir .. '/build.ninja')
+	--local toolsetNames = Seq:new(solution.toolsets)
+	--ninja.writeToolsets(toolset)
 	
 end
 
 function ninja.generate_project(prj)
 
-	local cfgs = project.eachconfig(prj)
-
-	_p('# Project ' .. prj.name)
-	ninja.writeToolsets(cfgs)
-	_p('')
+	if not prj.usage then
+		local cfgs = project.getConfigs(prj)
+	
+		ninja.writeToolsets(cfgs)
+		_p('# Project ' .. prj.name)
+		_p('##############################')
+		_p('')
+		ninja.writeTargets(prj)
+	end
 end
+
+function ninja.writeTargets(prj)
+
+	local filesPerConfig = ninja.getInputFiles(prj)
+	local filesInAll = filesPerConfig['']
+	
+	-- Compile
+	for _,cfg in project.getConfigs(prj):each() do
+		local toolsetName = cfg.toolset
+		local toolset = premake.tools[toolsetName or '']
+		local allObjFiles = {}
+		local compileTool = toolset:getCompileTool(cfg)		-- cc or cxx
+		local linkTool = toolset:getLinkTool(cfg)			-- ar or link
+		local compileRule = toolsetName .. '_' .. compileTool.toolName
+		local linkRule    = toolsetName .. '_' .. linkTool.toolName
+		local targetName = cfg.buildtarget.name
+		local prjCfgUID = tostring(nextProjectCfgUID)
+		nextProjectCfgUID = nextProjectCfgUID + 1
+		
+		-- Numbers were easier to read than text
+		--prjCfgUID = prj.name..'.'..cfg.shortname
+		
+		-- List of all files in this config
+		local filesInCfg = Seq:new(filesInAll):concat(filesPerConfig[cfg])
+		local srcBase = prj.basedir
+
+		_p('# Compile ' .. prj.name .. ' ['..cfg.shortname..']')
+		_p('')
+		_p('objdir'..prjCfgUID..'='..cfg.objdir)
+		_p('targetdir'..prjCfgUID..'='..cfg.targetdir)
+		_p('srcdir'..prjCfgUID..'='..srcBase)
+		_p('')
+		local objdirN = '${objdir'..prjCfgUID..'}'
+		local targetdirN = '${targetdir'..prjCfgUID..'}'
+		local srcdirN = '${srcdir'..prjCfgUID..'}'
+		local uniqueObjNameSet = {}
+		
+		-- Build targets for files which are in all configs
+		for _,fileName in filesInCfg:each() do
+			local sourceFileRel = path.getrelative(srcBase, fileName)
+			local outputFile = toolset:getObjectFile(cfg, fileName, uniqueObjNameSet)
+
+			-- Write the build rule
+			if outputFile then
+				local outputFullpath = objdirN..'/'..outputFile
+				
+				_p('build ' .. outputFullpath ..': '.. compileRule..' '..srcdirN..'/'..sourceFileRel)
+				
+				table.insert( allObjFiles, outputFullpath )
+			elseif toolset:isObjectFile(cfg, fileName ) then
+				table.insert( allObjFiles, fileName )
+			end
+		end
+		_p('')
+		
+		--local prjRelPath = ninja.esc(project.getrelative(cfg.project, ))
+	
+		-- Link
+		_p('# Link ' .. prj.name .. ' ['..cfg.shortname..']')
+		_p('build '..targetdirN..'/'..targetName..': '..linkRule..' $')
+		local allObjFilesStr = '  '..table.concat(allObjFiles, ' ')
+		_p(allObjFilesStr)
+		_p('')
+	end
+end
+
 
 function ninja.writeEnvironment(sln)
 	local arch = ""
@@ -40,110 +116,69 @@ function ninja.writeEnvironment(sln)
 
 end
 
--- ruleName[toolset][toolname]
-local ruleNames = {}
-
+--
+-- Define any toolsets which are not yet defined
+--  Run for each config, for each project
+--
 function ninja.writeToolsets(cfgs)
 
-	local toolsets = {}
-	
-	for cfg in cfgs do
+	for _,cfg in cfgs
+		:where(function(v) return v.toolset and v.toolset~=''; end)		-- toolset must be specified
+		:where(function(v) return definedToolsets[v.toolset] == nil; end)		-- toolset hasn't been defined already
+		:each() 
+	do
 		local toolsetName = cfg.toolset
+		definedToolsets[toolsetName] = true
 		
-		if toolsetName and toolsetName ~= '' then
+        local toolset = premake.tools[toolsetName]
+		if not toolset then
+			error("Invalid toolset '" .. toolsetName .. "' in config " .. cfg.shortname)
+		end
 		
-	        local toolset = premake.tools[toolsetName]
-			if not toolset then
-				error("Invalid toolset '" .. toolsetName .. "' in config " .. cfg.shortname)
+		_p('# Toolset ' .. toolsetName .. '[' .. cfg.shortname .. ']')
+		local toolsetBinaryDir 
+		
+		for _,tool in ipairs(toolset.tools) do
+			local toolName = toolsetName .. '_' .. tool.toolName
+
+			local toolInputs = tool:decorateInputs(cfg, '$out', '$in')
+			local depfileName = nil
+			if toolInputs.depfileOutput then
+				depfileName = '$out' .. tool.suffixes['depfileOutput']
 			end
-	        
-			local cppflags = toolset:getcmdflags(cfg, 'cpp')
-			local ccflags = toolset:getcmdflags(cfg, 'cc') 
-			local cxxflags = toolset:getcmdflags(cfg, 'cxx')
 			
-			-- The Intel ar tool outputs unwanted information to stderr. Allow the toolset to pipe it to somewhere else  
-			local redirectStderr = "" 
-		    if(toolset.redirectStderr) then
-		      local hostIsWindows = string.find(os.getversion(), "Windows")
-		      if( hostIsWindows ) then
-		        redirectStderr = '2> nul'
-		      else
-		        redirectStderr = '2> /dev/null'
-		      end
-		    end	
-		   
-		    -- Set up rule names
-		    local ruleNamePrefix = ''
-		    --if( #toolsets > 1 ) then
-		    	ruleNamePrefix = toolsetName .. '_'
-		    --end
-		    ruleNames[toolsetName] = {}
-		    ruleNames[toolsetName].cc   = ruleNamePrefix .. 'cc'
-		    ruleNames[toolsetName].cxx  = ruleNamePrefix .. 'cxx'
-		    ruleNames[toolsetName].link = ruleNamePrefix .. 'link'
-		    ruleNames[toolsetName].ar   = ruleNamePrefix .. 'ar'
+		    -- Set up tool vars
+		    _p('# Tool ' .. toolName)
+		    local toolVars = {}
+		    for k,v in pairs(toolInputs) do
+		    	
+		    	-- Extract variables with names as build variables
+		    	if type(k) ~= 'number' and v ~= '' then
+		    		-- Write build variable
+		    		local varName = toolsetName .. '_'..k
+			    	local varName,found = ninja.setGlobal(varName, v, { toolName .. '_' .. k })
+			    	if not found then
+			    		_p(varName .. ' = ' .. tostring(v))
+			    	end
+			    	
+			    	table.insert( toolVars, ninja.escVarName(varName) )
+			    end
+			end
 			
-			_p('# Toolset ' .. toolsetName)
-			_p('rule ' .. ruleNames[toolsetName].cc)
-				_p('  command = ' .. self:getCommandLine(cfg, 'cc', '$DEFINES $INCLUDES', '$out', '$in') )
-				_p('  depfile = $out.d')
-				_p('  description = ' .. ruleNames[toolsetName].cc .. ' $out')
-			_p('')
-			_p('rule ' .. ruleNames[toolsetName].cxx)
-				_p('  command = ' .. self:getCommandLine(cfg, 'cxx', '$DEFINES $INCLUDES', '$out', '$in') )
-				_p('  depfile = $out.d')
-				_p('  description = ' .. ruleNames[toolsetName].cxx .. ' $out')
-			_p('')
-			_p('rule ' .. ruleNames[toolsetName].link)
-				_p('  command = ' .. self:getCommandLine(cfg, 'link', '$LIBS $LDFLAGS', '$out', '$in') )
-				_p('  description = ' .. ruleNames[toolsetName].link .. ' $out')
-			_p('')
-			_p('rule ' .. ruleNames[toolsetName].ar)
-				_p('  command = ' .. self:getCommandLine(cfg, 'ar', '$LDFLAGS', '$out', '$in') )
-				_p('  description = ' .. ruleNames[toolsetName].ar .. ' $out')
-			_p('')
-			_p('')
+			for _,v in ipairs(toolInputs) do
+		    	-- For numbered parameters, put it directly on to the end of the command line
+	    		table.insert( toolVars, v )
+		    end
+		    
+		    table.insert( toolVars, redirectStderr )
 			
-			_p('# Global includes')
-			_p('includeFlags = -I "."')
+			_p('rule ' .. toolName)
+				_p('  command = ' .. tool:getCommandLine(toolVars) )
+				if depfileName then
+				_p('  depfile = ' .. depfileName )
+				end
+				_p('  description = ' .. toolName.. ' $in')
 			_p('')
-			
-			local cCommonFlags = table.concat(toolset:getcppflags(cfg), " ")	-- cppflags = C PreProcessor flags
-			_p('cFlags = ' .. cCommonFlags .. table.concat(toolset:getcflags(cfg), " ") )
-			_p('cxxFlags = ' .. cCommonFlags .. table.concat(toolset:getcxxflags(cfg), " "))
-			_p('linkFlags = ' .. table.concat(table.join(toolset:getldflags(cfg), cfg.linkoptions), " ") )
-			_p('arFlags = rc')
-			_p('')
-		
-			-- C Compiler rule
-			_p('# C Compiler rule')
-			_p('rule cc')
-			_p('  command = $ccTool $cFlags $includeFlags -o $out -MMD -MF $out.d $in' .. redirectStderr)
-			_p('  depfile = $out.d')
-			_p('  description = cc $out')
-			_p('')
-			
-			-- C++ Compiler rule
-			_p('# C++ Compiler rule')
-			_p('rule cxx')
-			_p('  command = $cxxTool $cxxFlags $includeFlags -o $out -MMD -MF $out.d $in' .. redirectStderr)
-			_p('  depfile = $out.d')
-			_p('  description = cc $out')
-			_p('')
-			
-			-- Link Compiler rule
-			_p('# Link rule')
-			_p('rule cxx')
-			_p('  command = $linkTool $linkFlags -o $out -Wl,--start-group $in -Wl,--end-group' .. redirectStderr)
-			_p('  description = link $out')
-			_p('')
-			
-			-- Archive tool rule
-			_p('# Archive tool rule')
-			_p('rule ar')
-			_p('  command = $arTool $arFlags $out $in ' .. redirectStderr)
-			_p('  description = ar $out')
-			_p('')
-		end 
-	end
+		end
+	end 
 end 

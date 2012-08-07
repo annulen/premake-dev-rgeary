@@ -137,14 +137,17 @@ function gcc:getresourcedirs(cfg)
 	return result
 end
 
+--
+-- Returns a **table** of command line flags to pass to the tool
+--
 function gcc:getcmdflags(cfg, toolName)
-	local cmdflags = self.super.getcmdflags(cfg, toolName)
+	local cmdflags = self.super.getcmdflags(self, cfg, toolName)
 	
 	if toolName == 'cc' then
 		if cfg.system ~= premake.WINDOWS and cfg.kind == premake.SHAREDLIB then
 			table.insert(cmdflags, "-fPIC")
 		end
-	else if( toolName == 'link' ) then
+	elseif( toolName == 'link' ) then
 		-- Return a list of LDFLAGS for a specific configuration.
 	
 		-- Scan the list of linked libraries. If any are referenced with
@@ -225,4 +228,3 @@ function gcc:getlinks(cfg, systemonly)
 
 	return result
 end
-

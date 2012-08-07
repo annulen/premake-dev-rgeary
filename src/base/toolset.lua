@@ -7,54 +7,23 @@
 --		or by mapping to configuration flags (eg self.cflags)  
 --   Tools can also have defines, includes and directly entered flags {buildoptions / linkoptions}
 
-
---   A toolset (eg. gcc) should define the functions :
---   and the table
---	  sysflags, 
+--  Toolsets do assume an abstract C++ style of compilation :
+--	  There is an (optional) compile stage which converts each 'source file' in to an 'object file'
+--	  There is an (optional) link stage which converts all "object files" in to a single "target file"
+--	  No assumptions are made about "object file" or "target file", so this can be adapted to many uses
+--
+--  There is only one toolset per configuration
+--	 If you have custom files which need a custom tool (eg. compiling .proto files), and you can't split
+--	  in to two projects, then add it to the toolset
 
 	premake.abstract.toolset = {}
 	local toolset = premake.abstract.toolset
+	premake.tools[''] = toolset		-- default
 	
-	toolset.tooldir = nil
-		
---
--- Get tool binary path
---
-	function toolset:getBinary(cfg, toolname)
-		if type(cfg) ~= 'table' then
-			error("toolset:getBinary : No config specified ")
-		end
-		if not toolname then
-			error("toolset:getBinary : No tool name specified")
-		end
-		
-		-- Get the name of the binary from the toolname
-		
-		local toolbin = self:getsysflag(cfg, toolname)
-		if toolbin == nil or toolbin == ''  then
-			
-			-- Special default case for linker, use the C / C++ binary instead
-			if toolname == 'link' then
-				local cc = iif(cfg.projectcfg.project.language == "C", "cc", "cxx")
-				return self:getBinary(cfg, cc)
-			else
-				return nil
-			end
-			
-		else
-		 	-- Find the binary
-		 	
-			local path = os.findbin(toolbin, self.tooldir)
-			local fullpath
-			if path then
-				fullpath = path .. '/' .. toolbin
-			else
-				fullpath = toolbin
-			end
-			return fullpath
-		end
-	end
-		
+	-- Default is for C++ source, override this for other toolset types
+	toolset.sourceFileExtensions = { ".cc", ".cpp", ".cxx", ".c", ".s", ".m", ".mm" }
+	toolset.objectFileExtension = '.o'
+
 --
 -- Select a default toolset for the appropriate platform / source type
 --
@@ -62,6 +31,74 @@
 	function toolset:getdefault(cfg)	
 	end
 	
+--
+-- Construct toolInputs 
+--
+	function toolset:getToolInputs(cfg)
+		local t = {}
+		t.defines 		= cfg.defines
+		t.includedirs 	= cfg.includedirs
+		t.libdirs 		= cfg.libdirs
+		t.systemlibs	= cfg.systemlibs
+		t.buildoptions	= cfg.buildoptions
+		t.default		= '$in'
+		
+		return t
+	end
+
+--
+-- Toolset only provides "compile" and "link" features, but this allows 
+--  for different tool names for different configurations
+--	
+	function toolset:getCompileTool(cfg)
+	    if cfg.project.language == "C" then
+		    return self.tools['cc']
+		else
+			return self.tools['cxx']
+		end	    	
+	end
+	
+	function toolset:getLinkTool(cfg)
+	    if cfg.kind == premake.STATICLIB then
+	    	return self.tools['ar']
+	    else
+	    	return self.tools['link']
+	    end
+	end
+	
+--
+-- Get the object filename given the source filename. Returns null if it's not a recognised source file
+--
+	function toolset:getObjectFile(cfg, fileName, uniqueSet)
+		-- .cpp -> .o
+		if path.hasextension(fileName, self.sourceFileExtensions ) then
+			local baseName = path.getbasename(fileName)
+			local objName = baseName .. self.objectFileExtension
+			
+			-- Make sure the object file name is unique to avoid name collisions if two source files
+			--  in different paths have the same filename
+			
+			if uniqueSet then
+				for i=2,99999 do
+					if not uniqueSet[objName] then break end
+					objName = baseName .. tostring(i) .. self.objectFileExtension
+				end
+				uniqueSet[objName] = 1
+			end
+			return objName
+		else
+			return nil		-- don't process
+		end		
+	end
+
+--
+-- Returns true if this is an object file for the toolset
+--
+	function toolset:isObjectFile(cfg, fileName)
+		return path.hasextension(fileName, { self.objectFileExtension })
+	end
+		
+--[[	
 --
 -- Gets a sysflag as a single string
 --
@@ -106,33 +143,34 @@
 	end
 
 --
--- Returns flags to pass to the tool at the the command line
+-- Returns a **table** of command line flags to pass to the tool
 --
-	toolset.getflags = {}
-
-	function toolset:getflags(cfg, toolName)
-		local toolsysflags = 
+	function toolset:getcmdflags(cfg, toolName)
 		if toolName == 'cpp' then
 			-- Add flags from the configuration & flags from sysflags
-			local cfgflags = table.translate(cfg.flags, self.cppflags)
-			cppflags = table.join(cfgflags, self:getsysflags(cfg, 'cppflags'))
-
-			return cppflags
+			local flags = table.translate(cfg.flags, self.cppflags)
+			flags = table.join(flags, self:getsysflags(cfg, 'cppflags'))
+			return flags
 		elseif toolName == 'cc' then
-			local cfgflags = table.translate(cfg.flags, self.cflags)
-			cflags = table.join(cfgflagsm, self:getsysflags(cfg, 'cflags'))
-	
-			return cflags
-		else if toolName == 'cxx' then
+			local flags = table.translate(cfg.flags, self.cflags)
+			flags = table.join(flags, self:getsysflags(cfg, 'cflags'))
+			flags = table.join(flags, self:getcmdflags(cfg, 'cpp'))
+			return flags
+		elseif toolName == 'cxx' then
 			local flags = table.translate(cfg.flags, self.cxxflags)
 			flags = table.join(flags, self:getsysflags(cfg, 'cxxflags'))
+			flags = table.join(flags, self:getcmdflags(cfg, 'cc'))
 			return flags
-		else if toolName == 'link' then
+		elseif toolName == 'link' then
+			local flags = table.translate(cfg.flags, self.ldflags)
+			flags = table.join(flags, self:getsysflags(cfg, 'ldflags'))
+			return flags
+		elseif toolName == 'ar' then
 			local flags = table.translate(cfg.flags, self.ldflags)
 			flags = table.join(flags, self:getsysflags(cfg, 'ldflags'))
 			return flags
 		else
-			error('Unrecognised tool name ' .. toolName)
+			error('Unrecognised tool name ' .. tostring(toolName))
 		end
 	end
 	
@@ -173,9 +211,25 @@
 --
 	function toolset:getCommandLine(cfg, toolName, extraFlags, outputs, inputs)
 		local toolCmd = self:getBinary(cfg, toolName)
-		local cmdflags = toolset.getcmdflags[toolname](self, cfg)
+		local cmdflags = table.concat( self:getcmdflags(cfg, toolName), ' ')
 		
 		local parts = { toolCmd, cmdflags, extraFlags, outputs, inputs }
 		local cmd = table.concat(parts, ' ')
 		return cmd
 	end
+	
+--
+-- Get the object filename given the source filename. Returns null if it's not a recognised source file
+--
+	function toolset:getObjectFile(cfg, sourceFileName)
+		error('Not Implemented')
+	end
+	
+--
+-- Returns true if this is an object file for the toolset
+--
+	function toolset:isObjectFile(cfg, fileName)
+		error('Not Implemented')
+	end
+]]
+		

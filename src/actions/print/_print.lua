@@ -28,11 +28,11 @@
 			indentStr = indentStr .. ' '
 		end
 	end
-
-	local function p(name, obj, depth)
+	
+	local function pRecursive(name, obj, depth)
 		depth = depth or 2
 		local str = iif(name, tostring(name) .. ' : ', '')
-		if( obj and builtin_type(obj) == "table" ) then
+		if( obj and type(obj) == "table" ) then
 			if depth < 0 then
 				print(indentStr .. str .. tostring(obj))
 			else
@@ -42,7 +42,7 @@
 					print(indentStr .. str)
 					indent(2)
 					for k,v in pairs(obj) do
-						p(k, v, depth-1)
+						pRecursive(k, v, depth-1)
 					end
 					indent(-2)
 				end
@@ -52,6 +52,11 @@
 		else
 			print(indentStr .. tostring(name))
 		end
+	end
+	
+	-- need to separate out this from pRecursive otherwise calling with tables will put the 2nd value as the depth
+	local function p(name, obj)
+		return pRecursive(name, obj, nil)
 	end
 	
 	function Print.onSolution(sln)
@@ -71,21 +76,53 @@
 		for cfg in project.eachconfig(prj) do
 			p('config', cfg.shortname)
 			local toolset = premake.tools[cfg.toolset]
-			p('toolset')
+			p('toolset ' .. cfg.toolset)
 			indent(2)
 				--[[p('cppflags', toolset:getcppflags(cfg))
 				p('cflags', toolset:getcflags(cfg))
 				p('cxxflags', toolset:getcxxflags(cfg))
 				p('sysflags', toolset.sysflags)]]
 				
+				local function flattenArgs(t)
+					local t2 = {}
+					for k,v in pairs(t) do
+						if type(k) ~= 'number' then
+							if v ~= '' then
+								table.insert(t2, '$'..k)
+							end
+						else
+							table.insert(t2, v)
+						end
+					end
+					return t2
+				end
+				
+				local compileTool = toolset:getCompileTool(cfg)
+				local linkTool = toolset:getLinkTool(cfg)
+				
+				local compileSysflags = compileTool:getsysflags(cfg)
+				local compileCmdArgs = compileTool:decorateInputs(cfg, '$out', '$in')
+				--local compileVars = Seq:new(compileCmdArgs):getKeys():prependEach('$'):prepend(compileSysflags):mkstring(' ')
+				local compileCmdArgsFlat = flattenArgs(compileCmdArgs)
+				local linkCmdArgs = linkTool:decorateInputs(cfg, '$out', '$in')
+				local linkVars = Seq:new(linkCmdArgs):getKeys():prependEach('$'):prepend(linkSysflags):mkstring(' ')
+				local linkCmdArgsFlat = flattenArgs(linkCmdArgs)
+				
 --				p('cfg          ', cfg)
 				p('flags        ', cfg.flags)
-				p('compiler cmd ', toolset:getBinary(cfg, 'cxx'))
-				p('compile flags', toolset:getcompilerflags(cfg))
-				p('objdir       ', project.getrelative(cfg.project, cfg.objdir))
-				p('link cmd     ', toolset:getBinary(cfg, 'link'))
-				p('link flags   ', toolset:getldflags(cfg))
-				p('link libs    ', table.concat( toolset:getlinks(cfg), ' '))
+				p('compiler tool', compileTool.toolName)
+				p('compiler bin ', compileTool:getBinary())
+				p('compile sysflags', compileSysflags)
+				for k,v in pairs(compileCmdArgs) do
+				 p(' .' .. tostring(k) ..' = '..v)
+				end				
+				p('compile cmd  ', compileTool:getCommandLine(compileCmdArgsFlat))
+				p('objdir       ', cfg.objdir)
+				p('link cmd     ', linkTool:getCommandLine(linkCmdArgsFlat))
+				p('link flags   ', linkTool:getsysflags(cfg), ' ')
+				for k,v in pairs(linkCmdArgs) do
+				 p(' .' .. tostring(k) ..' = '..v)
+				end				
 				p('link target  ', cfg.buildtarget.directory .. '/' .. cfg.buildtarget.name)
 				if 0 < #cfg.prebuildcommands then
 					p('prebuild cmd ', table.concat(cfg.prebuildcommands, "\n" .. indentStr .. '                '))

@@ -1419,3 +1419,19 @@
 	function newoption(opt)
 		premake.option.add(opt)
 	end
+
+--
+-- Define a new tool
+--
+	function newtool(t)
+		return premake.tools.newtool(t)
+	end
+	
+--
+-- Defines a new toolset. 
+--  eg. newtoolset { toolsetName = 'mytoolset', tools = { mytool_cc, mytool_cxx, mytool_link, mytool_ar }, }
+--
+	function newtoolset(t)
+		return premake.tools.newtoolset(t)
+	end
+		

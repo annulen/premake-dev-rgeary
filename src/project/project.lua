@@ -86,6 +86,7 @@
 		cfg.project = prj
 		cfg.system = cfg.system or system
 		cfg.architecture = cfg.architecture or architecture
+		ptypeSet( cfg, 'configprj' )
 		
 		-- fill in any calculated values
 		premake5.config.bake(cfg)
@@ -168,7 +169,9 @@
 		end
 	end
 
-
+	function project.getConfigs(prj)
+		return Seq:new(project.eachconfig(prj))
+	end
 -- 
 -- Locate a project by name; case insensitive.
 --
