@@ -135,6 +135,17 @@
 		end
 	end
 	
+--
+-- Remove the file extension
+--
+	function path.stripextension(p)
+		local i = p:findlast(".", true)
+		if (i) then
+			return p:sub(1,i)
+		else
+			return p
+		end
+	end
 	
 	
 --
