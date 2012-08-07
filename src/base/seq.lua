@@ -10,22 +10,42 @@ local SeqMT = {
 local nextUID = 1000		-- debugging
 
 -- Sequence for iterating over a table, or just cloning another sequence
-function Seq:new(t)
+function Seq:new(t, optValue)
 	local s = {}
-	if Seq.isSeq(t) then
+	if t == nil then
+		s.iterate = function()
+			return nil
+		end
+	elseif Seq.isSeq(t) then
 		-- Clone
 		s.iterate = t.iterate
 	elseif type(t) == 'string' then
-		return Seq:new({t})
+		if optValue then
+			local t2 = {}
+			t2[t] = optValue
+			return Seq:new(t2)
+		else
+			return Seq:new({t})
+		end
+	elseif type(t) == 'function' then
+		s.iterate = function()
+			-- setup
+			-- moveNext
+			return function()
+				local v = t()
+				return v,v
+			end
+		end
 	else
 		-- Create a new iterator object which will iterate over t
 		s.iterate = function()
 			-- Set up iterator state
-			local i = 0
+			local fn = pairs(t)
+			local key,value
 			-- Return a moveNext function, which returns (idx,value), and idx=nil to end
 			return function()
-				i = i + 1
-				if i <= #t then return i,t[i]
+				key,value = fn(t,key)
+				if key then return key,value
 				else return nil
 				end
 			end
@@ -36,11 +56,11 @@ function Seq:new(t)
 	return setmetatable( s, SeqMT )
 end
 
-function Seq.toSeq(s)
+function Seq.toSeq(s, optValue)
 	if Seq.isSeq(s) then
 		return s
 	else
-		return Seq:new(s)
+		return Seq:new(s, optValue)
 	end
 end
 
@@ -55,6 +75,18 @@ end
 
 function Seq:each()
 	return self.iterate()
+end
+
+function Seq:mkstring(delimiter)
+	rv = nil
+	for _,v in self:each() do
+		if rv then
+			rv = rv .. ' ' .. v
+		else
+			rv = v
+		end
+	end
+	return rv
 end
 
 function Seq:where(cond)
@@ -133,9 +165,39 @@ function Seq:take(n)
 end
 
 -- Remove any element in the string/sequence/set vs
-function Seq:except(vs)
-	vs = toSet(vs)
-	return self:where(function(v) return not vs[v];	end)
+function Seq:except(exceptValues)
+	if exceptValues == nil then
+		return self:where(function(v) return v ~= nil; end)
+	else
+		exceptValues = toSet(exceptValues)
+		return self:where(function(v) return not exceptValues[v];	end)
+	end
+end
+
+-- Prepend a string to each element
+function Seq:prependEach(prepend)
+	return self:select(function(v) return prepend .. v; end)
+end
+
+-- Append a string to each element
+function Seq:appendEach(append)
+	return self:select(function(v) return v .. append; end)
+end
+
+-- Iterate over the keys in a sequence
+function Seq:getKeys()
+	local s = Seq:new(self)
+	s.iterate = function()
+		-- setup
+		local iter = self.iterate()
+		-- moveNext
+		return function()
+			for k,_ in iter do
+				return k, k
+			end
+		end
+	end
+	return s
 end
 
 -- concatenate sequence
@@ -161,6 +223,54 @@ function Seq:concat(seq2)
 		end	
 	end
 	return s
+end
+
+-- prepend a sequence, opposite of concat
+function Seq:prepend(seq2, optValue)
+	seq2 = Seq.toSeq(seq2, optValue)
+	return seq2:concat(self)
+end
+
+function Seq:toTable()
+	local t = {}
+	for k,v in self:each() do
+		t[k] = v
+	end
+	return t
+end
+
+-- Returns boolean
+function Seq:contains(value)
+	for k,v in self:each() do
+		if k == value or v == value then
+			return true
+		end
+	end
+	return false
+end
+
+-- orderBy will put key/values in ascending order as defined by orderFn
+-- orderFn takes (key, value) parameters, and returns an integer
+function Seq:orderBy(orderFn)
+	--untested
+	local function compFn(a,b) return orderFn(a.key,a.value) < orderFn(b.key, b.value); end 	
+
+	-- flatten the table in to a sequence of key/value pairs
+	local tFlat = {}
+	for k,v in self:each() do
+		table.insert(tFlat, { key = k, value = v })
+	end
+	
+	-- sort it
+	local tSortedFlat = table.sort(tFlat, compFn)
+	
+	-- Unflatten the table
+	local tSorted = {}
+	for i,p in ipairs(tSortedFlat) do
+		tSorted[p.key] = p.value
+	end
+	
+	return Seq:new(tSorted)
 end
 
 function testSeq()
