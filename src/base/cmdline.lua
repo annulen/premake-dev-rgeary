@@ -104,7 +104,7 @@
 
 	newoption
 	{
-		trigger		= "tryattach",
+		trigger		= "attachNoWait",
 		value		= "[ip]",
 		description = "Try attaching to the debugger, but don't wait. IP address optional."
 	}	
