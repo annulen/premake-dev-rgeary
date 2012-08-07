@@ -81,8 +81,8 @@
 			local connection = require("debugger")
 			connection(debuggerIP,10000, nil, 100)
 			print('Connected to debugger')
-		elseif(_OPTIONS["tryattach"] ) then
-			local debuggerIP = _OPTIONS["tryattach"]
+		elseif(_OPTIONS["attachNoWait"] ) then
+			local debuggerIP = _OPTIONS["attachNoWait"]
 			if(debuggerIP=='') then debuggerIP = '127.0.0.1'; end
 			--print("Listening for debugger on " .. tostring(debuggerIP) .. ':10000')
 			local connection = require("debugger")
