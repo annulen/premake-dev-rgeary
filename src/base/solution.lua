@@ -30,7 +30,7 @@
 		premake.solution.list[name] = sln
 			
 		-- attach a type descriptor
-		setmetatable(sln, { __type="solution" })
+		ptypeSet( sln, "solution" )
 
 		sln.name           = name
 		sln.basedir        = os.getcwd()			
@@ -124,6 +124,7 @@
 		-- fill in any calculated values
 		for _, cfg in ipairs(configs) do
 			premake5.config.bake(cfg)
+			ptypeSet( cfg, 'configsln' )
 		end
 		
 		return configs
@@ -240,6 +241,16 @@
 				return sln.configs[i]
 			end
 		end
+	end
+	
+	function solution.getConfigs(sln)
+		-- to make testing a little easier, allow this function to
+		-- accept an unbaked solution, and fix it on the fly
+		if not sln.baked then
+			sln = solution.bake(sln)
+		end
+
+		return Seq:new(sln.configs)	
 	end
 
 

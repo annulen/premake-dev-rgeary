@@ -343,7 +343,7 @@
 		end
 		
 		-- remember the container object (solution, project, etc.)
-		cfg[type(block)] = block
+		cfg[ptype(block)] = block
 		
 		return cfg
 	end

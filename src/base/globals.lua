@@ -158,19 +158,24 @@
 	
 		
 --
--- An extension to type() to identify project object types by reading the
+-- Premake type. An extension to type() to identify project object types by reading the
 -- "__type" field from the metatable.
 --
 
-	builtin_type = type	
-	function type(t)
+	function ptype(t)
 		local mt = getmetatable(t)
 		if (mt) then
 			if (mt.__type) then
 				return mt.__type
 			end
 		end
-		return builtin_type(t)
+		return type(t)
+	end
+	
+	function ptypeSet(t, name)
+		local mt = getmetatable(t) or {}
+		mt.__type = name
+		return setmetatable(t, mt)
 	end
 	
 	
@@ -282,7 +287,7 @@
 		rv = {}
 		if t then
 			for k,v in pairs(t) do
-				local typeV = builtin_type(v)
+				local typeV = type(v)
 				if( typeV == "table" ) then
 					table.insert(rv, k)
 				end
@@ -323,7 +328,7 @@
 		end
 		-- Optional, but useful for error messages
 		if( derivedClassName ) then
-			setmetatable( rv, { __type = derivedClassName } ) 
+			ptypeSet( rv, derivedClassName )
 		end
 		return rv
 	end
@@ -333,8 +338,8 @@
 	end
 	
 	function concat(a,b)
-		local atype = builtin_type(a)
-		local btype = builtin_type(b)
+		local atype = type(a)
+		local btype = type(b)
 		local rv = {}
 		
 		if a == nil then
@@ -401,4 +406,22 @@
 		end
 	end
 	
-	
+	function toList(vs)
+		if type(vs) == 'string' then
+			-- Convert string to sequence
+			local rv = { vs }
+			return rv
+		elseif type(vs) == 'function' then
+			-- assume it's an iterator function
+			rv = {}
+			for k,v in vs do
+				table.insert(rv, v)
+			end
+			return rv
+		end
+		if #vs > 0 then
+			return vs
+		else
+			return {}
+		end
+	end
