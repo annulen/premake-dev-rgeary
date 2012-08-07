@@ -390,7 +390,7 @@
 			-- assume it's an iterator function
 			kvs = {}
 			for k,v in vs do
-				kvs.v = 1
+				kvs[v] = 1
 			end
 			return kvs
 		end
@@ -398,7 +398,7 @@
 			-- Convert sequence to hashset
 			kvs = {}
 			for _,v in ipairs(vs) do
-				kvs.v = 1
+				kvs[v] = 1
 			end
 			return kvs
 		else
