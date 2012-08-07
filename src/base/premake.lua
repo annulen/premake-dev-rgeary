@@ -84,6 +84,13 @@
 --
 
 	function premake.generate(obj, filename, callback)
+		local f = premake.generateStart(obj, filename)
+		callback(obj)
+		premake.generateEnd(f)
+	end
+
+-- Returns file handle
+	function premake.generateStart(obj, filename)
 		filename = premake.project.getfilename(obj, filename)
 		printf("Generating %s...", filename)
 
@@ -93,6 +100,12 @@
 		end
 
 		io.output(f)
-		callback(obj)
-		f:close()
+		return f	
 	end
+	
+	function premake.generateEnd(fileHandle)
+		if fileHandle then
+			fileHandle:close()
+		end
+	end
+	
