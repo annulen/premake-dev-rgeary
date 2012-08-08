@@ -6,6 +6,7 @@
 
 	premake.make = { }
 	local make = premake.make
+	local clean = premake.actions.clean
 	local solution = premake.solution
 	local project = premake5.project
 
@@ -44,11 +45,11 @@
 		end,
 		
 		oncleansolution = function(sln)
-			premake.clean.file(sln, make.getmakefilename(sln, false))
+			clean.file(sln, make.getmakefilename(sln, false))
 		end,
 		
 		oncleanproject = function(prj)
-			premake.clean.file(prj, make.getmakefilename(prj, true))
+			clean.file(prj, make.getmakefilename(prj, true))
 		end
 	}
 
@@ -304,10 +305,10 @@
 		end,
 		
 		oncleansolution = function(sln)
-			premake.clean.file(sln, make.getmakefilename(sln, false))
+			clean.file(sln, make.getmakefilename(sln, false))
 		end,
 		
 		oncleanproject = function(prj)
-			premake.clean.file(prj, make.getmakefilename(prj, true))
+			clean.file(prj, make.getmakefilename(prj, true))
 		end
 	}

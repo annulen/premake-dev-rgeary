@@ -45,6 +45,9 @@
 		"tools/snc.lua",
 		"tools/icc.lua",
 
+		-- Clean action
+		"actions/clean/_clean.lua",
+
 		-- CodeBlocks action
 		"actions/codeblocks/_codeblocks.lua",
 		"actions/codeblocks/codeblocks_workspace.lua",
@@ -83,10 +86,7 @@
 		
 		-- Xcode4 action
 		"actions/xcode/xcode4_workspace.lua",
-		
-		-- Clean action
-		"actions/clean/_clean.lua",
-		
+				
 		-- Print action
 		"actions/print/_print.lua",
 

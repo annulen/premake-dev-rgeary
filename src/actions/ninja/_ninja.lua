@@ -7,6 +7,7 @@
 	local ninja = premake.actions.ninja
 	local solution = premake.solution
 	local project = premake5.project
+	local clean = premake.actions.clean
 	ninja.slnconfigs = {}		-- all configurations
 	ninja.buildFileHandle = nil
 --
@@ -54,12 +55,11 @@
 		end,
 		
 		oncleansolution = function(sln)
-			premake.clean.file(sln, ninja.getMasterBuildFilename(sln))
-			premake.clean.file(sln, ninja.getBuildFilename(sln))
+			clean.file(sln, "build.ninja")
 		end,
 		
 		oncleanproject = function(prj)
-			premake.clean.file(prj, ninja.getBuildFilename(prj))
+			--clean.file(prj, ninja.getBuildFilename(prj))
 		end
 	}
 	

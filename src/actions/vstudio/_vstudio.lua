@@ -7,7 +7,7 @@
 	premake.vstudio = { }
 	local vstudio = premake.vstudio
 	local project = premake5.project
-
+	local clean = premake.actions.clean
 
 --
 -- The Visual Studio 2005 action, with support for the new platforms API
@@ -365,12 +365,12 @@
 --
 
 	function vstudio.cleansolution(sln)
-		premake.clean.file(sln, "%%.sln")
-		premake.clean.file(sln, "%%.suo")
-		premake.clean.file(sln, "%%.ncb")
+		clean.file(sln, "%%.sln")
+		clean.file(sln, "%%.suo")
+		clean.file(sln, "%%.ncb")
 		-- MonoDevelop files
-		premake.clean.file(sln, "%%.userprefs")
-		premake.clean.file(sln, "%%.usertasks")
+		clean.file(sln, "%%.userprefs")
+		clean.file(sln, "%%.usertasks")
 	end
 	
 	function vstudio.cleanproject(prj)

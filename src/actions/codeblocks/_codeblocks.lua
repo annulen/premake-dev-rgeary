@@ -5,6 +5,7 @@
 --
 
 	premake.codeblocks = { }
+	local clean = premake.actions.clean
 
 	newaction {
 		trigger         = "codeblocks",
@@ -28,12 +29,12 @@
 		end,
 		
 		oncleansolution = function(sln)
-			premake.clean.file(sln, "%%.workspace")
+			clean.file(sln, "%%.workspace")
 		end,
 		
 		oncleanproject = function(prj)
-			premake.clean.file(prj, "%%.cbp")
-			premake.clean.file(prj, "%%.depend")
-			premake.clean.file(prj, "%%.layout")
+			clean.file(prj, "%%.cbp")
+			clean.file(prj, "%%.depend")
+			clean.file(prj, "%%.layout")
 		end
 	}
