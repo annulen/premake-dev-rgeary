@@ -211,7 +211,7 @@
 			value, count = string.gsub(value, "%%{(.-)}", function(token)			
 				local result, err = expander(token)
 				if not result then
-					error(err, 0)
+					error(err .. ' in string ' .. value, 0)
 				end
 				return result
 			end)
@@ -343,7 +343,8 @@
 		end
 		
 		-- remember the container object (solution, project, etc.)
-		cfg[ptype(block)] = block
+		--cfg[ptype(block)] = block
+		ptypeSet(cfg, ptype(block))
 		
 		return cfg
 	end

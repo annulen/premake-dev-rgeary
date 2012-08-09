@@ -16,7 +16,7 @@
 	newaction {
 		trigger         = "ninja",
 		shortname       = "Ninja Build",
-		description     = "Generate build.ninja files for Ninja Build.", -- Currently only tested with C++",
+		description     = "Generate ninja files for Ninja Build.", -- Currently only tested with C++",
 
 		-- temporary
 		isnextgen = true,
@@ -32,10 +32,11 @@
 		buildFileHandle = nil,
 
 		onsolution = function(sln)
+			premake.generate(sln, ninja.getDefaultBuildFilename(), ninja.generate_defaultbuild) 
 			if ninja.buildFileHandle then
 				error("Not supported : Can't start more than one solution at once")
 			end
-			ninja.buildFileHandle = premake.generateStart(sln, "build.ninja")
+			ninja.buildFileHandle = premake.generateStart(sln, ninja.getSolutionBuildFilename(sln))
 			ninja.generate_solution(sln)
 		end,
 		
@@ -55,13 +56,21 @@
 		end,
 		
 		oncleansolution = function(sln)
-			clean.file(sln, "build.ninja")
+			clean.file(sln, ninja.getSolutionBuildFilename(sln))
 		end,
 		
 		oncleanproject = function(prj)
-			--clean.file(prj, ninja.getBuildFilename(prj))
+			clean.file(prj, ninja.getDefaultBuildFilename())
 		end
 	}
+	
+	function ninja.getDefaultBuildFilename()
+		return 'build.ninja'
+	end
+	
+	function ninja.getSolutionBuildFilename(sln)
+		return sln.name .. '.ninja'
+	end
 	
 	function ninja.onExecute()
 		local args = Seq:new(_ARGS) 
@@ -75,6 +84,16 @@
 		end
 	end
 
+--
+-- Write out a file which sets environment variables then subninjas to the actual build
+--
+	function ninja.generate_defaultbuild(sln)
+		local rootDir = sln.basedir
+		local currentDir = os.getcwd()
+		local relativeRoot = path.getrelative(currentDir, rootDir)
+		_p('root=' .. relativeRoot)
+		_p('subninja $root/' .. ninja.getSolutionBuildFilename(sln))
+	end
 --
 -- Write out the default configuration rule for a solution or project.
 -- @param target
@@ -173,14 +192,20 @@
 	-- Get the syntax for accessing a variable, with correct escaping
 	 
 	function ninja.escVarName(varName)
-    	varName = '$' .. varName
+		if string.sub(varName,1,1) == '$' then
+			return varName
+		end
     	if string.find(varName, ".", 1, true) then
-    		varName = '${' .. k .. '}'
+    		varName = '${' .. varName .. '}'
+    	else
+    	   	varName = '$' .. varName
     	end
     	return varName
 	end
 	
-	-- Returns a mangled varName which will refer to the specified unique value. 2nd return var is if it's already set
+	-- Returns (newVarName, found) 
+	--	newVarName : a mangled varName which will refer to the specified unique value
+	--  found : true is if it's already found
 	--  Just to make the ninja file look nicer
 	ninja.globalVars = {}  
 	function ninja.setGlobal(varName, value, alternateVarNames)
@@ -203,6 +228,7 @@
 		ninja.globalVars[varNameM] = value
 		return varNameM,false
 	end
+	
 
 --
 -- Write out raw ninja rules for a configuration.

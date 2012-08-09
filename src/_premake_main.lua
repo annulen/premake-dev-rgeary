@@ -55,8 +55,8 @@
 		      	table.concat(map(errobj, function (k,v) return '[' .. tostring(k) .. '] = ' .. tostring(v); end)
 		      	, ',') .. "}"
 		    end
-			print("MyError: \"" .. errStr .. "\"")
-	    	--for k,v in pairs(_G) do print("GLOBAL:" , k,v) end
+			print("Error: \"" .. errStr .. "\"")
+	    	--for k ,v in pairs(_G) do print("GLOBAL:" , k,v) end
 	    	if( type(errobj)=='thread' ) then
 	    		print(debug.traceback(errobj))
 	    	else

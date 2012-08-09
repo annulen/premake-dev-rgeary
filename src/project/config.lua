@@ -21,12 +21,35 @@
 		cfg.shortname = table.concat({ cfg.buildcfg, cfg.platform }, " ")
 		cfg.shortname = cfg.shortname:gsub(" ", "_"):lower()
 
-		if cfg.project and cfg.kind then
+		if cfg.project and cfg.kind and cfg.kind ~= 'None' then
 			cfg.buildtarget = config.gettargetinfo(cfg)
 			oven.expandtokens(cfg, nil, nil, "buildtarget")
 			cfg.linktarget = config.getlinkinfo(cfg)
 			oven.expandtokens(cfg, nil, nil, "linktarget")
 		end
+		
+		-- separate links in to systemlibs, linkAsStatic, linkAsShared
+		cfg.systemlibs = cfg.systemlibs or {}
+		cfg.linkAsStatic = cfg.linkAsStatic or {}
+		cfg.linkAsShared = cfg.linkAsShared or {}
+		
+		for _,link in ipairs(cfg.links or {}) do
+			local prj = premake.solution.findproject(cfg.solution, link)
+			if prj and prj.linktarget then
+				local targetdir = prj.linktarget.abspath
+				if prj.kind == 'SharedLib' then
+					table.insert( cfg.linkAsShared, targetdir )
+				else
+					table.insert( cfg.linkAsStatic, targetdir )
+				end
+			else
+				if string.find(link, '/') then
+					table.insert( cfg.linkAsStatic, link )
+				else
+					table.insert( cfg.systemlibs, link )
+				end				
+			end
+		end 
 	end
 
 
@@ -323,3 +346,13 @@
 	function config.gettargetinfo(cfg)
 		return buildtargetinfo(cfg, cfg.kind, "target")
 	end
+
+--
+--	Returns true if the configuration requests a dependency file output
+--
+	function config.hasDependencyFileOutput(cfg)
+		return cfg.flags.AddPhonyHeaderDependency or
+			cfg.flags.CreateDependencyFile or
+			cfg.flags.CreateDependencyFileIncludeSystem 
+	end
+	

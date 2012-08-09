@@ -14,7 +14,9 @@ function Seq:new(t, optValue)
 	local s = {}
 	if t == nil then
 		s.iterate = function()
-			return nil
+			return function()
+				return nil
+			end
 		end
 	elseif Seq.isSeq(t) then
 		-- Clone
@@ -56,6 +58,24 @@ function Seq:new(t, optValue)
 	return setmetatable( s, SeqMT )
 end
 
+-- seq equivalent of ipairs. Iterates over the numerical keyed arguments in a table
+function Seq:ipairs(t)
+	local s = Seq:new(nil)
+	if (not t) or (#t==0) then
+		return s
+	end
+	s.iterate = function()
+		local i = 0
+		return function()
+			i = i + 1
+			if i <= #t then return i,t[i]
+			else return nil
+			end
+		end
+	end
+	return s
+end
+
 function Seq.toSeq(s, optValue)
 	if Seq.isSeq(s) then
 		return s
@@ -86,9 +106,10 @@ function Seq:mkstring(delimiter)
 			rv = v
 		end
 	end
-	return rv
+	return rv or ''
 end
 
+-- note : Condition is on the value, not (key,value)
 function Seq:where(cond)
 	local s = Seq:new(self)
 	s.iterate = function()
@@ -107,6 +128,24 @@ function Seq:where(cond)
 	return s
 end
 
+-- Condition is on (key,value)
+function Seq:whereK(cond)
+	local s = Seq:new(self)
+	s.iterate = function()
+		-- setup
+		local iter = self.iterate()
+		-- moveNext
+		return function(s)
+			for k,v in iter do 
+				if cond(k,v) then
+					return k,v
+				end
+			end
+			return nil
+		end
+	end
+	return s
+end
 function Seq:select(selector)
 	local s = Seq:new(self)
 	s.iterate = function()

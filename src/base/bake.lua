@@ -7,7 +7,6 @@
 -- project, and can be retrieved by calling the getconfig() or eachconfig().
 --
 -- Copyright (c) 2008-2012 Jason Perkins and the Premake project
---
 
 	premake.bake = { }
 	local bake = premake.bake
@@ -419,7 +418,7 @@
   				local theUseProj = nil;
   				for _, prj in ipairs(cfg.project.solution.projects) do
   					if (prj.name:lower() == testName) then
-  						if(prj.usage) then
+  						if(prj.isUsage) then
   							theUseProj = prj;
   						else
   							theProj = prj;

@@ -530,7 +530,7 @@
 -- Write out the custom build step blocks.
 --
 
-	local function buildstepsblock(name, steps)
+	function vc200x.buildstepsblock(name, steps)
 		_p(3,'<Tool')
 		_p(4,'Name="%s"', name)
 		if #steps > 0 then
@@ -540,15 +540,15 @@
 	end
 
 	function vc200x.VCPreBuildEventTool(cfg)
-		buildstepsblock("VCPreBuildEventTool", cfg.prebuildcommands)
+		vc200x.buildstepsblock("VCPreBuildEventTool", cfg.prebuildcommands)
 	end
 
 	function vc200x.VCPreLinkEventTool(cfg)
-		buildstepsblock("VCPreLinkEventTool", cfg.prelinkcommands)
+		vc200x.buildstepsblock("VCPreLinkEventTool", cfg.prelinkcommands)
 	end
 
 	function vc200x.VCPostBuildEventTool(cfg)
-		buildstepsblock("VCPostBuildEventTool", cfg.postbuildcommands)
+		vc200x.buildstepsblock("VCPostBuildEventTool", cfg.postbuildcommands)
 	end
 
 

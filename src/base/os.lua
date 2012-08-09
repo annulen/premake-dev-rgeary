@@ -16,16 +16,19 @@
 
 
 --
--- Scan the well-known system locations for a particular library.
+-- Scan the well-known system locations for a particular library. 
+--  Add to the search path using premake.libsearchpath
 --
 
 	function os.findlib(libname)
 		local path, formats
+		local delimiter = ':'
 
 		-- assemble a search path, depending on the platform
 		if os.is("windows") then
 			formats = { "%s.dll", "%s" }
 			path = os.getenv("PATH")
+			delimiter = ';'
 		elseif os.is("haiku") then
 			formats = { "lib%s.so", "%s.so" }
 			path = os.getenv("LIBRARY_PATH")
@@ -52,6 +55,10 @@
 				path = path .. ":/lib64:/usr/lib64/:usr/local/lib64"
 			end
 			path = path .. ":/lib:/usr/lib:/usr/local/lib"
+		end
+		
+		if premake.libSearchPath then
+			path = path .. delimiter .. table.concat(premake.libSearchPath, delimiter)
 		end
 
 		for _, fmt in ipairs(formats) do
@@ -307,3 +314,19 @@
 		builtin_rmdir(p)
 	end
 
+--
+-- Remove a directory if it's empty, and any parents if they're empty too
+--
+
+	function os.rmdirParentsIfEmpty(p)
+		local dirs = os.matchdirs(p .. "/*")
+		local files = os.matchfiles(p .. "/*")
+		
+		if (#dirs == 0) and (#files == 0) then
+			builtin_rmdir(p)
+			local parent = path.getdirectory(p)
+			os.rmdirParentsIfEmpty(parent)
+			return true
+		end
+		return false
+	end

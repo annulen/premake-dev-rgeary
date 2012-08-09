@@ -444,6 +444,9 @@
 		kind = "string-list",
 		tokens = true,
 		namealiases = { "compileoptions" },
+		-- 'usagecopy = true' means that the field can be a "usage requirement". It will copy this field's values
+		--   from the usage secton in to the destination project 
+		usagecopy = true,							
 	}
 
 	api.register {
@@ -507,6 +510,8 @@
 		scope = "config",
 		kind = "string-list",
 		tokens = true,
+		usagecopy = true,
+		namealiases = { "define" },
 	}
 	
 	api.register {
@@ -514,6 +519,7 @@
 		scope = "config",
 		kind = "string-list",
 		tokens = true,
+		usagecopy = true,
 	}
 
 	api.register {
@@ -658,6 +664,8 @@
 		scope = "config",
 		kind = "directory-list",
 		tokens = true,
+		usagecopy = true,
+		namealiases = { "includedir" },
 	}
 
 	api.register {
@@ -665,11 +673,16 @@
 		scope = "config",
 		kind = "string",
 		allowed = {
+			"None",				-- don't build anything. Useful for usage projects where you just want to pass requirements
 			"ConsoleApp",
 			"WindowedApp",
 			"StaticLib",
 			"SharedLib",
 		},
+		aliases = {
+			Executable = 'ConsoleApp',
+			Exe = 'ConsoleApp',
+		}
 	}
 
 	api.register {
@@ -688,6 +701,7 @@
 		scope = "config",
 		kind = "directory-list",
 		tokens = true,
+		usagecopy = true,
 	}
 
 	api.register {
@@ -695,6 +709,7 @@
 		scope = "config",
 		kind = "string-list",
 		tokens = true,
+		usagecopy = true,
 	}
 	
 	api.register {
@@ -709,8 +724,33 @@
 			return value
 		end,
 		tokens = true,
+		usagecopy = true,		-- there's special case handling for links
 	}
-
+	
+	api.register {
+		name = "linkAsStatic",
+		scope = "config",
+		kind = "string-list",
+		tokens = true,
+		usagecopy = true,
+	}
+	
+	api.register {
+		name = "linkAsShared",
+		scope = "config",
+		kind = "string-list",
+		tokens = true,
+		usagecopy = true,
+	}
+	
+	api.register {
+		name = "systemlibs",
+		scope = "config",
+		kind = "string-list",
+		tokens = true,
+		usagecopy = true,
+	}
+	
 	api.register {
 		name = "location",
 		scope = "project",
@@ -786,6 +826,7 @@
 		scope = "config",
 		kind = "string-list",
 		tokens = true,
+		usagecopy = true,
 	}
 
 	api.register {
@@ -793,6 +834,7 @@
 		scope = "config",
 		kind = "directory-list",
 		tokens = true,
+		usagecopy = true,
 	}
 
 	api.register {
@@ -800,6 +842,7 @@
 		scope = "config",
 		kind = "string-list",
 		tokens = true,
+		usagecopy = true,
 	}
 
 	api.register {
@@ -821,6 +864,7 @@
 		scope = "config",
 		kind = "path",
 		tokens = true,
+		usagecopy = true,
 	}		
 
 	api.register {
@@ -828,6 +872,7 @@
 		scope = "config",
 		kind = "string",
 		tokens = true,
+		usagecopy = true,
 	}
 
 	api.register {
@@ -835,6 +880,7 @@
 		scope = "config",
 		kind = "string",
 		tokens = true,
+		usagecopy = true,
 	}
 
 	api.register {
@@ -842,6 +888,7 @@
 		scope = "config",
 		kind = "string",
 		tokens = true,
+		usagecopy = true,
 	}
 
 	api.register {
@@ -849,6 +896,7 @@
 		scope = "config",
 		kind = "string",
 		tokens = true,
+		usagecopy = true,
 	}
 
 	api.register {
@@ -1261,6 +1309,7 @@
 			--Otherwise, set us as the project in that slot.
 			if(sln.projects[name]) then
 				sln.projects[name].usageProj = prj;
+				prj.realProj = sln.projects[name]
 			else
 				sln.projects[name] = prj
 			end
@@ -1268,8 +1317,9 @@
 			--If we're creating a regular project, and there's already a project
 			--with our name, then it must be a usage project. Set it as our usage project
 			--and set us as the project in that slot.
-			if(sln.projects[name]) then
+			if(sln.projects[name] and sln.projects[name].isUsage) then
 				prj.usageProj = sln.projects[name];
+				prj.usageProj.realProj = prj
 			end
 
 			sln.projects[name] = prj
@@ -1281,7 +1331,7 @@
 		prj.script         = _SCRIPT
 		prj.uuid           = os.uuid()
 		prj.blocks         = { }
-		prj.usage		   = isUsage;
+		prj.isUsage		   = isUsage;
 		
 		return prj;
 	end
@@ -1290,8 +1340,10 @@
 		if (not name) then
 			--Only return usage projects.
 			if(ptype(premake.CurrentContainer) ~= "project") then return nil end
-			if(not premake.CurrentContainer.usage) then return nil end
+			if(not premake.CurrentContainer.isUsage) then return nil end
 			return premake.CurrentContainer
+		elseif type(name) ~= 'string' then
+			error('Invalid parameter for usage, must be a string')
 		end
 		
 		-- identify the parent solution
@@ -1300,17 +1352,30 @@
 			sln = premake.CurrentContainer.solution
 		else
 			sln = premake.CurrentContainer
-		end			
-		if (ptype(sln) ~= "solution") then
+		end
+		if sln == nil then
+			sln = {}
+			sln.name           = 'globalusages'
+			sln.basedir        = os.getcwd()		
+			sln.projects       = { }
+			sln.blocks         = { }
+			sln.configurations = { }
+			ptypeSet(sln, 'globalusage')
+			
+			premake.globalUsages = sln
+			premake.CurrentContainer = sln
+		end
+					
+		if (ptype(sln) ~= "solution" and ptype(sln) ~= 'globalusage') then
 			error("no active solution", 2)
 		end
 
   		-- if this is a new project, or the project in that slot doesn't have a usage, create it
-  		if((not sln.projects[name]) or
-  			((not sln.projects[name].usage) and (not sln.projects[name].usageProj))) then
+  		if((not sln.projects[name] ) or
+  			((not sln.projects[name].isUsage) and (not sln.projects[name].usageProj))) then
   			premake.CurrentContainer = createproject(name, sln, true)
   		else
-  			premake.CurrentContainer = iff(sln.projects[name].usage,
+  			premake.CurrentContainer = iif(sln.projects[name].isUsage,
   				sln.projects[name], sln.projects[name].usageProj)
   		end
   
@@ -1324,7 +1389,7 @@
   		if (not name) then
   			--Only return non-usage projects
   			if(ptype(premake.CurrentContainer) ~= "project") then return nil end
-  			if(premake.CurrentContainer.usage) then return nil end
+  			if(premake.CurrentContainer.isUsage) then return nil end
   			return premake.CurrentContainer
 		end
 		
@@ -1340,7 +1405,7 @@
   		end
   		
   		-- if this is a new project, or the old project is a usage project, create it
-  		if((not sln.projects[name]) or sln.projects[name].usage) then
+  		if((not sln.projects[name]) or sln.projects[name].isUsage) then
   			premake.CurrentContainer = createproject(name, sln)
   		else
   			premake.CurrentContainer = sln.projects[name];

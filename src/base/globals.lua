@@ -20,6 +20,8 @@
 -- Top level namespace for actions
 	premake.actions = { }
 
+-- For adding to the directories searched by os.findlib
+ 	premake.libSearchPath = { }
 	
 -- The list of supported platforms; also update list in cmdline.lua
 
@@ -407,21 +409,21 @@
 	end
 	
 	function toList(vs)
-		if type(vs) == 'string' then
-			-- Convert string to sequence
-			local rv = { vs }
-			return rv
-		elseif type(vs) == 'function' then
+		if type(vs) == 'function' then
 			-- assume it's an iterator function
 			rv = {}
 			for k,v in vs do
 				table.insert(rv, v)
 			end
 			return rv
-		end
-		if #vs > 0 then
-			return vs
+		elseif type(vs) == 'table' then
+			if #vs > 0 then
+				return vs
+			else
+				return {}
+			end
 		else
-			return {}
-		end
+			-- Convert to sequence
+			return { vs }
+		end		
 	end

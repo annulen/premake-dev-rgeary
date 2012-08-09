@@ -20,9 +20,16 @@
 --    a description of the format.
 --
 
-	function clean.directory(obj, pattern)
+	function clean.directory(obj, pattern, removeParentsIfEmpty)
+		if pattern == '.' then
+			return false		-- avoid deleting everything
+		end
 		local fname = premake.project.getfilename(obj, pattern)
 		os.rmdir(fname)
+		if removeParentsIfEmpty then
+			os.rmdirParentsIfEmpty(fname)
+		end
+		return true
 	end
 
 
@@ -81,10 +88,10 @@
 			for _, platform in ipairs(platforms) do
 				for cfg in project.eachconfig(prj) do
 					if cfg.objdir then
-						clean.directory(prj, cfg.objdir)
+						clean.directory(prj, cfg.objdir, true)
 					end
 					if cfg.linktarget then
-						clean.directory(prj, cfg.linktarget.directory)
+						clean.directory(prj, cfg.linktarget.directory, true)
 					end
 
 					-- call action.oncleantarget() with the undecorated target name

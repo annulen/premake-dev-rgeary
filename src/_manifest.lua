@@ -24,7 +24,6 @@
 		"base/config.lua",
 		"base/bake.lua",
 		"base/toolset.lua",
-		"base/atool.lua",
 		"base/api.lua",
 		"base/cmdline.lua",
 		"base/validate.lua",
@@ -38,6 +37,7 @@
 		"base/solution.lua",
 
 		-- tool APIs
+		"tools/atool.lua",
 		"tools/dotnet.lua",
 		"tools/gcc.lua",
 		"tools/msc.lua",

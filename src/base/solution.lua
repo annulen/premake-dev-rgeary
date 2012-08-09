@@ -78,13 +78,29 @@
 		-- bake all of the projects in the list, and store that result
 		local projects = {}
 		for i, prj in ipairs(sln.projects) do
-			projects[i] = project.bake(prj, result)
-			projects[prj.name] = projects[i]
+			prj = project.bake(prj, result)
+			projects[i] = prj
+
+			if (not projects[prj.name]) then
+				projects[prj.name] = prj
+			elseif prj.isUsage then
+				projects[prj.name].usageProj = prj
+				prj.realProj = projects[prj.name]
+			elseif projects[prj.name].isUsage then
+				prj.usageProj = projects[prj.name]
+				prj.usageProj.realPrj = prj
+				projects[prj.name] = prj
+			else
+				error('Duplicate project ' .. prj.name)
+			end
 		end
 		result.projects = projects
-	
+		
 		-- assign unique object directories to every project configurations
-		solution.bakeobjdirs(result)
+ 		solution.bakeobjdirs(result)
+ 		
+ 		-- Apply usage requirements
+ 		solution.bakeUsageRequirements(result.projects)
 		
 		-- expand all tokens contained by the solution
 		for prj in solution.eachproject_ng(result) do
@@ -100,7 +116,6 @@
 		
 		return result
 	end
-
 
 --
 -- Create a list of solution-level build configuration/platform pairs.
@@ -130,6 +145,83 @@
 		return configs
 	end
 
+
+--
+-- Read the "uses" field and bake in any requirements from those projects
+--
+	function solution.bakeUsageRequirements(projects)
+		
+		-- Usage projects should inherit some values from the real project. target directory/name, linkAsShared
+		-- Usage projects should by default link to their real project's target
+		for _,prj in ipairs(projects) do
+			if prj.isUsage and prj.realProj then
+				local realProj = prj.realProj
+				for cfgName,cfg in pairs(prj.configs) do
+					local realCfg = realProj.configs[cfgName]
+					
+					oven.mergefield(cfg, "buildtarget", realCfg.buildtarget )
+					oven.mergefield(cfg, "linkAsShared", realCfg.linkAsShared )
+					
+					local useCfgTarget = cfg.buildtarget.abspath
+					if useCfgTarget then
+						if cfg.kind == 'SharedLib' then
+							oven.mergefield(cfg, "linkAsShared", { useCfgTarget })
+						else
+							oven.mergefield(cfg, "linkAsStatic", { useCfgTarget })
+						end
+					end
+					
+				end
+			end
+		end
+		
+		for _,prj in ipairs(projects) do
+			for _,cfg in pairs(prj.configs) do
+	
+				-- find any "uses" statements, but don't include projects we've already included
+				local usedList = toSet(cfg.project.name)
+				if cfg.uses then
+					for _,useProjName in ipairs(cfg.uses) do
+						if not usedList[useProjName] then
+						
+							local useProj = projects[useProjName] or premake.globalUsages[useProjName]
+							
+							if useProj.usageProj then
+								useProj = useProj.usageProj
+							end
+							
+							local useCfg
+
+							-- Check if it also specifies a configuration
+							if not useProj then
+								local useProjName2,useBuildCfg, usePlatform = string.match(useProjName,'([^.]+)[.]+(.*)')
+								useProj = projects[useProjName2] or premake.globalUsages[useProjName2]
+								useCfg = project.getconfig(useProj, useBuildCfg, usePlatform)
+								if useCfg == nil then
+									error('Could not find usage '.. useProjName)
+								end
+							else
+								useCfg = project.getconfig(useProj, cfg.buildcfg, cfg.platform)
+							end
+							
+							if not useCfg then
+								error('Could not find cfg ' .. useCfgName .. ' for usage project ' .. useProjName)
+							end
+
+							-- Merge the usage requirements from the project
+							local usageFields = Seq:new(premake.fields):where(function(v) return v.usagecopy; end)
+							local usageRequirements = {}
+							for _,filterField in usageFields:each() do
+								cfg = oven.merge(cfg, useCfg, filterField.name)
+							end
+							
+							usedList[useProj] = true
+						end
+					end
+				end
+			end
+		end
+	end
 
 --
 -- Assigns a unique objects directory to every configuration of every project

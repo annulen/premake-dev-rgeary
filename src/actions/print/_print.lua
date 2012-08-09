@@ -70,6 +70,11 @@
 	end
 	
 	function Print.onProject(prj)
+		if prj.isUsage then
+			p('Usage', prj.name)
+			return nil
+		end
+
 		p('Project', prj.name)
 		
 		indent(2)

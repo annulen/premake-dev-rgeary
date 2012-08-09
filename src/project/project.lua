@@ -25,7 +25,7 @@
 		result.platforms = result.platforms or {}
 		result.blocks = prj.blocks
 		result.baked = true
-				
+		
 		-- prevent any default system setting from influencing configurations
 		result.system = nil
 		
@@ -45,7 +45,7 @@
 			end
 		end
 		result.configs = configs
-		
+				
 		return result
 	end
 
@@ -86,6 +86,7 @@
 		cfg.project = prj
 		cfg.system = cfg.system or system
 		cfg.architecture = cfg.architecture or architecture
+		cfg.isUsage = prj.isUsage
 		ptypeSet( cfg, 'configprj' )
 		
 		-- fill in any calculated values
