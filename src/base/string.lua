@@ -48,3 +48,21 @@
 	function string.startswith(haystack, needle)
 		return (haystack:find(needle, 1, true) == 1)
 	end
+
+--
+-- string.gsub without pattern matching
+--
+
+	function string.replace(str, searchStr, replaceStr)
+		local i = 1
+		while( i < #str ) do
+			local findIdx = string.find(str, searchStr, i, true)
+			if findIdx then
+				str = str:sub(1,findIdx-1) .. replaceStr .. str:sub(findIdx + #searchStr)
+				i = findIdx + #replaceStr
+			else
+				break
+			end
+		end
+		return str
+	end
