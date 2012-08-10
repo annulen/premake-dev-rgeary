@@ -431,10 +431,11 @@
 		scope = "config",
 		kind = "string",
 		allowed = {		
-			"Compile",
-			"Copy",
-			"Embed",
-			"None"
+			"Compile",				-- Treat the file as source code; compile and link it
+			"Copy",					-- Copy the file to the target directory
+			"Embed",				-- Embed the file into the target binary as a resource
+			"ImplicitDependency",	-- Implicit dependency - Not part of the build, but rebuild the project if this file changes
+			"None"					-- do nothing with the file
 		},
 	}
 
@@ -728,14 +729,6 @@
 	}
 	
 	api.register {
-		name = "linkAsStatic",
-		scope = "config",
-		kind = "string-list",
-		tokens = true,
-		usagecopy = true,
-	}
-	
-	api.register {
 		name = "linkAsShared",
 		scope = "config",
 		kind = "string-list",
@@ -744,7 +737,7 @@
 	}
 	
 	api.register {
-		name = "systemlibs",
+		name = "linkAsStatic",
 		scope = "config",
 		kind = "string-list",
 		tokens = true,
@@ -764,14 +757,6 @@
 		kind = "string-list",
 		tokens = true,
 	}
-	
-	-- custom rule to create settings only for ninja build files
-	api.register {
-	 	name = "rawninja",
-	 	scope = "config",
-	 	kind = "string-list",
-	 	tokens = true,
-	} 		
 
 	api.register {
 		name = "objdir",
@@ -820,6 +805,14 @@
 		kind = "string-list",
 		tokens = true,
 	}
+	
+	-- custom rule to create settings only for ninja build files
+	api.register {
+	 	name = "rawninja",
+	 	scope = "config",
+	 	kind = "string-list",
+	 	tokens = true,
+	} 		
 
 	api.register {
 		name = "resdefines",
@@ -857,6 +850,14 @@
 				return nil, "unknown system"
 			end
 		end,
+	}
+
+	api.register {
+		name = "systemlibs",
+		scope = "config",
+		kind = "string-list",
+		tokens = true,
+		usagecopy = true,
 	}
 
 	api.register {
@@ -1353,21 +1354,9 @@
 		else
 			sln = premake.CurrentContainer
 		end
-		if sln == nil then
-			sln = {}
-			sln.name           = 'globalusages'
-			sln.basedir        = os.getcwd()		
-			sln.projects       = { }
-			sln.blocks         = { }
-			sln.configurations = { }
-			ptypeSet(sln, 'globalusage')
-			
-			premake.globalUsages = sln
-			premake.CurrentContainer = sln
-		end
 					
-		if (ptype(sln) ~= "solution" and ptype(sln) ~= 'globalusage') then
-			error("no active solution", 2)
+		if (ptype(sln) ~= "solution" and ptype(sln) ~= 'globalcontainer') then
+			error("no active solution or globalcontainer", 2)
 		end
 
   		-- if this is a new project, or the project in that slot doesn't have a usage, create it

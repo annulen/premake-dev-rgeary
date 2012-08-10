@@ -8,6 +8,7 @@
 	local solution = premake.solution
 	local project = premake5.project
 	local clean = premake.actions.clean
+	local config = premake5.config
 	ninja.slnconfigs = {}		-- all configurations
 	ninja.buildFileHandle = nil
 --
@@ -76,7 +77,7 @@
 		local args = Seq:new(_ARGS) 
 		
 		if args:contains('build') then
-			return os.execute('ninja')
+			return os.executef('ninja')
 		
 		elseif args:contains('print') then
 			local printAction = premake.action.get('print')
@@ -114,11 +115,8 @@
 	end
 
 
-	-- returns the input files per config
-	--  files which are in all configs are under ['']
-	--
-	--	local filesInAllConfigs = getInputFiles(prj)['']
-	--  local filesOnlyInConfig =  getInputFiles(prj)[cfg.shortname]
+	-- returns the input files per config, per buildaction
+	--  local filesInConfig =  getInputFiles(prj)[cfg.shortname][buildaction]
 	
 	function ninja.getInputFiles(prj)
 		if prj.filesPerConfig then
@@ -127,8 +125,8 @@
 		
 		local tr = project.getsourcetree(prj)
 		local filesPerConfig = {}	-- list of files per config
+		local defaultAction = 'Compile'
 		
-		filesPerConfig[''] = {}
 		for cfg in project.eachconfig(prj) do
 			filesPerConfig[cfg] = {}
 		end			
@@ -138,32 +136,17 @@
 				-- figure out what configurations contain this file
 				local inall = true
 				local filename = node.abspath
-				local incfg = {}
-				local inall = true
 				local custom = false
 				
 				for cfg in project.eachconfig(prj) do
-					local filecfg = premake5.config.getfileconfig(cfg, node.abspath)
-					if filecfg then
-						incfg[cfg] = filecfg
-						custom = (filecfg.buildrule ~= nil)
-					else
-						inall = false
-					end
-				end
-
-				-- if this file exists in all configurations, write it to
-				-- the project's list of files, else add to specific cfgs
-				if inall then
-					table.insert(filesPerConfig[''], filename)
-				else
-					for cfg in project.eachconfig(prj) do
-						if incfg[cfg] then
-							table.insert(filesPerConfig[cfg], filename)
-						end
-					end
-				end
+					local filecfg = config.getfileconfig(cfg, filename)
+					local buildaction = filecfg.buildaction or defaultAction
 					
+					filesPerConfig[cfg][buildaction] = filesPerConfig[cfg][buildaction] or {}
+					table.insert( filesPerConfig[cfg][buildaction], filename)  
+					--custom = (filecfg.buildrule ~= nil)
+				end
+				
 			end
 		})
 		prj.filesPerConfig = filesPerConfig
@@ -195,7 +178,7 @@
 		if string.sub(varName,1,1) == '$' then
 			return varName
 		end
-    	if string.find(varName, ".", 1, true) then
+    	if true or string.find(varName, ".", 1, true) then
     		varName = '${' .. varName .. '}'
     	else
     	   	varName = '$' .. varName
@@ -208,7 +191,7 @@
 	--  found : true is if it's already found
 	--  Just to make the ninja file look nicer
 	ninja.globalVars = {}  
-	function ninja.setGlobal(varName, value, alternateVarNames)
+	function ninja.setGlobalVar(varName, value, alternateVarNames)
 		local varNameM = varName
 		local i = 1
 		while ninja.globalVars[varNameM] do
@@ -229,6 +212,21 @@
 		return varNameM,false
 	end
 	
+	-- Substitutes variables in to v, to make the string the smallest size  
+	function ninja.getBestGlobalVar(v)
+		-- try $root first
+		v = string.replace(v, ninja.globalVars['root'], '$root')
+		local bestV = v
+		
+		for varName,varValue in pairs(ninja.globalVars) do
+			local varNameN = ninja.escVarName(varName)
+			local replaced = string.replace(v, varValue, varNameN)
+			if #replaced < #bestV then
+				bestV = replaced
+			end
+		end
+		return bestV
+	end
 
 --
 -- Write out raw ninja rules for a configuration.

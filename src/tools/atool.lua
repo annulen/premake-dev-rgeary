@@ -69,9 +69,10 @@ end
 
 --
 -- Construct a command line given the flags & input/output args. 
+--	toolCmd = tool:getBinary
+--  cmdArgs = tool:decorateInputs
 --
-function tool:getCommandLine(cmdArgs)
-	local toolCmd = self:getBinary()
+function tool:getCommandLine(toolCmd, cmdArgs)
 	local fixedFlags = self:getFixedFlags() or ''
 	
 	if #cmdArgs == 0 then
