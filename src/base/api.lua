@@ -790,6 +790,7 @@
 		scope = "config",
 		kind = "string-list",
 		expandtokens = true,
+		namealiases = { 'postbuildcommand' },
 	}
 
 	api.register {
@@ -797,6 +798,7 @@
 		scope = "config",
 		kind = "string-list",
 		expandtokens = true,
+		namealiases = { 'prebuildcommand' },
 	}
 
 	api.register {
