@@ -107,4 +107,12 @@
 		trigger		= "attachNoWait",
 		value		= "[ip]",
 		description = "Try attaching to the debugger, but don't wait. IP address optional."
-	}	
+	}
+	
+	newoption
+	{
+		trigger		= "dryrun",
+		description	= "Print the files which would be modified, but do not execute commands or make any changes to the file system",
+		aliases		= { 'n' },
+	}
+	

@@ -11,7 +11,12 @@
 
 	function os.executef(cmd, ...)
 		cmd = string.format(cmd, unpack(arg))
-		return os.execute(cmd)
+		if( _OPTIONS['dryrun'] ) then	
+			printf("Execute : " ..cmd .. '\n')
+			return 0 
+		else
+			return os.execute(cmd)
+		end
 	end
 
 
@@ -262,6 +267,11 @@
 
 	local builtin_mkdir = os.mkdir
 	function os.mkdir(p)
+		if( _OPTIONS['dryrun'] ) then	
+			printf("mkdir : " .. p .. '\n')
+			return true
+		end
+			
 		local dir = iif(p:startswith("/"), "/", "")
 		for part in p:gmatch("[^/]+") do
 			dir = dir .. part
@@ -298,6 +308,11 @@
 
 	local builtin_rmdir = os.rmdir
 	function os.rmdir(p)
+		if( _OPTIONS['dryrun'] ) then	
+			printf("rm -rf " .. p .. '\n')
+			return true
+		end
+	
 		-- recursively remove subdirectories
 		local dirs = os.matchdirs(p .. "/*")
 		for _, dname in ipairs(dirs) do
@@ -319,6 +334,11 @@
 --
 
 	function os.rmdirParentsIfEmpty(p)
+		if( _OPTIONS['dryrun'] ) then	
+			printf("rmdir -p " .. p .. '\n')
+			return true
+		end
+
 		local dirs = os.matchdirs(p .. "/*")
 		local files = os.matchfiles(p .. "/*")
 		

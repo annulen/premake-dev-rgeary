@@ -99,13 +99,13 @@
 			error(err, 0)
 		end
 
-		io.output(f)
+		if not _OPTIONS['dryrun'] then
+			io.output(f)
+		end
 		return f	
 	end
 	
 	function premake.generateEnd(fileHandle)
-		if fileHandle then
-			fileHandle:close()
-		end
+		io.close(fileHandle)
 	end
 	

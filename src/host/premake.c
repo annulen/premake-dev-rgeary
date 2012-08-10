@@ -197,15 +197,18 @@ int process_arguments(lua_State* L, int argc, const char** argv)
 
 	for (i = 1; i < argc; ++i)
 	{
-		/* Options start with '/' or '--'. The first argument that isn't an option
+		/* Options start with '/' or '-' or '--'. The first argument that isn't an option
 		 * is the action. Anything after that is an argument to the action */
 		if (argv[i][0] == '/')
 		{
 			process_option(L, argv[i] + 1);
 		}
-		else if (argv[i][0] == '-' && argv[i][1] == '-')
+		else if (argv[i][0] == '-')
 		{
-			process_option(L, argv[i] + 2);
+			if( argv[i][1] == '-' )
+				process_option(L, argv[i] + 2);
+			else
+				process_option(L, argv[i] + 1);
 		}
 		else
 		{

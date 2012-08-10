@@ -12,6 +12,7 @@
 --
 
 	premake.option.list = { }
+	premake.option.aliases = { }
 	
 
 --
@@ -36,6 +37,12 @@
 		
 		-- add it to the master list
 		premake.option.list[opt.trigger] = opt
+
+		if opt.aliases then		
+			for _,a in ipairs(opt.aliases) do
+				premake.option.aliases[a] = opt
+			end
+		end
 	end
 
 
@@ -49,7 +56,7 @@
 --
 
 	function premake.option.get(name)
-		return premake.option.list[name]
+		return premake.option.list[name] or premake.option.aliases[name]
 	end
 
 
@@ -88,6 +95,9 @@
 			local opt = premake.option.get(key)
 			if (not opt) then
 				return false, "invalid option '" .. key .. "'"
+			else
+				-- reregister .trigger in the _OPTIONS table in case the option is an alias
+				_OPTIONS[opt.trigger] = _OPTIONS[opt.trigger] or _OPTIONS[key]
 			end
 			
 			-- does it need a value?

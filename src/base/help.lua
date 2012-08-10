@@ -23,6 +23,10 @@
 			local trigger = option.trigger
 			local description = option.description
 			if (option.value) then trigger = trigger .. "=" .. option.value end
+			if (option.aliases) then
+				local aliasStr = table.concat( option.aliases, ', -' )
+				trigger = trigger .. ", -" .. aliasStr
+			end
 			if (option.allowed) then description = description .. "; one of:" end
 			
 			printf(" --%-15s %s", trigger, description) 
