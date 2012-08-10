@@ -186,6 +186,8 @@
 
 
 	function oven.expandvalue(value, context)
+		local location = (context.sln.name or '') ..'/'..(context.prj.name or '')..'/'..(context.cfg.shortname or '')
+		
 		-- function to do the work of replacing a single token
 		local expander = function(token)
 			-- convert the token into a function to execute
@@ -199,8 +201,8 @@
 			setmetatable(context, {__index = _G})
 
 			-- run it and return the result
-			local result = func()
-			if not result then
+			local err, result = pcall(func)
+			if not err or not result then
 				return nil, "Invalid token '" .. token .. "'"
 			end
 			return result
@@ -211,7 +213,7 @@
 			value, count = string.gsub(value, "%%{(.-)}", function(token)			
 				local result, err = expander(token)
 				if not result then
-					error(err .. ' in string ' .. value, 0)
+					error(err .. ' in string ' .. value..' at '..location, 0)
 				end
 				return result
 			end)
