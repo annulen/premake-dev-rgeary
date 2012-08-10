@@ -109,3 +109,18 @@
 		io.close(fileHandle)
 	end
 	
+--
+--  Global container for configurations, applied to all solutions
+--
+	function premake.createGlobalContainer()
+		local c = {}
+		ptypeSet(c, 'globalcontainer')
+		c.name           = 'globalcontainer'
+		c.basedir        = os.getcwd()
+		c.projects       = { }
+		c.blocks         = { }
+		c.configurations = { }
+		
+		premake.globalContainer = c
+		premake.CurrentContainer = c
+	end

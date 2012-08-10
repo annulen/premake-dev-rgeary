@@ -37,6 +37,10 @@
 		sln.projects       = { }
 		sln.blocks         = { }
 		sln.configurations = { }
+		
+		-- merge in global configuration blocks
+		sln.blocks = oven.merge({}, premake.globalContainer.blocks)
+		
 		return sln
 	end
 
@@ -184,7 +188,7 @@
 					for _,useProjName in ipairs(cfg.uses) do
 						if not usedList[useProjName] then
 						
-							local useProj = projects[useProjName] or premake.globalUsages[useProjName]
+							local useProj = projects[useProjName] or premake.globalContainer.projects[useProjName]
 							
 							if useProj.usageProj then
 								useProj = useProj.usageProj
@@ -195,7 +199,7 @@
 							-- Check if it also specifies a configuration
 							if not useProj then
 								local useProjName2,useBuildCfg, usePlatform = string.match(useProjName,'([^.]+)[.]+(.*)')
-								useProj = projects[useProjName2] or premake.globalUsages[useProjName2]
+								useProj = projects[useProjName2] or premake.globalContainer.projects[useProjName2]
 								useCfg = project.getconfig(useProj, useBuildCfg, usePlatform)
 								if useCfg == nil then
 									error('Could not find usage '.. useProjName)

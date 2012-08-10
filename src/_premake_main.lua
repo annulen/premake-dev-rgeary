@@ -109,6 +109,9 @@
 			_G[v] = v
 		end
 		
+		-- Set up global container
+		premake.createGlobalContainer()
+		
 		-- Search for a system-level premake4-system.lua file
 		local systemScript = os.getenv("PREMAKE_PATH") or ''
 		local systemScriptFullpath = systemScript .. '/' .. "premake-" .. _PREMAKE_VERSION .. '-system.lua'
