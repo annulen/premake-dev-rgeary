@@ -177,7 +177,7 @@
 				-- to avoid unexpected errors or recursions, I only process
 				-- Premake's own API fields, and only those marked for it
 				local field = premake.fields[key]
-				if field ~= nil and field.tokens and field.scope == scope then
+				if field ~= nil and field.expandtokens and field.scope == scope then
 					expand(target, key)
 				end
 			end

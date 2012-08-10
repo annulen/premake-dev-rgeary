@@ -443,7 +443,7 @@
 		name = "buildoptions",
 		scope = "config",
 		kind = "string-list",
-		tokens = true,
+		expandtokens = true,
 		namealiases = { "compileoptions" },
 		-- 'usagecopy = true' means that the field can be a "usage requirement". It will copy this field's values
 		--   from the usage secton in to the destination project 
@@ -454,7 +454,7 @@
 		name = "buildrule",
 		scope = "config",
 		kind = "object",
-		tokens = true,
+		expandtokens = true,
 	}
 
 	api.register {
@@ -473,28 +473,28 @@
 		name = "debugargs",
 		scope = "config",
 		kind = "string-list",
-		tokens = true,
+		expandtokens = true,
 	}
 
 	api.register {
 		name = "debugcommand",
 		scope = "config",
 		kind = "path",
-		tokens = true,
+		expandtokens = true,
 	}
 
 	api.register {
 		name = "debugdir",
 		scope = "config",
 		kind = "path",
-		tokens = true,
+		expandtokens = true,
 	}
 	
 	api.register {
 		name = "debugenvs",
 		scope = "config",
 		kind = "string-list",
-		tokens = true,
+		expandtokens = true,
 	}
 
 	api.register {
@@ -510,7 +510,7 @@
 		name = "defines",
 		scope = "config",
 		kind = "string-list",
-		tokens = true,
+		expandtokens = true,
 		usagecopy = true,
 		namealiases = { "define" },
 	}
@@ -519,7 +519,7 @@
 		name = "deploymentoptions",
 		scope = "config",
 		kind = "string-list",
-		tokens = true,
+		expandtokens = true,
 		usagecopy = true,
 	}
 
@@ -527,14 +527,14 @@
 		name = "excludes",
 		scope = "config",
 		kind = "file-list",
-		tokens = true,
+		expandtokens = true,
 	}
 
 	api.register {
 		name = "files",
 		scope = "config",
 		kind = "file-list",
-		tokens = true,
+		expandtokens = true,
 	}
 
 	api.register {
@@ -615,56 +615,56 @@
 		name = "imageoptions",
 		scope = "config",
 		kind = "string-list",
-		tokens = true,		
+		expandtokens = true,		
 	}
 	
 	api.register {
 		name = "imagepath",
 		scope = "config",
 		kind = "path",
-		tokens = true,		
+		expandtokens = true,		
 	}	
 
 	api.register {
 		name = "implibdir",
 		scope = "config",
 		kind = "path",
-		tokens = true,
+		expandtokens = true,
 	}			
 
 	api.register {
 		name = "implibextension",
 		scope = "config",
 		kind = "string",
-		tokens = true,
+		expandtokens = true,
 	}
 
 	api.register {
 		name = "implibname",
 		scope = "config",
 		kind = "string",
-		tokens = true,
+		expandtokens = true,
 	}
 
 	api.register {
 		name = "implibprefix",
 		scope = "config",
 		kind = "string",
-		tokens = true,
+		expandtokens = true,
 	}
 
 	api.register {
 		name = "implibsuffix",
 		scope = "config",
 		kind = "string",
-		tokens = true,
+		expandtokens = true,
 	}
 
 	api.register {
 		name = "includedirs",
 		scope = "config",
 		kind = "directory-list",
-		tokens = true,
+		expandtokens = true,
 		usagecopy = true,
 		namealiases = { "includedir" },
 	}
@@ -701,7 +701,7 @@
 		name = "libdirs",
 		scope = "config",
 		kind = "directory-list",
-		tokens = true,
+		expandtokens = true,
 		usagecopy = true,
 	}
 
@@ -709,7 +709,7 @@
 		name = "linkoptions",
 		scope = "config",
 		kind = "string-list",
-		tokens = true,
+		expandtokens = true,
 		usagecopy = true,
 	}
 	
@@ -724,7 +724,7 @@
 			end
 			return value
 		end,
-		tokens = true,
+		expandtokens = true,
 		usagecopy = true,		-- there's special case handling for links
 	}
 	
@@ -732,7 +732,7 @@
 		name = "linkAsShared",
 		scope = "config",
 		kind = "string-list",
-		tokens = true,
+		expandtokens = true,
 		usagecopy = true,
 	}
 	
@@ -740,7 +740,7 @@
 		name = "linkAsStatic",
 		scope = "config",
 		kind = "string-list",
-		tokens = true,
+		expandtokens = true,
 		usagecopy = true,
 	}
 	
@@ -748,35 +748,35 @@
 		name = "location",
 		scope = "project",
 		kind = "path",
-		tokens = true,
+		expandtokens = true,
 	}
 
 	api.register {
 		name = "makesettings",
 		scope = "config",
 		kind = "string-list",
-		tokens = true,
+		expandtokens = true,
 	}
 
 	api.register {
 		name = "objdir",
 		scope = "config",
 		kind = "path",
-		tokens = true,
+		expandtokens = true,
 	}
 
 	api.register {
 		name = "pchheader",
 		scope = "config",
 		kind = "string",
-		tokens = true,
+		expandtokens = true,
 	}
 
 	api.register {
 		name = "pchsource",
 		scope = "config",
 		kind = "path",
-		tokens = true,
+		expandtokens = true,
 	}		
 
 	api.register {
@@ -789,21 +789,21 @@
 		name = "postbuildcommands",
 		scope = "config",
 		kind = "string-list",
-		tokens = true,
+		expandtokens = true,
 	}
 
 	api.register {
 		name = "prebuildcommands",
 		scope = "config",
 		kind = "string-list",
-		tokens = true,
+		expandtokens = true,
 	}
 
 	api.register {
 		name = "prelinkcommands",
 		scope = "config",
 		kind = "string-list",
-		tokens = true,
+		expandtokens = true,
 	}
 	
 	-- custom rule to create settings only for ninja build files
@@ -811,14 +811,14 @@
 	 	name = "rawninja",
 	 	scope = "config",
 	 	kind = "string-list",
-	 	tokens = true,
+	 	expandtokens = true,
 	} 		
 
 	api.register {
 		name = "resdefines",
 		scope = "config",
 		kind = "string-list",
-		tokens = true,
+		expandtokens = true,
 		usagecopy = true,
 	}
 
@@ -826,7 +826,7 @@
 		name = "resincludedirs",
 		scope = "config",
 		kind = "directory-list",
-		tokens = true,
+		expandtokens = true,
 		usagecopy = true,
 	}
 
@@ -834,7 +834,7 @@
 		name = "resoptions",
 		scope = "config",
 		kind = "string-list",
-		tokens = true,
+		expandtokens = true,
 		usagecopy = true,
 	}
 
@@ -856,7 +856,7 @@
 		name = "systemlibs",
 		scope = "config",
 		kind = "string-list",
-		tokens = true,
+		expandtokens = true,
 		usagecopy = true,
 	}
 
@@ -864,7 +864,7 @@
 		name = "targetdir",
 		scope = "config",
 		kind = "path",
-		tokens = true,
+		expandtokens = true,
 		usagecopy = true,
 	}		
 
@@ -872,7 +872,7 @@
 		name = "targetextension",
 		scope = "config",
 		kind = "string",
-		tokens = true,
+		expandtokens = true,
 		usagecopy = true,
 	}
 
@@ -880,7 +880,7 @@
 		name = "targetname",
 		scope = "config",
 		kind = "string",
-		tokens = true,
+		expandtokens = true,
 		usagecopy = true,
 	}
 
@@ -888,7 +888,7 @@
 		name = "targetprefix",
 		scope = "config",
 		kind = "string",
-		tokens = true,
+		expandtokens = true,
 		usagecopy = true,
 	}
 
@@ -896,7 +896,7 @@
 		name = "targetsuffix",
 		scope = "config",
 		kind = "string",
-		tokens = true,
+		expandtokens = true,
 		usagecopy = true,
 	}
 
