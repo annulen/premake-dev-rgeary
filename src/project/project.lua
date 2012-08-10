@@ -80,6 +80,9 @@
 		if architecture == nil and os.is64bit() then
 			architecture = 'x86_64'
 		end
+		-- Look to see what kind of project this is, and use that to further filter results
+		local cfgKind = oven.bake(prj, prj.solution, filter, "kind")
+		filter.kind = cfgKind.kind
 		
 		cfg = oven.bake(prj, prj.solution, filter)
 		cfg.solution = prj.solution
