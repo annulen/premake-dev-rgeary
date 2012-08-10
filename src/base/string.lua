@@ -55,6 +55,12 @@
 
 	function string.replace(str, searchStr, replaceStr)
 		local i = 1
+		if not str then
+			return ''
+		end 
+		if #searchStr == 0 then
+			return str
+		end
 		while( i < #str ) do
 			local findIdx = string.find(str, searchStr, i, true)
 			if findIdx then

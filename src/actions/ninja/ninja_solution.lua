@@ -45,8 +45,8 @@ function ninja.writeTargets(prj)
 	
 	-- Compile
 	for _,cfg in project.getConfigs(prj):each() do
-		local toolsetName = cfg.toolset
-		local toolset = premake.tools[toolsetName or '']
+		local toolsetName = cfg.toolset or 'icc'
+		local toolset = premake.tools[toolsetName]
 		local allLinkInputs = {}
 		local slnRoot = cfg.solution.basedir or '////'
 		ninja.globalVars['root'] = slnRoot
@@ -110,7 +110,7 @@ function ninja.writeTargets(prj)
 		srcdirN = ninja.escVarName(srcdirN)
 				
 		-- Compile source -> object files, for all files in the config
-		for _,fileName in ipairs(filesInCfg['Compile']) do
+		for _,fileName in ipairs(filesInCfg['Compile'] or {}) do
 			local sourceFileRel = path.getrelative(srcdirFull, fileName)
 			
 			-- Check if we can compile the file, and get the object file name
@@ -201,7 +201,7 @@ function ninja.writeToolsets(cfgs)
 	for _,cfg in cfgs
 		:each() 
 	do
-		local toolsetName = cfg.toolset or 'gcc'
+		local toolsetName = cfg.toolset or 'icc'
 		local slnRoot = cfg.solution.basedir or '////'
 		--definedToolsets[toolsetName] = true
 		
