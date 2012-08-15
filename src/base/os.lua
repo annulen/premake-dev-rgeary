@@ -10,15 +10,28 @@
 --
 
 	function os.executef(cmd, ...)
+		if repoRoot then
+			cmd = cmd:replace('$root', repoRoot)
+		end
 		cmd = string.format(cmd, unpack(arg))
 		if( _OPTIONS['dryrun'] ) then	
-			printf("Execute : " ..cmd .. '\n')
+			print("Execute : " ..cmd)
 			return 0 
 		else
 			return os.execute(cmd)
 		end
 	end
-
+	
+--
+-- Override to replace $root with repoRoot
+--
+	local builtin_isfile = os.isfile
+	function os.isfile(s)
+		if repoRoot then
+			s = s:replace('$root', repoRoot)
+		end
+		return builtin_isfile(s)
+	end
 
 --
 -- Scan the well-known system locations for a particular library. 
@@ -305,11 +318,18 @@
 --
 -- Remove a directory, along with any contained files or subdirectories.
 --
+	local removeList = {}		-- just so we don't print the same command twice
 
 	local builtin_rmdir = os.rmdir
 	function os.rmdir(p)
-		if( _OPTIONS['dryrun'] ) then	
-			printf("rm -rf " .. p .. '\n')
+		if repoRoot then
+			p = p:replace('$root', repoRoot)
+		end
+		if( _OPTIONS['dryrun'] ) then
+			if (os.isfile(p)	or os.isdir(p)) and (not removeList[p]) then
+				print("rm -rf " .. p)
+				removeList[p] = true
+			end	
 			return true
 		end
 	
@@ -334,16 +354,24 @@
 --
 
 	function os.rmdirParentsIfEmpty(p)
-		if( _OPTIONS['dryrun'] ) then	
-			printf("rmdir -p " .. p .. '\n')
-			return true
+		if repoRoot then
+			p = p:replace('$root', repoRoot)
 		end
 
 		local dirs = os.matchdirs(p .. "/*")
 		local files = os.matchfiles(p .. "/*")
 		
 		if (#dirs == 0) and (#files == 0) then
-			builtin_rmdir(p)
+			
+			if( _OPTIONS['dryrun'] ) then
+				if not removeList[p] then	
+					print("rmdir " .. p )
+				end
+				removeList[p] = true
+			else
+				builtin_rmdir(p)
+			end
+			
 			local parent = path.getdirectory(p)
 			os.rmdirParentsIfEmpty(parent)
 			return true
