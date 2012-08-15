@@ -39,7 +39,6 @@ function toolset:getToolInputs(cfg)
 	t.defines 		= cfg.defines
 	t.includedirs 	= cfg.includedirs
 	t.libdirs 		= cfg.libdirs
-	t.systemlibs	= cfg.systemlibs
 	t.buildoptions	= cfg.buildoptions
 	t.default		= '$in'
 	

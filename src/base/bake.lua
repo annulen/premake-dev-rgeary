@@ -562,7 +562,7 @@
   
   			for name, field in pairs(premake.fields) do
   				if(srcCfg[name]) then
-  					if(field.usagecopy) then
+  					if(field.usagefield) then
   						if(not prjEntry.bLinkageOnly) then
   							copydependentfield(srcCfg, cfg, name)
   						end

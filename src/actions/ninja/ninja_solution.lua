@@ -7,7 +7,7 @@ local solution = premake.solution
 local project = premake5.project
 local config = premake5.config
 local definedTools = {}
-local nextProjectCfgUID = 1				-- number referencing a unique project configuration 
+local ninjaVarLevel = 1		-- higher = use more ninja build vars
 
 function ninja.generate_solution(sln)
   
@@ -17,6 +17,15 @@ function ninja.generate_solution(sln)
 	_p('')
 	_p('# Solution ' .. sln.name)
 	_p('')
+	
+	if sln.includesolution then
+		for _,slnName in ipairs(sln.includesolution) do
+			local extSln = solution.list[slnName]
+			if extSln then
+				_p('subninja '..ninja.getSolutionBuildFilename(extSln))
+			end 
+		end
+	end
 	
 	--ninja.writeEnvironment(sln)
 	--for _,cfg in sln.getConfigs():each() do
@@ -48,8 +57,7 @@ function ninja.writeTargets(prj)
 		local toolsetName = cfg.toolset or 'icc'
 		local toolset = premake.tools[toolsetName]
 		local allLinkInputs = {}
-		local slnRoot = cfg.solution.basedir or '////'
-		ninja.globalVars['root'] = slnRoot
+		ninja.globalVars['root'] = ninjaRoot
 		
 		local compileTool = toolset:getCompileTool(cfg)		-- cc or cxx
 		local linkTool = toolset:getLinkTool(cfg)			-- ar or link
@@ -57,9 +65,15 @@ function ninja.writeTargets(prj)
 		local compileInputs = compileTool:decorateInputs(cfg, '$out', '$in')
 		local compileToolRuleName = toolsetName .. '_' .. compileTool.toolName
 		local compileToolDef = definedTools[compileToolRuleName]
-		local linkToolRuleName = toolsetName .. '_' .. linkTool.toolName
-		local linkInputs = linkTool:decorateInputs(cfg, '$out', '$in')
-		local linkToolDef = definedTools[linkToolRuleName]
+		
+		local linkToolRuleName = 'phony'
+		local linkInputs = {}
+		local linkToolDef = {}
+		if linkTool then
+			linkToolRuleName = toolsetName .. '_' .. linkTool.toolName
+			linkInputs = linkTool:decorateInputs(cfg, '$out', '$in')
+			linkToolDef = definedTools[linkToolRuleName]
+		end
 		
 		-- See if we need to override any flags
 		local compileOverrides = {}
@@ -81,34 +95,48 @@ function ninja.writeTargets(prj)
 			end
 		end
 		
-		local targetName = cfg.buildtarget.name
-		
 		-- List of all files in this config
 		local filesInCfg = filesPerConfig[cfg]
 		local srcdirFull = prj.basedir
-		local srcdir = string.replace(srcdirFull, slnRoot, '$root')
-		local objdir = string.replace(cfg.objdir, slnRoot, '$root')
-		local targetdir = string.replace(cfg.targetdir, slnRoot, '$root')
+		local srcdir = string.replace(srcdirFull, ninjaRoot, '$root')
+		local objdir = string.replace(cfg.objdir, ninjaRoot, '$root')
+		local targetdir = string.replace(cfg.targetdir, ninjaRoot, '$root')
 		local cfgname = string.replace(cfg.shortname, '.', '_')
 		
+		local numFilesToCompile = #(filesInCfg['Compile'] or {}) 
+		local verboseComments = numFilesToCompile > 5
+					
 		-- Generate unique ninja build var names
-		local objdirN,foundO = ninja.setGlobalVar('objdir', objdir)
-		local targetdirN,foundT = ninja.setGlobalVar('targetdir_' .. cfgname, targetdir)
-		local srcdirN,foundS = ninja.setGlobalVar('srcdir', srcdir)
-
-		_p('# Compile ' .. prj.name .. ' ['..cfgname..']')
-		_p('#------------------------------------')
-		_p('')
-		if not foundO then _p(objdirN ..'='..objdir); end
-		if not foundT then _p(targetdirN..'='..targetdir); end
-		if not foundS then _p(srcdirN..'='..srcdir); end
-		_p('')
+		local objdirN = objdir
+		local targetdirN = targetdir
+		local srcdirN = srcdir
+		
+		if not prj.name:find('/test',1,true) then
+			local foundO, foundT, foundS
+			objdirN,foundO = ninja.setGlobalVar('objdir', objdir)
+			targetdirN,foundT = ninja.setGlobalVar('targetdir_' .. cfgname, targetdir)
+			srcdirN,foundS = ninja.setGlobalVar('srcdir', srcdir)
+			
+			if verboseComments then
+				_p('# Compile ' .. prj.name .. ' ['..cfgname..']')
+				_p('#------------------------------------')
+				_p('')
+			end
+			if not foundO then _p(objdirN ..'='..objdir); end
+			if not foundT then _p(targetdirN..'='..targetdir); end
+			if not foundS then _p(srcdirN..'='..srcdir); end
+			_p('')
+		else
+			objdirN = ninja.getBestGlobalVar(objdirN)
+			targetdirN = ninja.getBestGlobalVar(targetdirN)
+			srcdirN = ninja.getBestGlobalVar(srcdirN)
+		end
 		local uniqueObjNameSet = {}
 		
 		objdirN = ninja.escVarName(objdirN)
 		targetdirN = ninja.escVarName(targetdirN)
 		srcdirN = ninja.escVarName(srcdirN)
-				
+		
 		-- Compile source -> object files, for all files in the config
 		for _,fileName in ipairs(filesInCfg['Compile'] or {}) do
 			local sourceFileRel = path.getrelative(srcdirFull, fileName)
@@ -153,29 +181,100 @@ function ninja.writeTargets(prj)
 		local libs = Seq:ipairs(cfg.linkAsStatic):concat(Seq:ipairs(cfg.linkAsShared))
 			:select(function(v) return ninja.getBestGlobalVar(v); end)
 		for _,lib in libs:each() do
-			table.insert( implicitDeps, lib )
+			if path.containsSlash(lib) then
+				table.insert( implicitDeps, lib )
+			end
 		end
 		
 		-- Link
+		local finalTargetInputs = {}
+		local finalTargetN = prj.name..'_'..cfgname
+		local targetName = ('')..cfg.buildtarget.name
 		
 		if #allLinkInputs > 0 then
-			_p('# Link ' .. prj.name .. ' ['..cfgname..']')
-			_p('#++++++++++++++++++++++++++++++++')
-			_p('build '..targetdirN..'/'..targetName..': '..linkToolRuleName ..' $')
-			local allObjFilesStr = '  '..table.concat(allLinkInputs, ' ')
-
-			if #implicitDeps > 0 then
-				_p(allObjFilesStr .. ' | ' .. table.concat( implicitDeps, ' '))
-			else
-				_p(allObjFilesStr)
-			end 
+			local linkTargetN = targetdirN..'/'..targetName
+		
+			if verboseComments then
+				_p('# Link ' .. prj.name .. ' ['..cfgname..']')
+				_p('#++++++++++++++++++++++++++++++++')
+			end
+			local buildStr = 'build '..linkTargetN..': '..linkToolRuleName ..' '..table.concat(allLinkInputs, ' ')
 			
+			local implicitDepStr = ''
+			if #implicitDeps > 0 then
+				if ninjaVarLevel >= 2 then
+					for _,v in ipairs(implicitDeps) do
+						local varName,found = ninja.getGlobalVar(v, 'dep')
+						if not found then
+							_p(varName..'='..v)
+						end
+						implicitDepStr = implicitDepStr..' '..ninja.escVarName(varName)
+					end
+				else
+					implicitDepStr = table.concat(implicitDeps, ' ')
+				end
+			 
+				buildStr = buildStr .. ' | ' .. implicitDepStr
+			end 
+
+			if ninjaVarLevel >= 2 then
+				for k,v in pairs(linkOverrides) do
+					local varName = ninja.getGlobalVar(v)
+					if varName then
+						linkOverrides[k] = ninja.escVarName(varName)
+					else
+		    			local varName,found = ninja.setGlobalVar(k, v)
+		    			if not found then
+							_p(varName.. '=' .. v)
+							linkOverrides[k] = ninja.escVarName(varName)
+						end
+					end
+				end
+			end
+			_p(buildStr)
 			for k,v in pairs(linkOverrides) do
-    			v = ninja.getBestGlobalVar(v)
+				v = ninja.getBestGlobalVar(v)
 				_p(' ' .. k .. '=' .. v)
+			end
+			
+			table.insert(finalTargetInputs,linkTargetN)
+			_p('')
+		end
+		
+		-- Post build commands
+		if cfg.postbuildcommands then
+			if verboseComments then
+				_p('# Post build commands')
+			end
+			local linkTargetN = targetdirN..'/'..targetName
+			-- Generate a unique name to reference this post build command
+			local description = nil
+			for i,cmd in ipairs(cfg.postbuildcommands) do
+			
+				if string.sub(cmd,1,1) == '#' then
+					description = string.sub(cmd,2)
+				else
+					
+					local postBuildTarget = finalTargetN..'postbuild'..tostring(i)
+					repeat
+						local cmd2 = cmd
+						cmd = ninja.getBestGlobalVar(cmd)
+					until #cmd2 == #cmd
+					_p('build '..postBuildTarget..' : exec '..table.concat(finalTargetInputs, ' '))
+					_p(' cmd='..cmd)
+					if description then
+					  _p(' description='..description)
+					  description=nil
+					end
+					table.insert(finalTargetInputs, postBuildTarget)
+				end 
 			end
 			_p('')
 		end
+		
+		-- Phony rule to build it all
+		_p('build '..finalTargetN..': phony '..table.concat(finalTargetInputs, ' '))
+		_p('')
 	end
 end
 
@@ -202,7 +301,6 @@ function ninja.writeToolsets(cfgs)
 		:each() 
 	do
 		local toolsetName = cfg.toolset or 'icc'
-		local slnRoot = cfg.solution.basedir or '////'
 		--definedToolsets[toolsetName] = true
 		
         local toolset = premake.tools[toolsetName]
@@ -253,12 +351,15 @@ function ninja.writeToolsets(cfgs)
 			    	-- Write build variable default value
 			    	if v ~= '' then
 			    		-- Substitute $root
-		    			v = string.replace(v, slnRoot, '$root')
+		    			v = string.replace(v, ninjaRoot, '$root')
 			    		
 				    	local varName,found = ninja.setGlobalVar(varName, v)
 				    	if not found then
 				    		_p(varName .. ' = ' .. tostring(v))
 				    	end
+			    	else
+			    		-- keep a record that it's blank
+				    	ninja.setGlobalVar(varName, v)
 			    	end
 			    end
 			end
@@ -273,10 +374,10 @@ function ninja.writeToolsets(cfgs)
 				if depfileName then
 				_p('  depfile = ' .. depfileName )
 				end
-				if toolName == 'cc' or toolName == 'cxx' then
-					_p('  description = ' .. toolName.. ' $in')
+				if tool.toolName == 'cc' or tool.toolName == 'cxx' then
+					_p('  description = ' .. tool.toolName.. ' $in')
 				else
-					_p('  description = ' .. toolName.. ' $out')
+					_p('  description = ' .. tool.toolName.. ' $out')
 				end
 			_p('')
 		end

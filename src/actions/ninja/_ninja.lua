@@ -11,6 +11,9 @@
 	local config = premake5.config
 	ninja.slnconfigs = {}		-- all configurations
 	ninja.buildFileHandle = nil
+	
+	ninjaRoot = ninjaRoot or os.getcwd()
+	
 --
 -- The Ninja build action
 --
@@ -31,9 +34,9 @@
 		},
 		
 		buildFileHandle = nil,
-
+		
 		onsolution = function(sln)
-			premake.generate(sln, ninja.getDefaultBuildFilename(), ninja.generate_defaultbuild) 
+			premake.generate(sln, ninja.getDefaultBuildFilename(sln), ninja.generate_defaultbuild) 
 			if ninja.buildFileHandle then
 				error("Not supported : Can't start more than one solution at once")
 			end
@@ -43,6 +46,10 @@
 		
 		onSolutionEnd = function(sln)
 			if ninja.buildFileHandle then
+				local fileLen = ninja.buildFileHandle:seek('end', 0)
+				if fileLen then
+					printf('  %.0f kb', fileLen/1024.0)
+				end
 				premake.generateEnd(ninja.buildFileHandle)
 			end
 			ninja.buildFileHandle = nil
@@ -61,16 +68,16 @@
 		end,
 		
 		oncleanproject = function(prj)
-			clean.file(prj, ninja.getDefaultBuildFilename())
+			clean.file(prj, ninja.getDefaultBuildFilename(prj))
 		end
 	}
 	
-	function ninja.getDefaultBuildFilename()
-		return 'build.ninja'
+	function ninja.getDefaultBuildFilename(obj)
+		return path.join(obj.basedir, 'build.ninja')
 	end
 	
 	function ninja.getSolutionBuildFilename(sln)
-		return sln.name .. '.ninja'
+		return path.join(sln.basedir, 'build_'..sln.name .. '.ninja')
 	end
 	
 	function ninja.onExecute()
@@ -89,11 +96,13 @@
 -- Write out a file which sets environment variables then subninjas to the actual build
 --
 	function ninja.generate_defaultbuild(sln)
-		local rootDir = sln.basedir
-		local currentDir = os.getcwd()
-		local relativeRoot = path.getrelative(currentDir, rootDir)
-		_p('root=' .. relativeRoot)
-		_p('subninja $root/' .. ninja.getSolutionBuildFilename(sln))
+		local rootDir = ninjaRoot
+		_p('root=' .. ninjaRoot)
+		_p('rule exec')
+		_p(' command=$cmd')
+		_p(' description=$description')
+		_p('')
+		_p('subninja $root/' .. path.getrelative(rootDir, ninja.getSolutionBuildFilename(sln)))
 	end
 --
 -- Write out the default configuration rule for a solution or project.
@@ -191,6 +200,7 @@
 	--  found : true is if it's already found
 	--  Just to make the ninja file look nicer
 	ninja.globalVars = {}  
+	ninja.globalVarValues = {}  
 	function ninja.setGlobalVar(varName, value, alternateVarNames)
 		local varNameM = varName
 		local i = 1
@@ -209,7 +219,16 @@
 			end
 		end
 		ninja.globalVars[varNameM] = value
+		ninja.globalVarValues[value] = varNameM
 		return varNameM,false
+	end
+	
+	function ninja.getGlobalVar(value, setNameIfNew)
+		local var = ninja.globalVarValues[value]
+		if (not var) and setNameIfNew then
+			return ninja.setGlobalVar(setNameIfNew, value)
+		end
+		return var, true
 	end
 	
 	-- Substitutes variables in to v, to make the string the smallest size  
@@ -221,8 +240,12 @@
 		for varName,varValue in pairs(ninja.globalVars) do
 			local varNameN = ninja.escVarName(varName)
 			local replaced = string.replace(v, varValue, varNameN)
+			local replaced2 = string.replace(bestV, varValue, varNameN)
 			if #replaced < #bestV then
 				bestV = replaced
+			end
+			if #replaced2 < #bestV then
+				bestV = replaced2
 			end
 		end
 		return bestV

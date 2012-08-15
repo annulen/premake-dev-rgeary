@@ -8,7 +8,6 @@
 --	  defines :					toolInputs['defines']
 --	  includedirs :				toolInputs.includedirs
 --	  libdirs :					toolInputs.libdirs
---    systemlibs				toolInputs.systemlibs
 --	  staticlibs  				toolInputs.staticlibs
 --	  sharedlibs  				toolInputs.sharedlibs
 --	  frameworklibs				toolInputs.frameworklibs
@@ -47,14 +46,13 @@ tool.flagMap = {}
 -- Prefix to decorate defines, include paths & include libs
 tool.prefixes = {
 	-- defines = '-D',
-	-- systemlibs = '-l'
 	-- depfileOutput = '-MF'
 }
 tool.suffixes = {
 	-- depfileOutput = '.d'
 }
 tool.decorateFn = {
-	-- input = function(cfg, inputList) return '-Wl,--start-group'..table.concat(inputList, ' ')..'-Wl,--end-group'; end
+	-- input = function(inputList) return '-Wl,--start-group'..table.concat(inputList, ' ')..'-Wl,--end-group'; end
 }
 
 -- Default is for C++ source, override this for other tool types
@@ -121,6 +119,14 @@ function tool:decorateInputs(cfg, outputVar, inputVar)
 	
 	--rv.flags = self:decorateInput('fixedFlags', self:getFixedFlags(), true)
 	rv.sysflags = self:decorateInput('sysflags', self:getsysflags(cfg), true)
+	
+	if self.isCompiler then
+		rv.buildoptions = self:decorateInput('buildoptions', cfg.buildoptions, true)
+	end
+	if self.isLinker then
+		rv.linkoptions = self:decorateInput('linkoptions', cfg.linkoptions, true)
+	end
+
 	local output = self:decorateInput('output', outputVar, true)
 	local input = self:decorateInput('input', inputVar, true)
 
@@ -242,7 +248,7 @@ end
 function tool:isLinkInput(cfg, fileName)
 	return (self.extensionsForLinking[path.getextension(fileName)] ~= nil)
 end
---
+
 -- Get library includes
 --
 function tool:getIncludeLibs(cfg, systemonly)
@@ -322,6 +328,15 @@ function premake.tools.newtool(toolDef)
 	if (not t.toolName) or #t.toolName < 1 then
 		error('toolName not specified')
 	end 
+	
+	-- Categorise the tool
+	if (not t.isCompiler) and (not t.isLinker) then
+		if t.toolName == 'cc' or t.toolName == 'cxx' then
+			t.isCompiler = true
+		else
+			t.isLinker = true
+		end
+	end  
 	
 	return t
 end

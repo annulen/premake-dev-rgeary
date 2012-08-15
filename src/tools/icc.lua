@@ -63,7 +63,23 @@ local icc_ar = newtool {
 	binaryName = 'xiar',
 	fixedFlags = 'rc',
 	redirectStderr = true,
+	targetNamePrefix = 'lib',
 }
+local function decorateLibList(list, startPrefix, systemlibPrefix)
+	if not list or #list == 0 then
+		return ''
+	else
+		local s = startPrefix
+		for _,lib in ipairs(list) do
+			if path.containsSlash(lib) then
+				s = s..' '..lib
+			else
+				s = s..' '..systemlibPrefix..lib
+			end
+		end
+		return s
+	end
+end
 local icc_link = newtool {
 	toolName = 'link',
 	binaryName = 'icpc',
@@ -74,14 +90,15 @@ local icc_link = newtool {
 		StdlibStatic	= '-static-libgcc -shared-intel',		-- Might not work, test final binary with ldd. See http://www.trilithium.com/johan/2005/06/static-libstdc/
 	},
 	prefixes = {
-		systemlibs 		= '-l',
 		libdirs 		= '-L',
-		linkAsStatic 	= '-Wl,-Bstatic ',
-		linkAsShared 	= '-Wl,-Bdynamic ',
 		output 			= '-o',
 	},
 	suffixes = {
 		input 			= ' -Wl,--end-group',
+	},
+	decorateFn = {
+		linkAsStatic	= function(list) return decorateLibList(list, '-Wl,-Bstatic', '-l'); end,
+		linkAsShared	= function(list) return decorateLibList(list, '-Wl,-Bdynamic', '-l'); end,
 	},
 	
 	getsysflags = function(self, cfg)

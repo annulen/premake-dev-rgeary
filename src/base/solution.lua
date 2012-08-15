@@ -26,20 +26,29 @@
 		local sln = { }
 
 		-- add to master list keyed by both name and index
-		table.insert(premake.solution.list, sln)
-		premake.solution.list[name] = sln
+		if name == '_GLOBAL_SOLUTION' then
+			ptypeSet( sln, "globalcontainer" )
+		else
+			table.insert(premake.solution.list, sln)
+			premake.solution.list[name] = sln
+			ptypeSet( sln, "solution" )
+		end
 			
-		-- attach a type descriptor
-		ptypeSet( sln, "solution" )
-
 		sln.name           = name
 		sln.basedir        = os.getcwd()			
 		sln.projects       = { }
-		sln.blocks         = { }
-		sln.configurations = { }
-		
-		-- merge in global configuration blocks
-		sln.blocks = oven.merge({}, premake.globalContainer.blocks)
+
+		-- merge in global configuration
+		local global = premake.globalContainer 
+		if global then
+			sln.configurations 	= oven.merge({}, global.configurations)
+			sln.blocks 			= oven.merge({}, global.blocks)
+			sln.platforms		= oven.merge({}, global.platforms or {})
+			sln.language		= global.language
+		else
+			sln.configurations = { }
+			sln.blocks         = { }
+		end
 		
 		return sln
 	end
@@ -57,6 +66,7 @@
 		local result = {}
 		for i, sln in ipairs(solution.list) do
 			result[i] = solution.bake(sln)
+			result[sln.name] = result[i]
 		end
 		solution.list = result
 	end
@@ -74,6 +84,8 @@
 		-- start by copying all field values into the baked result
 		local result = oven.merge({}, sln)
 		result.baked = true
+		local slnNoBlocks = oven.merge({}, sln)
+		slnNoBlocks.baked = true
 		
 		-- keep a reference to the original configuration blocks, in
 		-- case additional filtering (i.e. for files) is needed later
@@ -82,20 +94,21 @@
 		-- bake all of the projects in the list, and store that result
 		local projects = {}
 		for i, prj in ipairs(sln.projects) do
-			prj = project.bake(prj, result)
-			projects[i] = prj
+			local bakedPrj = project.bake(prj, iif(prj.isUsage, slnNoBlocks, result))
+			local prjName = prj.name
+			projects[i] = bakedPrj
 
-			if (not projects[prj.name]) then
-				projects[prj.name] = prj
-			elseif prj.isUsage then
-				projects[prj.name].usageProj = prj
-				prj.realProj = projects[prj.name]
-			elseif projects[prj.name].isUsage then
-				prj.usageProj = projects[prj.name]
-				prj.usageProj.realPrj = prj
-				projects[prj.name] = prj
+			if (not projects[prjName]) then
+				projects[prjName] = bakedPrj
+			elseif bakedPrj.isUsage then
+				projects[prjName].usageProj = bakedPrj
+				bakedPrj.realProj = projects[prjName]
+			elseif projects[prjName].isUsage then
+				bakedPrj.usageProj = projects[prjName]
+				bakedPrj.usageProj.realbakedPrj = bakedPrj
+				projects[prjName] = bakedPrj
 			else
-				error('Duplicate project ' .. prj.name)
+				error('Duplicate project ' .. prjName)
 			end
 		end
 		result.projects = projects
@@ -149,82 +162,118 @@
 		return configs
 	end
 
-
+uid = 1
 --
 -- Read the "uses" field and bake in any requirements from those projects
 --
 	function solution.bakeUsageRequirements(projects)
 		
-		-- Usage projects should inherit some values from the real project. target directory/name, linkAsShared
-		-- Usage projects should by default link to their real project's target
-		for _,prj in ipairs(projects) do
+		local prjHasBakedUsageDefaults = {}
+		
+		-- Look recursively at the uses statements in each project and add usage project defaults for them  
+		function bakeUsageDefaults(prj)
+			if prjHasBakedUsageDefaults[prj] then
+				return true
+			end
+			prjHasBakedUsageDefaults[prj] = true
+			
+			-- For usage project, first ensure that the real project's usages are baked, and then copy in any defaults
 			if prj.isUsage and prj.realProj then
 				local realProj = prj.realProj
-				for cfgName,cfg in pairs(prj.configs) do
+				local usageProj = prj
+			
+				-- Bake the real project first
+				bakeUsageDefaults(realProj)
+			
+				-- Copy in default build target from the real proj
+				for cfgName,useCfg in pairs(usageProj.configs) do
 					local realCfg = realProj.configs[cfgName]
+				
+					-- usage kind = real proj kind
+					useCfg.kind = useCfg.kind or realCfg.kind
+
+					local realTarget = realCfg.buildtarget.abspath
+					if realTarget then
+						if realCfg.kind == 'SharedLib' then
+							-- link to the target as a shared library
+							oven.mergefield(useCfg, "linkAsShared", { realTarget })
+						elseif realCfg.kind == 'StaticLib' then
+							-- link to the target as a static library
+							oven.mergefield(useCfg, "linkAsStatic", { realTarget })
+						end
+					end
+				
+					-- Finally, resolve the links in to linkAsStatic, linkAsShared
+					if useCfg.kind == 'SharedLib' then
+						-- If you link to a shared library, you also need to link to any shared libraries that it uses
+						oven.mergefield(useCfg, "linkAsShared", realCfg.linkAsShared )
+					elseif realCfg.kind == 'StaticLib' then
+						-- If you link to a static library, you also need to link to any libraries that it uses
+						oven.mergefield(useCfg, "linkAsStatic", realCfg.linkAsStatic )
+						oven.mergefield(useCfg, "linkAsShared", realCfg.linkAsShared )
+					end					
+				end
+			end -- isUsage
+				
+			-- Resolve "uses" & "links" for each config
+			for cfg in project.eachconfig(prj) do
+				local uses = concat(cfg.uses or {}, cfg.links or {})
+				for _,useProjName in ipairs(uses) do
+					local p = projects[useProjName] or premake.globalContainer.projects[useProjName]
+					local useProj = iif( p.isUsage, p, p.usageProj )
+					local realProj = iif( p.isUsage, p.realProj, p )
+					local useCfg
+									
+					-- Check the string also specifies a configuration
+					if not useProj then
+						local useProjName2,useBuildCfg, usePlatform = string.match(useProjName,'([^.]+)[.]+(.*)')
+						useProj = projects[useProjName2] or premake.globalContainer.projects[useProjName2]
+						if not useProj then
+							error('Could not find project '.. useProjName)
+						end								
+						useCfg = project.getconfig(useProj, useBuildCfg, usePlatform)
+						if useCfg == nil then
+							error('Could not find usage '.. useProjName)
+						end
+					else
+						useCfg = project.getconfig(useProj, cfg.buildcfg, cfg.platform)
+					end
+				
+					if useProj and useCfg then 
+						-- make sure the usage project also has its defaults baked
+						bakeUsageDefaults(useProj)
 					
-					oven.mergefield(cfg, "buildtarget", realCfg.buildtarget )
-					oven.mergefield(cfg, "linkAsShared", realCfg.linkAsShared )
+						-- Separate links in to linkAsStatic, linkAsShared
+						cfg.linkAsStatic = cfg.linkAsStatic or {}
+						cfg.linkAsShared = cfg.linkAsShared or {}
+											
+						-- Merge in the usage requirements from the usage project
+						local usageFields = Seq:new(premake.fields):where(function(v) return v.usagefield; end)
+						local usageRequirements = {}
+						for _,filterField in usageFields:each() do
+							oven.merge(cfg, useCfg, filterField.name)
+						end						
 					
-					local useCfgTarget = cfg.buildtarget.abspath
-					if useCfgTarget then
-						if cfg.kind == 'SharedLib' then
-							oven.mergefield(cfg, "linkAsShared", { useCfgTarget })
+					else
+						-- Can't find the usage project, assume the string is a file
+						local linkName = useProjName
+						if string.find(linkName, '.so',1,true) then
+							table.insert( cfg.linkAsShared, linkName )
 						else
-							oven.mergefield(cfg, "linkAsStatic", { useCfgTarget })
-						end
-					end
-					
-				end
-			end
-		end
+							table.insert( cfg.linkAsStatic, linkName )
+						end				
+					end -- if valid useProj
+							
+				end -- each use
+			end  -- each cfg
+			
+		end -- function bakeUsageDefaults
 		
+		-- bake each project
 		for _,prj in ipairs(projects) do
-			for _,cfg in pairs(prj.configs) do
-	
-				-- find any "uses" statements, but don't include projects we've already included
-				local usedList = toSet(cfg.project.name)
-				if cfg.uses then
-					for _,useProjName in ipairs(cfg.uses) do
-						if not usedList[useProjName] then
-						
-							local useProj = projects[useProjName] or premake.globalContainer.projects[useProjName]
-							
-							if useProj.usageProj then
-								useProj = useProj.usageProj
-							end
-							
-							local useCfg
-
-							-- Check if it also specifies a configuration
-							if not useProj then
-								local useProjName2,useBuildCfg, usePlatform = string.match(useProjName,'([^.]+)[.]+(.*)')
-								useProj = projects[useProjName2] or premake.globalContainer.projects[useProjName2]
-								useCfg = project.getconfig(useProj, useBuildCfg, usePlatform)
-								if useCfg == nil then
-									error('Could not find usage '.. useProjName)
-								end
-							else
-								useCfg = project.getconfig(useProj, cfg.buildcfg, cfg.platform)
-							end
-							
-							if not useCfg then
-								error('Could not find cfg ' .. useCfgName .. ' for usage project ' .. useProjName)
-							end
-
-							-- Merge the usage requirements from the project
-							local usageFields = Seq:new(premake.fields):where(function(v) return v.usagecopy; end)
-							local usageRequirements = {}
-							for _,filterField in usageFields:each() do
-								cfg = oven.merge(cfg, useCfg, filterField.name)
-							end
-							
-							usedList[useProj] = true
-						end
-					end
-				end
-			end
+			bakeUsageDefaults(prj)
 		end
+
 	end
 
 --
@@ -406,6 +455,29 @@
 		for _, prj in ipairs(sln.projects) do
 			if name == prj.name:lower() then
 				return prj
+			end
+		end
+		for _, prj in ipairs(premake.globalContainer.projects) do
+			if name == prj.name:lower() then
+				return prj
+			end
+		end
+		return nil
+	end
+
+--
+--  Find a usage configuration
+--
+	function solution.findusage(sln, useProjName)
+		name = name:lower()
+		for _, prj in ipairs(sln.projects) do
+			if useProjName == prj.name:lower() then
+				return iif( prj.usageProj, prj.usageProj, prj )
+			end
+		end
+		for _, prj in ipairs(premake.globalContainer.projects) do
+			if useProjName == prj.name:lower() then
+				return iif( prj.usageProj, prj.usageProj, prj )
 			end
 		end
 		return nil

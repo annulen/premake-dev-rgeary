@@ -31,6 +31,16 @@
 		return result
 	end
 
+--
+-- Make a shallow 1 level copy of a table
+--
+	function table.shallowcopy(t)
+		local dest = {}
+		for k,v in pairs(t) do
+			dest[k] = v
+		end
+		return dest
+	end
 
 --
 -- Make a complete copy of a table, including any child tables it contains.

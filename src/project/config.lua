@@ -28,28 +28,6 @@
 			oven.expandtokens(cfg, nil, nil, "linktarget")
 		end
 		
-		-- separate links in to systemlibs, linkAsStatic, linkAsShared
-		cfg.systemlibs = cfg.systemlibs or {}
-		cfg.linkAsStatic = cfg.linkAsStatic or {}
-		cfg.linkAsShared = cfg.linkAsShared or {}
-		
-		for _,link in ipairs(cfg.links or {}) do
-			local prj = premake.solution.findproject(cfg.solution, link)
-			if prj and prj.linktarget then
-				local targetdir = prj.linktarget.abspath
-				if prj.kind == 'SharedLib' then
-					table.insert( cfg.linkAsShared, targetdir )
-				else
-					table.insert( cfg.linkAsStatic, targetdir )
-				end
-			else
-				if string.find(link, '/') then
-					table.insert( cfg.linkAsStatic, link )
-				else
-					table.insert( cfg.systemlibs, link )
-				end				
-			end
-		end 
 	end
 
 
@@ -74,6 +52,9 @@
 
 		local directory = cfg[field.."dir"] or cfg.targetdir or basedir
 		local basename = cfg[field.."name"] or cfg.targetname or cfg.project.name
+		
+		-- in case a project has a slash in the name
+		basename = path.getbasename(basename)
 
 		local bundlename = ""
 		local bundlepath = ""

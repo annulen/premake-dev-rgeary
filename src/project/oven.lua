@@ -60,6 +60,7 @@
 
 		-- Walk the blocks available in this container, and merge their values
 		-- into my configuration-in-progress, if they pass the keyword filter
+		container.blocks = container.blocks or {}
 		for _, block in ipairs(container.blocks) do
 			if oven.filter(block, casedTerms) then
 				oven.merge(cfg, block, filterField)
@@ -391,6 +392,10 @@
 
 	function oven.mergefield(cfg, name, value)
 		local field = premake.fields[name]
+		
+		if not value then
+			return
+		end
 
 		-- if this isn't a Premake field, then just copy
 		if not field then

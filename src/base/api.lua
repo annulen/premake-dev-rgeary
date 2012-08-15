@@ -89,7 +89,9 @@
 
 	function api.gettarget(scope)
 		local target
-		if scope == "project" then
+		if scope == "solution" then
+			target = api.scope.solution
+		elseif scope == "project" then
 			target = api.scope.project or api.scope.solution
 		else
 			target = api.scope.configuration
@@ -102,6 +104,32 @@
 		return target
 	end
 
+--
+-- Push the current scope on to a stack
+--
+	api.scopeStack = {}
+	function api.scopepush()
+		local s = {
+			solution 			 = api.scope.solution,
+			project 			 = api.scope.project,
+			configuration 		 = api.scope.configuration,
+			currentContainer 	 = premake.CurrentContainer,
+			currentConfiguration = premake.CurrentConfiguration,  			
+		}
+		table.insert( api.scopeStack, s )
+	end
+
+--
+-- Pop a scope from the stack
+--
+	function api.scopepop()
+		if #api.scopeStack < 1 then
+			error('No scope to pop')
+		end
+		api.scope = table.remove( api.scopeStack )
+		premake.CurrentContainer = api.scope.currentContainer
+		premake.CurrentConfiguration = api.scope.currentConfiguration
+	end
 
 --
 -- Callback for all API functions; everything comes here first, and then
@@ -343,7 +371,7 @@
 
 	function api.setlist(target, name, field, value)
 		-- start with the existing list, or an empty one
-		target[name] = target[name] or {}
+		target[name] = iif(field.overwrite, {}, target[name] or {})
 		target = target[name]
 		
 		-- find the contained data type
@@ -445,9 +473,9 @@
 		kind = "string-list",
 		expandtokens = true,
 		namealiases = { "compileoptions" },
-		-- 'usagecopy = true' means that the field can be a "usage requirement". It will copy this field's values
+		-- 'usagefield = true' means that the field can be a "usage requirement". It will copy this field's values
 		--   from the usage secton in to the destination project 
-		usagecopy = true,							
+		usagefield = true,							
 	}
 
 	api.register {
@@ -467,6 +495,7 @@
 		name = "configurations",
 		scope = "project",
 		kind = "string-list",
+		overwrite = true,			-- don't merge multiple configurations sections
 	}
 	
 	api.register {
@@ -511,7 +540,7 @@
 		scope = "config",
 		kind = "string-list",
 		expandtokens = true,
-		usagecopy = true,
+		usagefield = true,
 		namealiases = { "define" },
 	}
 	
@@ -520,7 +549,7 @@
 		scope = "config",
 		kind = "string-list",
 		expandtokens = true,
-		usagecopy = true,
+		usagefield = true,
 	}
 
 	api.register {
@@ -541,6 +570,7 @@
 		name = "flags",
 		scope = "config",
 		kind  = "string-list",
+		usagefield = true,
 		allowed = {
 			"AddPhonyHeaderDependency",		 -- for Makefiles, requires CreateDependencyFile
 			"CreateDependencyFile",
@@ -665,8 +695,14 @@
 		scope = "config",
 		kind = "directory-list",
 		expandtokens = true,
-		usagecopy = true,
+		usagefield = true,
 		namealiases = { "includedir" },
+	}
+	
+	api.register {
+		name = "includesolution",
+		scope = "solution",
+		kind = "string-list",
 	}
 
 	api.register {
@@ -702,7 +738,7 @@
 		scope = "config",
 		kind = "directory-list",
 		expandtokens = true,
-		usagecopy = true,
+		usagefield = true,
 	}
 
 	api.register {
@@ -710,7 +746,7 @@
 		scope = "config",
 		kind = "string-list",
 		expandtokens = true,
-		usagecopy = true,
+		usagefield = true,
 	}
 	
 	api.register {
@@ -720,12 +756,15 @@
 		allowed = function(value)
 			-- if library name contains a '/' then treat it as a path to a local file
 			if value:find('/', nil, true) then
-				value = path.getabsolute(value)
+				local absPath = path.getabsolute(value)
+				if os.isfile(absPath) then
+					value = absPath
+				end
 			end
 			return value
 		end,
 		expandtokens = true,
-		usagecopy = true,		-- there's special case handling for links
+		usagefield = true,
 	}
 	
 	api.register {
@@ -733,7 +772,7 @@
 		scope = "config",
 		kind = "string-list",
 		expandtokens = true,
-		usagecopy = true,
+		usagefield = true,
 	}
 	
 	api.register {
@@ -741,7 +780,7 @@
 		scope = "config",
 		kind = "string-list",
 		expandtokens = true,
-		usagecopy = true,
+		usagefield = true,
 	}
 	
 	api.register {
@@ -821,7 +860,7 @@
 		scope = "config",
 		kind = "string-list",
 		expandtokens = true,
-		usagecopy = true,
+		usagefield = true,
 	}
 
 	api.register {
@@ -829,7 +868,7 @@
 		scope = "config",
 		kind = "directory-list",
 		expandtokens = true,
-		usagecopy = true,
+		usagefield = true,
 	}
 
 	api.register {
@@ -837,7 +876,7 @@
 		scope = "config",
 		kind = "string-list",
 		expandtokens = true,
-		usagecopy = true,
+		usagefield = true,
 	}
 
 	api.register {
@@ -855,19 +894,10 @@
 	}
 
 	api.register {
-		name = "systemlibs",
-		scope = "config",
-		kind = "string-list",
-		expandtokens = true,
-		usagecopy = true,
-	}
-
-	api.register {
 		name = "targetdir",
 		scope = "config",
 		kind = "path",
 		expandtokens = true,
-		usagecopy = true,
 	}		
 
 	api.register {
@@ -875,7 +905,6 @@
 		scope = "config",
 		kind = "string",
 		expandtokens = true,
-		usagecopy = true,
 	}
 
 	api.register {
@@ -883,7 +912,6 @@
 		scope = "config",
 		kind = "string",
 		expandtokens = true,
-		usagecopy = true,
 	}
 
 	api.register {
@@ -891,7 +919,6 @@
 		scope = "config",
 		kind = "string",
 		expandtokens = true,
-		usagecopy = true,
 	}
 
 	api.register {
@@ -899,7 +926,6 @@
 		scope = "config",
 		kind = "string",
 		expandtokens = true,
-		usagecopy = true,
 	}
 
 	api.register {
@@ -1324,7 +1350,7 @@
 				prj.usageProj = sln.projects[name];
 				prj.usageProj.realProj = prj
 			end
-
+			
 			sln.projects[name] = prj
 		end
 		
@@ -1336,6 +1362,10 @@
 		prj.blocks         = { }
 		prj.isUsage		   = isUsage;
 		
+		-- Create a default usage project if there isn't one
+		if (not isUsage) and (not prj.usageProj) then
+			prj.usageProj = createproject(name, sln, true)
+		end
 		return prj;
 	end
 	

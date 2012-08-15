@@ -75,19 +75,32 @@
 			return nil
 		end
 
-		p('Project', prj.name)
-		
+		p('Usage Project', prj.usageProj.name)
+		indent(2)
+			local uProj = prj.usageProj 
+			local ucfg = project.getConfigs(uProj):first() or {}
+			for k,v in pairs(ucfg) do
+				if v and premake.fields[k] and premake.fields[k].usagefield then
+					if type(v) == 'table' then
+						if #v > 0 then
+							p(k..' = '..table.concat(v, ' '))
+						end
+					else
+						p(k..' = '..tostring(v))
+					end
+				end
+			end
+		indent(-2)
+
+		p('RealProject', prj.name)
 		indent(2)
 		for cfg in project.eachconfig(prj) do
+			p('kind', cfg.kind)
+			p('uses', cfg.uses)
 			p('config', cfg.shortname)
 			local toolset = premake.tools[cfg.toolset]
 			p('toolset ' .. cfg.toolset)
 			indent(2)
-				--[[p('cppflags', toolset:getcppflags(cfg))
-				p('cflags', toolset:getcflags(cfg))
-				p('cxxflags', toolset:getcxxflags(cfg))
-				p('sysflags', toolset.sysflags)]]
-				
 				local function flattenArgs(t)
 					local t2 = {}
 					for k,v in pairs(t) do
@@ -121,14 +134,16 @@
 				for k,v in pairs(compileCmdArgs) do
 				 p(' .' .. tostring(k) ..' = '..v)
 				end				
-				p('compile cmd  ', compileTool:getCommandLine(compileCmdArgsFlat))
+				p('compile cmd  ', compileTool:getCommandLine(compileTool:getBinary(), compileCmdArgsFlat))
 				p('objdir       ', cfg.objdir)
-				p('link cmd     ', linkTool:getCommandLine(linkCmdArgsFlat))
+				p('link cmd     ', linkTool:getCommandLine(linkTool:getBinary(), linkCmdArgsFlat))
 				p('link flags   ', linkTool:getsysflags(cfg), ' ')
 				for k,v in pairs(linkCmdArgs) do
 				 p(' .' .. tostring(k) ..' = '..v)
 				end				
-				p('link target  ', cfg.buildtarget.directory .. '/' .. cfg.buildtarget.name)
+				p('link target  ', cfg.linktarget.directory .. '/' .. cfg.linktarget.name)
+				p('build target  ', cfg.buildtarget.directory .. '/' .. cfg.buildtarget.name)
+				p('build targetdir', cfg.targetdir )
 				if 0 < #cfg.prebuildcommands then
 					p('prebuild cmd ', table.concat(cfg.prebuildcommands, "\n" .. indentStr .. '                '))
 				end
