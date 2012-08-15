@@ -51,9 +51,9 @@
 		 	_HandlingError = 1
 		    local errStr = tostring(errobj) or "("..type(errobj)..")"
 		    if( type(errobj)=='table' ) then
-		      errStr = "Table: {" ..
+		      errStr = ("Table: {" ..
 		      	table.concat(map(errobj, function (k,v) return '[' .. tostring(k) .. '] = ' .. tostring(v); end)
-		      	, ',') .. "}"
+		      	, ',') .. "}"):sub(1,1500)
 		    end
 			print("Error: \"" .. errStr .. "\"")
 	    	--for k ,v in pairs(_G) do print("GLOBAL:" , k,v) end
