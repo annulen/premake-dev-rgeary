@@ -85,7 +85,7 @@
 				platforms = table.join(platforms, { "Native" })
 			end
 
-			for _, platform in ipairs(platforms) do
+			if not prj.isUsage then
 				for cfg in project.eachconfig(prj) do
 					if cfg.objdir then
 						clean.directory(prj, cfg.objdir, true)
@@ -93,7 +93,7 @@
 					if cfg.linktarget then
 						clean.directory(prj, cfg.linktarget.directory, true)
 					end
-
+	
 					-- call action.oncleantarget() with the undecorated target name
 					local target = cfg.project.basedir
 					for action in premake.action.each() do
