@@ -203,6 +203,13 @@ function Seq:take(n)
 	return s
 end
 
+-- Returns the first value
+function Seq:first()
+	local iter = self.iterate()
+	local k,v = iter()
+	return v
+end
+
 -- Remove any element in the string/sequence/set vs
 function Seq:except(exceptValues)
 	if exceptValues == nil then
