@@ -286,11 +286,11 @@
 		
 		valid_languages = { "C", "C++", "C#" },
 		
---[[		valid_tools     = {
+		valid_tools     = {
 			cc     = { "gcc" },
 			dotnet = { "mono", "msnet", "pnet" },
 		},
-]]		
+
 		onsolution = function(sln)
 			premake.generate(sln, make.getmakefilename(sln, false), premake.make_solution)
 		end,

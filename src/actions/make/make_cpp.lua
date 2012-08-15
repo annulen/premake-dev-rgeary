@@ -480,8 +480,9 @@
 --
 
 	function cpp.toolconfig(cfg, toolset)
-		-- Need to always output these as we could alternate compilers between configurations
-		_p('  CC         = %s', toolset:getBinary(cfg,'cc'))
-		_p('  CXX        = %s', toolset:getBinary(cfg,'cxx'))
-		_p('  AR         = %s', toolset:getBinary(cfg,'ar'))
+		local compileTool = toolset:getCompileTool(cfg)
+		local linkTool = toolset:getLinkTool(cfg)
+		_p('  CC         = %s', compileTool:getBinary(cfg))
+		--_p('  CXX        = %s', compileTool:getBinary(cfg,'cxx'))
+		_p('  AR         = %s', linkTool:getBinary(cfg,'ar'))
 	end
