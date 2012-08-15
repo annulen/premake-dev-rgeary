@@ -268,6 +268,9 @@
 		return path.hasextension(fname, { ".h", ".hh", ".hpp", ".hxx" })
 	end
 
+	function path.containsSlash(fname)
+		return string.find(fname, '[/\\]')
+	end
 
 
 --
