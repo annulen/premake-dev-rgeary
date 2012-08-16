@@ -4,7 +4,7 @@
 -- Copyright (c) 2011-2012 Jason Perkins and the Premake project
 --
 
-	premake5.oven = { }
+	premake5.oven = premake5.oven or { }
 	local oven = premake5.oven
 
 
@@ -214,7 +214,7 @@
 			value, count = string.gsub(value, "%%{(.-)}", function(token)			
 				local result, err = expander(token)
 				if not result then
-					error(err .. ' in string ' .. value..' at '..location, 0)
+					error(err .. ' in ' .. value..' at '..location, 0)
 				end
 				return result
 			end)
@@ -338,16 +338,18 @@
 				oven.mergefield(cfg, filterField, block[filterField])
 			end
 		else
+			local tmr = timer.start('oven.merge')
+			
 			for key, value in pairs(block) do
 				if not nomerge[key] then
 					oven.mergefield(cfg, key, value)
 				end
 			end
+			
+			-- remember the container object (solution, project, etc.)
+			ptypeSet(cfg, ptype(block))
+			timer.stop(tmr)
 		end
-		
-		-- remember the container object (solution, project, etc.)
-		--cfg[ptype(block)] = block
-		ptypeSet(cfg, ptype(block))
 		
 		return cfg
 	end

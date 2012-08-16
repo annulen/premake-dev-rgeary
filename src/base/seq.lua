@@ -250,7 +250,7 @@ end
 function Seq:concat(seq2)
 	seq2 = Seq.toSeq(seq2)
 	
-	local s = Seq:new(self)
+	local s = Seq:new(nil)
 	s.iterate = function()
 		-- setup
 		local iter1 = self.iterate()
@@ -270,6 +270,12 @@ function Seq:concat(seq2)
 	end
 	return s
 end
+
+-- concatenate index sequence
+function Seq:iconcat(seq2)
+	return self:concat(Seq:ipairs(seq2))
+end
+
 
 -- prepend a sequence, opposite of concat
 function Seq:prepend(seq2, optValue)
@@ -319,15 +325,39 @@ function Seq:orderBy(orderFn)
 	return Seq:new(tSorted)
 end
 
+-- Return the maximum value in a sequence, assume #value for non number types
+function Seq:max()
+	local hasValues = false 
+	local maxValue = -9e99
+	for k,v in self.iterate() do
+		hasValues = true
+		if type(v) == 'number' then
+			maxValue = math.max(maxValue, v)
+		elseif v ~= nil then
+			maxValue = math.max(maxValue, #v)
+		end
+	end
+	if not hasValues then
+		return 0
+	end
+	return maxValue
+end
+
 function testSeq()
 	bigT = { 'one', 'two', 'three', 'four', 'five', 'six', 'seven' }
+	t2 = { 'door', 'stop' }
 	
 	local bigTseq = Seq:new(bigT)
 	local no2 = bigTseq:where(function(v) return v ~= 'two'; end)
 	local no23 = no2:where(function(v) return v ~= 'three'; end)
 	local no23_2 = no23:select(function(v) return v .. string.upper(v); end)
+	
+	local tconcat = bigTseq:take(2):concat(t2)
+	local ticoncat = Seq:ipairs(bigT):concat(Seq:ipairs(t2))
 
 	print('bigTseq ' .. bigTseq:tostring()) 
+	print('tconcat ' .. tconcat:mkstring(' ')) 
+	print('ticoncat ' .. ticoncat:mkstring(' ')) 
 	--print('no2     ' .. no2:tostring()) 
 	--print('no23    ' .. no23:tostring()) 
 	--print('no23_2  ' .. no23_2:tostring()) 

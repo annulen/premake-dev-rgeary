@@ -59,17 +59,16 @@
 				_ACTION = _ACTION:sub(1, -3)
 			end
 			for sln in premake.solution.each() do
-				if a.onsolution then
-					a.onsolution(sln)
-				end
+				if a.onSolution then a.onSolution(sln) end
+				if a.onsolution then a.onsolution(sln) end
+				
 				for prj in premake.solution.eachproject_ng(sln) do
-					if a.onproject and not prj.external then
-						a.onproject(prj)
-					end
+					if a.onProject then a.onProject(prj) end
+					if a.onproject then a.onproject(prj) end
 				end
-				if a.onSolutionEnd then
-					a.onSolutionEnd(sln)
-				end
+			end
+			if a.onSolutionEnd then
+				a.onSolutionEnd()
 			end
 		else
 			for sln in premake.solution.each() do

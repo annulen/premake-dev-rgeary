@@ -248,7 +248,11 @@
 					end
 				end
 			end
-			return nil, "invalid value '" .. value .. "'"
+			local errMsg = "invalid value '" .. value .. "'."
+			if allowedValues and type(allowedValues)=='table' then
+				errMsg = errMsg..' Allowed values are {'..table.concat(allowedValues, ' ')..'}'
+			end
+			return nil, errMsg
 
 		else
 			return value
@@ -928,6 +932,15 @@
 		expandtokens = true,
 	}
 
+	for i=1,1 do
+		api.register {
+			name = "dummy"..tostring(i),
+			scope = "config",
+			kind = "string-list",
+			expandtokens = true,
+		}
+	end
+
 	api.register {
 		name = "toolset",
 		scope = "config",
@@ -1310,11 +1323,17 @@
 		for _, word in ipairs(cfg.terms) do
 			table.insert(cfg.keywords, path.wildcards(word):lower())
 		end
+		
+		local isUsageProj = container.isUsage
 
 		-- initialize list-type fields to empty tables
 		for name, field in pairs(premake.fields) do
 			if field.kind:endswith("-list") then
-				cfg[name] = { }
+				if isUsageProj and field.usagefield then
+					cfg[name] = { }
+				else
+					cfg[name] = { }
+				end
 			end
 		end
 		
@@ -1322,51 +1341,6 @@
 		api.scope.configuration = cfg
 		
 		return cfg
-	end
-	
-	local function createproject(name, sln, isUsage)
-		local prj = {}
-		
-		-- attach a type
-		ptypeSet(prj, 'project')
-		
-		-- add to master list keyed by both name and index
-		table.insert(sln.projects, prj)
-		if(isUsage) then
-			--If we're creating a new usage project, and there's already a project
-			--with our name, then set us as the usage project for that project.
-			--Otherwise, set us as the project in that slot.
-			if(sln.projects[name]) then
-				sln.projects[name].usageProj = prj;
-				prj.realProj = sln.projects[name]
-			else
-				sln.projects[name] = prj
-			end
-		else
-			--If we're creating a regular project, and there's already a project
-			--with our name, then it must be a usage project. Set it as our usage project
-			--and set us as the project in that slot.
-			if(sln.projects[name] and sln.projects[name].isUsage) then
-				prj.usageProj = sln.projects[name];
-				prj.usageProj.realProj = prj
-			end
-			
-			sln.projects[name] = prj
-		end
-		
-		prj.solution       = sln
-		prj.name           = name
-		prj.basedir        = os.getcwd()
-		prj.script         = _SCRIPT
-		prj.uuid           = os.uuid()
-		prj.blocks         = { }
-		prj.isUsage		   = isUsage;
-		
-		-- Create a default usage project if there isn't one
-		if (not isUsage) and (not prj.usageProj) then
-			prj.usageProj = createproject(name, sln, true)
-		end
-		return prj;
 	end
 	
 	function usage(name)
@@ -1392,14 +1366,15 @@
 		end
 
   		-- if this is a new project, or the project in that slot doesn't have a usage, create it
-  		if((not sln.projects[name] ) or
-  			((not sln.projects[name].isUsage) and (not sln.projects[name].usageProj))) then
-  			premake.CurrentContainer = createproject(name, sln, true)
-  		else
-  			premake.CurrentContainer = iif(sln.projects[name].isUsage,
-  				sln.projects[name], sln.projects[name].usageProj)
+  		local prj = premake5.project.getUsageProject(name)
+  		if not prj then
+  			prj = premake5.project.createproject(name, sln, true)
   		end
-  
+  		
+  		-- Set the current container
+  		premake.CurrentContainer = prj
+		api.scope.project = premake.CurrentContainer
+  		
   		-- add an empty, global configuration to the project
   		configuration { }
   	
@@ -1424,23 +1399,33 @@
   		if (ptype(sln) ~= "solution") then
   			error("no active solution", 2)
   		end
-  		
-  		-- if this is a new project, or the old project is a usage project, create it
-  		if((not sln.projects[name]) or sln.projects[name].isUsage) then
-  			premake.CurrentContainer = createproject(name, sln)
-  		else
-  			premake.CurrentContainer = sln.projects[name];
+
+  		-- if this is a new project, create it
+  		local prj = premake5.project.getRealProject(name)
+  		if not prj then
+  			prj = premake5.project.createproject(name, sln, false)
   		end
+  		
+  		-- Set the current container
+  		premake.CurrentContainer = prj
+		api.scope.project = premake.CurrentContainer
+		  		
+  		-- Add it to the solution 
+		sln.projects[name] = prj
 		
 		-- add an empty, global configuration to the project
 		configuration { }
-		
-		-- this is the new place for storing scoped objects
-		api.scope.project = premake.CurrentContainer
 	
 		return premake.CurrentContainer
 	end
 
+--
+--  Global container for configurations, applied to all solutions
+--
+	function global()
+		local c = solution('_GLOBAL_CONTAINER')
+		premake5.globalContainer.solution = c
+	end
 
 	function solution(name)
 		if not name then
@@ -1451,7 +1436,12 @@
 			end
 		end
 		
-		premake.CurrentContainer = premake.solution.get(name)
+		if name == '_GLOBAL_CONTAINER' then	
+			premake.CurrentContainer = premake5.globalContainer.solution
+		else
+			premake.CurrentContainer = premake.solution.get(name)
+		end
+		
 		if (not premake.CurrentContainer) then
 			premake.CurrentContainer = premake.solution.new(name)
 		end

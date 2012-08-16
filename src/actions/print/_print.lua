@@ -75,9 +75,9 @@
 			return nil
 		end
 
-		p('Usage Project', prj.usageProj.name)
+		local uProj = project.getUsageProject(prj.name)
+		p('Usage Project', usageProj.name)
 		indent(2)
-			local uProj = prj.usageProj 
 			local ucfg = project.getConfigs(uProj):first() or {}
 			for k,v in pairs(ucfg) do
 				if v and premake.fields[k] and premake.fields[k].usagefield then
@@ -98,59 +98,61 @@
 			p('kind', cfg.kind)
 			p('uses', cfg.uses)
 			p('config', cfg.shortname)
-			local toolset = premake.tools[cfg.toolset]
-			p('toolset ' .. cfg.toolset)
-			indent(2)
-				local function flattenArgs(t)
-					local t2 = {}
-					for k,v in pairs(t) do
-						if type(k) ~= 'number' then
-							if v ~= '' then
-								table.insert(t2, '$'..k)
+			if cfg.toolset then
+				local toolset = premake.tools[cfg.toolset]
+				p('toolset ' .. cfg.toolset)
+				indent(2)
+					local function flattenArgs(t)
+						local t2 = {}
+						for k,v in pairs(t) do
+							if type(k) ~= 'number' then
+								if v ~= '' then
+									table.insert(t2, '$'..k)
+								end
+							else
+								table.insert(t2, v)
 							end
-						else
-							table.insert(t2, v)
 						end
+						return t2
 					end
-					return t2
-				end
-				
-				local compileTool = toolset:getCompileTool(cfg)
-				local linkTool = toolset:getLinkTool(cfg)
-				
-				local compileSysflags = compileTool:getsysflags(cfg)
-				local compileCmdArgs = compileTool:decorateInputs(cfg, '$out', '$in')
-				--local compileVars = Seq:new(compileCmdArgs):getKeys():prependEach('$'):prepend(compileSysflags):mkstring(' ')
-				local compileCmdArgsFlat = flattenArgs(compileCmdArgs)
-				local linkCmdArgs = linkTool:decorateInputs(cfg, '$out', '$in')
-				local linkVars = Seq:new(linkCmdArgs):getKeys():prependEach('$'):prepend(linkSysflags):mkstring(' ')
-				local linkCmdArgsFlat = flattenArgs(linkCmdArgs)
-				
---				p('cfg          ', cfg)
-				p('flags        ', cfg.flags)
-				p('compiler tool', compileTool.toolName)
-				p('compiler bin ', compileTool:getBinary())
-				p('compile sysflags', compileSysflags)
-				for k,v in pairs(compileCmdArgs) do
-				 p(' .' .. tostring(k) ..' = '..v)
-				end				
-				p('compile cmd  ', compileTool:getCommandLine(compileTool:getBinary(), compileCmdArgsFlat))
-				p('objdir       ', cfg.objdir)
-				p('link cmd     ', linkTool:getCommandLine(linkTool:getBinary(), linkCmdArgsFlat))
-				p('link flags   ', linkTool:getsysflags(cfg), ' ')
-				for k,v in pairs(linkCmdArgs) do
-				 p(' .' .. tostring(k) ..' = '..v)
-				end				
-				p('link target  ', cfg.linktarget.directory .. '/' .. cfg.linktarget.name)
-				p('build target  ', cfg.buildtarget.directory .. '/' .. cfg.buildtarget.name)
-				p('build targetdir', cfg.targetdir )
-				if 0 < #cfg.prebuildcommands then
-					p('prebuild cmd ', table.concat(cfg.prebuildcommands, "\n" .. indentStr .. '                '))
-				end
-				if 0 < #cfg.postbuildcommands then
-					p('postbuild cmd', table.concat(cfg.postbuildcommands, "\n".. indentStr .. '                '))
-				end
-			indent(-2)
+					
+					local compileTool = toolset:getCompileTool(cfg)
+					local linkTool = toolset:getLinkTool(cfg)
+					
+					local compileSysflags = compileTool:getsysflags(cfg)
+					local compileCmdArgs = compileTool:decorateInputs(cfg, '$out', '$in')
+					--local compileVars = Seq:new(compileCmdArgs):getKeys():prependEach('$'):prepend(compileSysflags):mkstring(' ')
+					local compileCmdArgsFlat = flattenArgs(compileCmdArgs)
+					local linkCmdArgs = linkTool:decorateInputs(cfg, '$out', '$in')
+					local linkVars = Seq:new(linkCmdArgs):getKeys():prependEach('$'):prepend(linkSysflags):mkstring(' ')
+					local linkCmdArgsFlat = flattenArgs(linkCmdArgs)
+					
+	--				p('cfg          ', cfg)
+					p('flags        ', cfg.flags)
+					p('compiler tool', compileTool.toolName)
+					p('compiler bin ', compileTool:getBinary())
+					p('compile sysflags', compileSysflags)
+					for k,v in pairs(compileCmdArgs) do
+					 p(' .' .. tostring(k) ..' = '..v)
+					end				
+					p('compile cmd  ', compileTool:getCommandLine(compileTool:getBinary(), compileCmdArgsFlat))
+					p('objdir       ', cfg.objdir)
+					p('link cmd     ', linkTool:getCommandLine(linkTool:getBinary(), linkCmdArgsFlat))
+					p('link flags   ', linkTool:getsysflags(cfg), ' ')
+					for k,v in pairs(linkCmdArgs) do
+					 p(' .' .. tostring(k) ..' = '..v)
+					end				
+					p('link target  ', cfg.linktarget.directory .. '/' .. cfg.linktarget.name)
+					p('build target  ', cfg.buildtarget.directory .. '/' .. cfg.buildtarget.name)
+					p('build targetdir', cfg.targetdir )
+					if 0 < #cfg.prebuildcommands then
+						p('prebuild cmd ', table.concat(cfg.prebuildcommands, "\n" .. indentStr .. '                '))
+					end
+					if 0 < #cfg.postbuildcommands then
+						p('postbuild cmd', table.concat(cfg.postbuildcommands, "\n".. indentStr .. '                '))
+					end
+				indent(-2)
+			end -- if toolset
 		end
 		indent(-2)
 		for k,v in pairs(prj) do

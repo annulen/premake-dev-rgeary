@@ -4,27 +4,34 @@
 -- Copyright (c) 2011-2012 Jason Perkins and the Premake project
 --
 
-	premake5.project = { }
+	premake5.project = premake5.project or { }
 	local project = premake5.project
 	local oven = premake5.oven
-
-
+	local globalContainer = premake5.globalContainer
+		
 --
 -- Flatten out a project and all of its configurations, merging all of the
 -- values contained in the script-supplied configuration blocks.
 --
 
-	function project.bake(prj, sln)
+	function project.bake(prj)
 		-- make sure I've got the actual project, and not the root configurations
 		prj = prj.project or prj
+		local sln = prj.solution
+		
+		if prj.isbaked then
+			return prj
+		end
+		local tmr = timer.start('project.bake')
 		
 		-- bake the project's "root" configuration, which are all of the
 		-- values that aren't part of a more specific configuration
-		local result = oven.merge(oven.merge({}, sln), prj)
+		local result = oven.merge({}, sln)
+		result = oven.merge(result, prj)
 		result.solution = sln
 		result.platforms = result.platforms or {}
 		result.blocks = prj.blocks
-		result.baked = true
+		result.isbaked = true
 		
 		-- prevent any default system setting from influencing configurations
 		result.system = nil
@@ -46,6 +53,7 @@
 		end
 		result.configs = configs
 				
+		timer.stop(tmr)
 		return result
 	end
 
@@ -157,8 +165,8 @@
 	function project.eachconfig(prj)
 		-- to make testing a little easier, allow this function to
 		-- accept an unbaked project, and fix it on the fly
-		if not prj.baked then
-			prj = project.bake(prj, prj.solution)
+		if not prj.isbaked then
+			prj = project.bake(prj)
 		end
 
 		local configs = prj.cfglist
@@ -186,15 +194,65 @@
 --
 
 	function project.findproject(name)
-		for sln in premake.solution.each() do
-			for _, prj in ipairs(sln.projects) do
-				if (prj.name == name) then
-					return  prj
-				end
-			end
-		end
+		return project.allReal[name] or project.allUsage[name]
 	end
 
+-- Get a real project
+	function project.getRealProject(name)
+		return globalContainer.allReal[name]
+	end
+
+-- Get a usage project
+	function project.getUsageProject(name)
+		return globalContainer.allUsage[name]
+	end
+	
+-- Iterate over all real projects
+	function project.eachproject()
+		local iter,t,k,v = ipairs(globalContainer.allReal)
+		return function()
+			k,v = iter(t,k)
+			return v
+		end
+	end
+	
+-- Create a project
+	function project.createproject(name, sln, isUsage)
+		local prj = {}
+		
+		-- attach a type
+		ptypeSet(prj, 'project')
+		
+		-- add to master list keyed by both name and index
+		if isUsage then
+			table.insert(sln.projects, prj)
+			sln.projects[name] = prj
+		end
+		
+		if isUsage then
+			table.insert( globalContainer.allUsage, prj )
+			globalContainer.allUsage[name] = prj
+		else
+			table.insert( globalContainer.allReal, prj )
+			globalContainer.allReal[name] = prj
+		end
+		
+		prj.solution       = sln
+		prj.name           = name
+		prj.basedir        = os.getcwd()
+		prj.script         = _SCRIPT
+		prj.uuid           = os.uuid()
+		prj.blocks         = { }
+		prj.isUsage		   = isUsage;
+		
+		-- Create a default usage project if there isn't one
+		if (not isUsage) and (not project.getUsageProject(prj.name)) then
+			project.createproject(name, sln, true)
+		end
+		
+		return prj;
+	end
+	
 
 --
 -- Retrieve the project's configuration information for a particular build 
@@ -213,8 +271,8 @@
 	function project.getconfig(prj, buildcfg, platform)
 		-- to make testing a little easier, allow this function to
 		-- accept an unbaked project, and fix it on the fly
-		if not prj.baked then
-			prj = project.bake(prj, prj.solution)
+		if not prj.isbaked then
+			prj = project.bake(prj)
 		end
 	
 		-- if no build configuration is specified, return the "root" project

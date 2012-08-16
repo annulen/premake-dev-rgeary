@@ -4,7 +4,7 @@
 -- Copyright (c) 2002-2012 Jason Perkins and the Premake project
 --
 
-	premake.solution = { }
+	premake.solution = premake.solution or { }
 	local solution = premake.solution
 	local oven = premake5.oven
 	local project = premake5.project
@@ -26,7 +26,7 @@
 		local sln = { }
 
 		-- add to master list keyed by both name and index
-		if name == '_GLOBAL_SOLUTION' then
+		if name == '_GLOBAL_CONTAINER' then
 			ptypeSet( sln, "globalcontainer" )
 		else
 			table.insert(premake.solution.list, sln)
@@ -36,15 +36,15 @@
 			
 		sln.name           = name
 		sln.basedir        = os.getcwd()			
-		sln.projects       = { }
+		sln.projects       = { }		-- real projects, not usages
 
 		-- merge in global configuration
-		local global = premake.globalContainer 
-		if global then
-			sln.configurations 	= oven.merge({}, global.configurations)
-			sln.blocks 			= oven.merge({}, global.blocks)
-			sln.platforms		= oven.merge({}, global.platforms or {})
-			sln.language		= global.language
+		local slnTemplate = premake5.globalContainer.solution 
+		if slnTemplate then
+			sln.configurations 	= oven.merge({}, slnTemplate.configurations)
+			sln.blocks 			= oven.merge({}, slnTemplate.blocks)
+			sln.platforms		= oven.merge({}, slnTemplate.platforms or {})
+			sln.language		= slnTemplate.language
 		else
 			sln.configurations = { }
 			sln.blocks         = { }
@@ -65,8 +65,10 @@
 	function solution.bakeall()
 		local result = {}
 		for i, sln in ipairs(solution.list) do
-			result[i] = solution.bake(sln)
-			result[sln.name] = result[i]
+			local bakedSln = solution.bake(sln)
+			
+			result[i] = bakedSln
+			result[sln.name] = bakedSln
 		end
 		solution.list = result
 	end
@@ -81,51 +83,28 @@
 --
 
 	function solution.bake(sln)
+		
+		-- early out
+		if sln.isbaked then
+			return sln
+		end
+	
 		-- start by copying all field values into the baked result
 		local result = oven.merge({}, sln)
-		result.baked = true
-		local slnNoBlocks = oven.merge({}, sln)
-		slnNoBlocks.baked = true
+		result.isbaked = true
 		
 		-- keep a reference to the original configuration blocks, in
 		-- case additional filtering (i.e. for files) is needed later
 		result.blocks = sln.blocks
 		
-		-- bake all of the projects in the list, and store that result
-		local projects = {}
-		for i, prj in ipairs(sln.projects) do
-			local bakedPrj = project.bake(prj, iif(prj.isUsage, slnNoBlocks, result))
-			local prjName = prj.name
-			projects[i] = bakedPrj
-
-			if (not projects[prjName]) then
-				projects[prjName] = bakedPrj
-			elseif bakedPrj.isUsage then
-				projects[prjName].usageProj = bakedPrj
-				bakedPrj.realProj = projects[prjName]
-			elseif projects[prjName].isUsage then
-				bakedPrj.usageProj = projects[prjName]
-				bakedPrj.usageProj.realbakedPrj = bakedPrj
-				projects[prjName] = bakedPrj
-			else
-				error('Duplicate project ' .. prjName)
-			end
+		-- Resolve baked projects
+		local prjList = {}	
+		for i,prj in ipairs(result.projects) do
+			table.insert( prjList, project.getRealProject(prj.name) )
 		end
-		result.projects = projects
+		result.projects = prjList
 		
-		-- assign unique object directories to every project configurations
- 		solution.bakeobjdirs(result)
- 		
- 		-- Apply usage requirements
- 		solution.bakeUsageRequirements(result.projects)
-		
-		-- expand all tokens contained by the solution
-		for prj in solution.eachproject_ng(result) do
-			oven.expandtokens(prj, "project")
-			for cfg in project.eachconfig(prj) do
-				oven.expandtokens(cfg, "config")
-			end
-		end
+		-- expand all tokens
 		oven.expandtokens(result, "project")
 
 		-- build a master list of solution-level configuration/platform pairs
@@ -162,186 +141,6 @@
 		return configs
 	end
 
-uid = 1
---
--- Read the "uses" field and bake in any requirements from those projects
---
-	function solution.bakeUsageRequirements(projects)
-		
-		local prjHasBakedUsageDefaults = {}
-		
-		-- Look recursively at the uses statements in each project and add usage project defaults for them  
-		function bakeUsageDefaults(prj)
-			if prjHasBakedUsageDefaults[prj] then
-				return true
-			end
-			prjHasBakedUsageDefaults[prj] = true
-			
-			-- For usage project, first ensure that the real project's usages are baked, and then copy in any defaults
-			if prj.isUsage and prj.realProj then
-				local realProj = prj.realProj
-				local usageProj = prj
-			
-				-- Bake the real project first
-				bakeUsageDefaults(realProj)
-			
-				-- Copy in default build target from the real proj
-				for cfgName,useCfg in pairs(usageProj.configs) do
-					local realCfg = realProj.configs[cfgName]
-				
-					-- usage kind = real proj kind
-					useCfg.kind = useCfg.kind or realCfg.kind
-
-					local realTarget = realCfg.buildtarget.abspath
-					if realTarget then
-						if realCfg.kind == 'SharedLib' then
-							-- link to the target as a shared library
-							oven.mergefield(useCfg, "linkAsShared", { realTarget })
-						elseif realCfg.kind == 'StaticLib' then
-							-- link to the target as a static library
-							oven.mergefield(useCfg, "linkAsStatic", { realTarget })
-						end
-					end
-				
-					-- Finally, resolve the links in to linkAsStatic, linkAsShared
-					if useCfg.kind == 'SharedLib' then
-						-- If you link to a shared library, you also need to link to any shared libraries that it uses
-						oven.mergefield(useCfg, "linkAsShared", realCfg.linkAsShared )
-					elseif realCfg.kind == 'StaticLib' then
-						-- If you link to a static library, you also need to link to any libraries that it uses
-						oven.mergefield(useCfg, "linkAsStatic", realCfg.linkAsStatic )
-						oven.mergefield(useCfg, "linkAsShared", realCfg.linkAsShared )
-					end					
-				end
-			end -- isUsage
-				
-			-- Resolve "uses" & "links" for each config
-			for cfg in project.eachconfig(prj) do
-				local uses = concat(cfg.uses or {}, cfg.links or {})
-				for _,useProjName in ipairs(uses) do
-					local p = projects[useProjName] or premake.globalContainer.projects[useProjName]
-					local useProj = iif( p.isUsage, p, p.usageProj )
-					local realProj = iif( p.isUsage, p.realProj, p )
-					local useCfg
-									
-					-- Check the string also specifies a configuration
-					if not useProj then
-						local useProjName2,useBuildCfg, usePlatform = string.match(useProjName,'([^.]+)[.]+(.*)')
-						useProj = projects[useProjName2] or premake.globalContainer.projects[useProjName2]
-						if not useProj then
-							error('Could not find project '.. useProjName)
-						end								
-						useCfg = project.getconfig(useProj, useBuildCfg, usePlatform)
-						if useCfg == nil then
-							error('Could not find usage '.. useProjName)
-						end
-					else
-						useCfg = project.getconfig(useProj, cfg.buildcfg, cfg.platform)
-					end
-				
-					if useProj and useCfg then 
-						-- make sure the usage project also has its defaults baked
-						bakeUsageDefaults(useProj)
-					
-						-- Separate links in to linkAsStatic, linkAsShared
-						cfg.linkAsStatic = cfg.linkAsStatic or {}
-						cfg.linkAsShared = cfg.linkAsShared or {}
-											
-						-- Merge in the usage requirements from the usage project
-						local usageFields = Seq:new(premake.fields):where(function(v) return v.usagefield; end)
-						local usageRequirements = {}
-						for _,filterField in usageFields:each() do
-							oven.merge(cfg, useCfg, filterField.name)
-						end						
-					
-					else
-						-- Can't find the usage project, assume the string is a file
-						local linkName = useProjName
-						if string.find(linkName, '.so',1,true) then
-							table.insert( cfg.linkAsShared, linkName )
-						else
-							table.insert( cfg.linkAsStatic, linkName )
-						end				
-					end -- if valid useProj
-							
-				end -- each use
-			end  -- each cfg
-			
-		end -- function bakeUsageDefaults
-		
-		-- bake each project
-		for _,prj in ipairs(projects) do
-			bakeUsageDefaults(prj)
-		end
-
-	end
-
---
--- Assigns a unique objects directory to every configuration of every project
--- in the solution, taking any objdir settings into account, to ensure builds
--- from different configurations won't step on each others' object files. 
--- The path is built from these choices, in order:
---
---   [1] -> the objects directory as set in the config
---   [2] -> [1] + the platform name
---   [3] -> [2] + the build configuration name
---   [4] -> [3] + the project name
---
-
-	function solution.bakeobjdirs(sln)
-		-- function to compute the four options for a specific configuration
-		local function getobjdirs(cfg)
-			local dirs = {}
-			
-			local dir = path.getabsolute(path.join(project.getlocation(cfg.project), cfg.objdir or "obj"))
-			table.insert(dirs, dir)
-			
-			if cfg.platform then
-				dir = path.join(dir, cfg.platform)
-				table.insert(dirs, dir)
-			end
-			
-			dir = path.join(dir, cfg.buildcfg)
-			table.insert(dirs, dir)
-
-			dir = path.join(dir, cfg.project.name)
-			table.insert(dirs, dir)
-			
-			return dirs
-		end
-
-		-- walk all of the configs in the solution, and count the number of
-		-- times each obj dir gets used
-		local counts = {}
-		local configs = {}
-		
-		for prj in premake.solution.eachproject_ng(sln) do
-			for cfg in project.eachconfig(prj) do
-				-- expand any tokens contained in the field
-				oven.expandtokens(cfg, "config", nil, "objdir")
-				
-				-- get the dirs for this config, and remember the association
-				local dirs = getobjdirs(cfg)
-				configs[cfg] = dirs
-				
-				for _, dir in ipairs(dirs) do
-					counts[dir] = (counts[dir] or 0) + 1
-				end
-			end
-		end
-
-		-- now walk the list again, and assign the first unique value
-		for cfg, dirs in pairs(configs) do
-			for _, dir in ipairs(dirs) do
-				if counts[dir] == 1 then
-					cfg.objdir = dir 
-					break
-				end
-			end
-		end
-	end
-
-
 --
 -- Iterate over the collection of solutions in a session.
 --
@@ -372,7 +171,7 @@ uid = 1
 	function solution.eachconfig(sln)
 		-- to make testing a little easier, allow this function to
 		-- accept an unbaked solution, and fix it on the fly
-		if not sln.baked then
+		if not sln.isbaked then
 			sln = solution.bake(sln)
 		end
 
@@ -391,7 +190,7 @@ uid = 1
 	function solution.getConfigs(sln)
 		-- to make testing a little easier, allow this function to
 		-- accept an unbaked solution, and fix it on the fly
-		if not sln.baked then
+		if not sln.isbaked then
 			sln = solution.bake(sln)
 		end
 
@@ -453,11 +252,6 @@ uid = 1
 	function solution.findproject(sln, name)
 		name = name:lower()
 		for _, prj in ipairs(sln.projects) do
-			if name == prj.name:lower() then
-				return prj
-			end
-		end
-		for _, prj in ipairs(premake.globalContainer.projects) do
 			if name == prj.name:lower() then
 				return prj
 			end
@@ -549,7 +343,7 @@ uid = 1
 	function solution.getproject_ng(sln, idx)
 		-- to make testing a little easier, allow this function to
 		-- accept an unbaked solution, and fix it on the fly
-		if not sln.baked then
+		if not sln.isbaked then
 			sln = solution.bake(sln)
 		end
 		return sln.projects[idx]

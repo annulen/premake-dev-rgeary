@@ -22,6 +22,12 @@
 
 -- For adding to the directories searched by os.findlib
  	premake.libSearchPath = { }
+
+-- Forward declarations so globalContainer/project/oven/solution can access each other
+	premake5.globalContainer = { }
+	premake5.project = { }
+	premake5.oven = { }
+	premake.solution = { }
 	
 -- The list of supported platforms; also update list in cmdline.lua
 

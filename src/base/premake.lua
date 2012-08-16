@@ -84,14 +84,14 @@
 --
 
 	function premake.generate(obj, filename, callback)
-		local f = premake.generateStart(obj, filename)
+		filename = premake.project.getfilename(obj, filename)
+		local f = premake.generateStart(filename)
 		callback(obj)
 		premake.generateEnd(f)
 	end
 
 -- Returns file handle
-	function premake.generateStart(obj, filename)
-		filename = premake.project.getfilename(obj, filename)
+	function premake.generateStart(filename)
 		printf("Generating %s...", filename)
 
 		local f, err = io.open(filename, "wb")
@@ -106,14 +106,13 @@
 	end
 	
 	function premake.generateEnd(fileHandle)
+		if _OPTIONS['debug'] then
+			local fileLen = fileHandle:seek('end', 0)
+			if fileLen then
+				printf('  %.0f kb'
+				, fileLen/1024.0)
+			end
+		end
 		io.close(fileHandle)
 	end
 	
---
---  Global container for configurations, applied to all solutions
---
-	function premake.createGlobalContainer()
-		local c = solution('_GLOBAL_SOLUTION')
-		premake.globalContainer = c
-		premake.CurrentContainer = c
-	end

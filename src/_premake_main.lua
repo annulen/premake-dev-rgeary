@@ -102,6 +102,10 @@
 				dofile(scriptpath .. "/" .. v)
 			end
 		end
+
+		if (_OPTIONS['profile']) then
+			timer.enable()
+		end
 		
 		-- Expose flags as root level objects, so you can write "flags { Symbols }"
 		local field = premake.fields["flags"]
@@ -110,13 +114,15 @@
 		end
 		
 		-- Set up global container
-		premake.createGlobalContainer()
+		global()
 		
 		-- Search for a system-level premake4-system.lua file
 		local systemScript = os.getenv("PREMAKE_PATH") or ''
 		local systemScriptFullpath = systemScript .. '/' .. "premake-" .. _PREMAKE_VERSION .. '-system.lua'
 		if( os.isfile(systemScriptFullpath) ) then
+			timer.start('Load system script')
 			dofile(systemScriptFullpath)
+			timer.stop()
 		end 
 		
 		-- Set up the environment for the chosen action early, so side-effects
@@ -135,7 +141,9 @@
 		
 		local fname = _OPTIONS["file"] or scriptfile
 		if (os.isfile(fname)) then
+			timer.start('Load build script')
 			dofile(fname)
+			timer.stop()
 		end
 
 
@@ -195,19 +203,25 @@
 		-- next-gen actions; this code will go away when everything has been
 		-- ported to the new API
 		print("Building configurations...")
+		timer.start('Bake configurations')
 		if not action.isnextgen then
 			premake.bake.buildconfigs()		
 			ok, err = premake.checkprojects()
 			if (not ok) then error("Error: " .. err, 0) end
 		else
-			premake.solution.bakeall()
+			premake5.globalContainer.bakeall()
 		end
+		timer.stop()
 			
 		
 		-- Hand over control to the action
 		printf("Running action '%s'...", action.trigger)
+		timer.start('Run action ' .. action.trigger)
 		premake.action.call(action.trigger)
+		timer.stop()
 
+		timer.print()
+		
 		print("Done.")
 		return 0
 

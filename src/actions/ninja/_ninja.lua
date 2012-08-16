@@ -35,28 +35,9 @@
 		
 		buildFileHandle = nil,
 		
-		onsolution = function(sln)
-			premake.generate(sln, ninja.getDefaultBuildFilename(sln), ninja.generate_defaultbuild) 
-			if ninja.buildFileHandle then
-				error("Not supported : Can't start more than one solution at once")
-			end
-			ninja.buildFileHandle = premake.generateStart(sln, ninja.getSolutionBuildFilename(sln))
-			ninja.generate_solution(sln)
-		end,
-		
-		onSolutionEnd = function(sln)
-			if ninja.buildFileHandle then
-				local fileLen = ninja.buildFileHandle:seek('end', 0)
-				if fileLen then
-					printf('  %.0f kb', fileLen/1024.0)
-				end
-				premake.generateEnd(ninja.buildFileHandle)
-			end
-			ninja.buildFileHandle = nil
-		end,
-
-		onproject = function(prj)
-			ninja.generate_project(prj)
+		onSolution = function(sln)
+			premake.generate(sln, ninja.getDefaultBuildFilename(sln), ninja.generateDefaultBuild) 
+			premake.generate(sln, ninja.getSolutionBuildFilename(sln), ninja.generateSolution)
 		end,
 		
 		execute = function()
@@ -65,19 +46,34 @@
 		
 		oncleansolution = function(sln)
 			clean.file(sln, ninja.getSolutionBuildFilename(sln))
+			clean.file(sln, ninja.getDefaultBuildFilename(sln))
 		end,
-		
-		oncleanproject = function(prj)
-			clean.file(prj, ninja.getDefaultBuildFilename(prj))
-		end
 	}
 	
-	function ninja.getDefaultBuildFilename(obj)
-		return path.join(obj.basedir, 'build.ninja')
+	function ninja.openFile(filename)
+		if ninja.buildFileName ~= filename then
+			ninja.closeFile()
+		end
+		if not ninja.buildFileHandle then
+			ninja.buildFileName = filename
+			ninja.buildFileHandle = premake.generateStart(filename)
+		end
 	end
 	
+	function ninja.closeFile()
+		if ninja.buildFileHandle then
+			premake.generateEnd(ninja.buildFileHandle)
+		end
+		ninja.buildFileHandle = nil
+		ninja.buildFileName = nil
+	end
+
 	function ninja.getSolutionBuildFilename(sln)
-		return path.join(sln.basedir, 'build_'..sln.name .. '.ninja')
+		return path.join(sln.basedir, 'build_'..sln.name..'.ninja')
+	end
+	
+	function ninja.getDefaultBuildFilename(sln)
+		return path.join(_WORKING_DIR, 'build.ninja')
 	end
 	
 	function ninja.onExecute()
@@ -95,14 +91,23 @@
 --
 -- Write out a file which sets environment variables then subninjas to the actual build
 --
-	function ninja.generate_defaultbuild(sln)
+	function ninja.generateDefaultBuild(sln)
 		local rootDir = ninjaRoot
 		_p('root=' .. ninjaRoot)
 		_p('rule exec')
 		_p(' command=$cmd')
 		_p(' description=$description')
 		_p('')
-		_p('subninja $root/' .. path.getrelative(rootDir, ninja.getSolutionBuildFilename(sln)))
+		
+		if sln.includesolution then
+			for _,slnName in ipairs(sln.includesolution) do
+				local extSln = solution.list[slnName]
+				if extSln then
+					_p('include '..ninja.getBestGlobalVar(ninja.getSolutionBuildFilename(extSln)))
+				end 
+			end
+		end
+		_p('include ' .. ninja.getBestGlobalVar(ninja.getSolutionBuildFilename(sln)))
 	end
 --
 -- Write out the default configuration rule for a solution or project.
@@ -234,7 +239,7 @@
 	-- Substitutes variables in to v, to make the string the smallest size  
 	function ninja.getBestGlobalVar(v)
 		-- try $root first
-		v = string.replace(v, ninja.globalVars['root'], '$root')
+		v = string.replace(v, repoRoot, '$root')
 		local bestV = v
 		
 		for varName,varValue in pairs(ninja.globalVars) do

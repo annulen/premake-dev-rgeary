@@ -116,3 +116,9 @@
 		aliases		= { 'n' },
 	}
 	
+	newoption
+	{
+		trigger		= "profile",
+		description	= "Run premake with timing enabled",
+	}
+	
