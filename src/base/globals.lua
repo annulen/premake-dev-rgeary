@@ -367,8 +367,13 @@
 				for k,v in pairs(a) do
 					rv[k] = v
 				end
+				local offset = #a
 				for k,v in pairs(b) do
-					rv[k] = v
+					if type(k) == 'number' then
+						rv[k+offset] = v
+					else
+						rv[k] = v
+					end
 				end
 			end
 		elseif( btype == "table" ) then
@@ -385,7 +390,25 @@
 	end
 	
 	function mkstring(t, delimiter)
-		return table.concat(t, delimiter)
+		delimiter = delimiter or ' '
+		if t == nil then
+			return ''
+		elseif type(t) == 'string' then
+			return t
+		elseif type(t) == 'table' then
+			local s = ''
+			for k,v in pairs(t) do
+				if #s > 0 then s = s .. delimiter end
+				if type(k) == 'number' then
+					s = s .. mkstring(v)
+				else
+					s = s .. mkstring(k) ..'='..mkstring(v)
+				end
+			end
+			return s
+		else
+			return tostring(t)
+		end
 	end
 	
 	function toSet(vs)
@@ -432,4 +455,21 @@
 			-- Convert to sequence
 			return { vs }
 		end		
+	end
+	
+	function printDebug(msg, ...)
+		if _OPTIONS['debug'] then
+			printf(msg, unpack(arg))
+		end
+	end
+	
+	-- Pad msg with spaces
+	function padSpaces(msg, length)
+		local rv = msg
+		if #rv < length then
+			for i=#rv,length-1 do
+				rv = rv..' '
+			end
+		end
+		return rv
 	end

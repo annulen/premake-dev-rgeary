@@ -96,8 +96,8 @@
 			if (not opt) then
 				return false, "invalid option '" .. key .. "'"
 			else
-				-- reregister .trigger in the _OPTIONS table in case the option is an alias
-				_OPTIONS[opt.trigger] = _OPTIONS[opt.trigger] or _OPTIONS[key]
+				-- reregister .trigger in the table in case the option is an alias
+				values[opt.trigger] = values[opt.trigger] or values[key]
 			end
 			
 			-- does it need a value?

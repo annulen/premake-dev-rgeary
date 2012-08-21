@@ -540,6 +540,12 @@
 	}
 	
 	api.register {
+		name = "defaultconfiguration",
+		scope = "project",
+		kind = "string",
+	}
+	
+	api.register {
 		name = "defines",
 		scope = "config",
 		kind = "string-list",

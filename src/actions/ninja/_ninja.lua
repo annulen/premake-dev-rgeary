@@ -4,13 +4,17 @@
 --
 
 	premake.actions.ninja = {}
+	premake.abstract.ninjaVar = {}
 	local ninja = premake.actions.ninja
+	local ninjaVar = premake.abstract.ninjaVar
+
 	local solution = premake.solution
 	local project = premake5.project
 	local clean = premake.actions.clean
 	local config = premake5.config
-	ninja.slnconfigs = {}		-- all configurations
 	ninja.buildFileHandle = nil
+	local slnDone = {}
+	local globalScope = {}
 	
 	ninjaRoot = ninjaRoot or os.getcwd()
 	
@@ -36,8 +40,11 @@
 		buildFileHandle = nil,
 		
 		onSolution = function(sln)
-			premake.generate(sln, ninja.getDefaultBuildFilename(sln), ninja.generateDefaultBuild) 
-			premake.generate(sln, ninja.getSolutionBuildFilename(sln), ninja.generateSolution)
+			ninja.onSolution(sln.name)
+		end,
+		
+		onSolutionEnd = function()
+			ninja.onSolutionEnd()
 		end,
 		
 		execute = function()
@@ -50,6 +57,34 @@
 		end,
 	}
 	
+	function ninja.onSolution(slnName)
+		local sln = solution.list[slnName]
+		-- Build included solutions first
+		
+		if not slnDone[slnName] then
+			if sln.includesolution then
+				for _,v in ipairs(sln.includesolution) do
+					ninja.onSolution(v)
+				end
+			end
+			
+			if ninja.openFile(path.join(_WORKING_DIR, 'build.ninja')) then
+				globalScope = ninja.newScope('build.ninja')
+			end
+				
+			ninja.generateSolution(sln, globalScope)
+			--premake.generate(sln, ninja.getSolutionBuildFilename(sln), ninja.generateSolution)
+			--premake.generate(sln, ninja.getDefaultBuildFilename(sln), ninja.generateDefaultBuild) 
+			slnDone[slnName] = true
+		end
+	end
+	
+	function ninja.onSolutionEnd()
+		ninja.writeFooter(globalScope)
+		ninja.closeFile()
+		slnDone = {}
+	end
+	
 	function ninja.openFile(filename)
 		if ninja.buildFileName ~= filename then
 			ninja.closeFile()
@@ -57,7 +92,9 @@
 		if not ninja.buildFileHandle then
 			ninja.buildFileName = filename
 			ninja.buildFileHandle = premake.generateStart(filename)
+			return true
 		end
+		return false
 	end
 	
 	function ninja.closeFile()
@@ -73,61 +110,25 @@
 	end
 	
 	function ninja.getDefaultBuildFilename(sln)
-		return path.join(_WORKING_DIR, 'build.ninja')
+		return path.join(sln.basedir, 'build.ninja')
 	end
 	
 	function ninja.onExecute()
 		local args = Seq:new(_ARGS) 
 		
-		if args:contains('build') then
-			return os.executef('ninja')
+		if not args:contains('nobuild') then
+			print('Running ninja...')
+			local cmd = 'ninja'
+			if _OPTIONS['threads'] then
+				cmd = cmd .. ' -j'..tostring(_OPTIONS['threads'])
+			end
+			return os.executef(cmd)
 		
 		elseif args:contains('print') then
 			local printAction = premake.action.get('print')
 			premake.action.call(printAction.trigger)
 		end
 	end
-
---
--- Write out a file which sets environment variables then subninjas to the actual build
---
-	function ninja.generateDefaultBuild(sln)
-		local rootDir = ninjaRoot
-		_p('root=' .. ninjaRoot)
-		_p('rule exec')
-		_p(' command=$cmd')
-		_p(' description=$description')
-		_p('')
-		
-		if sln.includesolution then
-			for _,slnName in ipairs(sln.includesolution) do
-				local extSln = solution.list[slnName]
-				if extSln then
-					_p('include '..ninja.getBestGlobalVar(ninja.getSolutionBuildFilename(extSln)))
-				end 
-			end
-		end
-		_p('include ' .. ninja.getBestGlobalVar(ninja.getSolutionBuildFilename(sln)))
-	end
---
--- Write out the default configuration rule for a solution or project.
--- @param target
---    The solution or project object for which a build file is being generated.
---
-
-	function ninja.defaultconfig(target)
-		-- find the configuration iterator function
-		local eachconfig = iif(target.project, project.eachconfig, solution.eachconfig)
-		local iter = eachconfig(target)
-		
-		-- grab the first configuration and write the block
-		local cfg = iter()
-		if cfg then
-			_p("# " + target.name)
-			_p('')
-		end
-	end
-
 
 	-- returns the input files per config, per buildaction
 	--  local filesInConfig =  getInputFiles(prj)[cfg.shortname][buildaction]
@@ -200,18 +201,53 @@
     	return varName
 	end
 	
-	-- Returns (newVarName, found) 
-	--	newVarName : a mangled varName which will refer to the specified unique value
-	--  found : true is if it's already found
-	--  Just to make the ninja file look nicer
-	ninja.globalVars = {}  
-	ninja.globalVarValues = {}  
-	function ninja.setGlobalVar(varName, value, alternateVarNames)
+-- Returns (newVarName, found) 
+--	newVarName : a mangled varName which will refer to the specified unique value
+--  found : true is if it's already found
+--  Just to make the ninja file look nicer
+	ninja.scope = {}
+	ninjaVar = {}
+	ninjaVar.nameToValue = {}
+	ninjaVar.valueToName = {}
+	ninjaVar.valueSeen = {}
+	
+	function ninja.newScope(scopeName)
+		local s = inheritFrom(ninjaVar)
+		
+		ninja.scope[scopeName] = s
+		
+		s:set('root', ninjaRoot)
+		
+		return s
+	end
+	
+	-- Call this function 'threshold' times with the same value & it'll set the var
+	-- returns : useThis, isNewVar
+	function ninjaVar:trySet(varName, value, threshold)
+		-- Check if it is already a variable
+		local existingVarName = self.valueToName[value]
+		if existingVarName then
+			return ninja.escVarName(existingVarName), false
+		end
+		
+		local count = (self.valueSeen[value] or 0) + 1
+		self.valueSeen[value] = count
+		
+		if count > threshold then
+			-- Create a new var
+			self:set(varName, value)
+			return ninja.escVarName(varName), true
+		else
+			return value, false
+		end		
+	end
+	
+	function ninjaVar:set(varName, value, alternateVarNames)
 		local varNameM = varName
 		local i = 1
-		while ninja.globalVars[varNameM] do
+		while self.nameToValue[varNameM] do
 			-- Found a var which already exists with this value
-			if ninja.globalVars[varNameM] == value then
+			if self.nameToValue[varNameM] == value then
 				return varNameM,true
 			end
 			
@@ -223,48 +259,69 @@
 				varNameM = varName .. tostring(i)
 			end
 		end
-		ninja.globalVars[varNameM] = value
-		ninja.globalVarValues[value] = varNameM
+		self.nameToValue[varNameM] = value
+		self.valueToName[value] = varNameM
 		return varNameM,false
 	end
 	
-	function ninja.getGlobalVar(value, setNameIfNew)
-		local var = ninja.globalVarValues[value]
+	function ninjaVar:add(name, valuesToAdd)
+		local r = self.nameToValue[name]
+		if r then
+			if type(r) ~= 'table' then
+				r = { r }
+			end
+			for _,v in ipairs(valuesToAdd) do
+				table.insert(r, v)
+			end
+			self.nameToValue[name] = r
+		else
+			self.nameToValue[name] = valuesToAdd
+		end
+	end
+	
+	function ninjaVar:get(name)
+		return self.nameToValue[name]
+	end
+
+	function ninjaVar:getName(value, setNameIfNew)
+		local var = self.valueToName[value]
 		if (not var) and setNameIfNew then
-			return ninja.setGlobalVar(setNameIfNew, value)
+			return self:set(setNameIfNew, value)
 		end
 		return var, true
 	end
 	
 	-- Substitutes variables in to v, to make the string the smallest size  
-	function ninja.getBestGlobalVar(v)
+	function ninjaVar:getBest(v)
+		local tmr = timer.start('getBest')
 		-- try $root first
 		v = string.replace(v, repoRoot, '$root')
 		local bestV = v
 		
-		for varName,varValue in pairs(ninja.globalVars) do
-			local varNameN = ninja.escVarName(varName)
-			local replaced = string.replace(v, varValue, varNameN)
-			local replaced2 = string.replace(bestV, varValue, varNameN)
-			if #replaced < #bestV then
-				bestV = replaced
-			end
-			if #replaced2 < #bestV then
-				bestV = replaced2
+		for varValue,varName in pairs(self.valueToName) do
+			if type(varValue) == 'string' and #varValue > 0 then
+				local varNameN = ninja.escVarName(varName)
+				local replaced = string.replace(v, varValue, varNameN)
+				local replaced2 = string.replace(bestV, varValue, varNameN)
+				if #replaced < #bestV then
+					bestV = replaced
+				end
+				if #replaced2 < #bestV then
+					bestV = replaced2
+				end
 			end
 		end
+		timer.stop(tmr)
 		return bestV
 	end
-
---
--- Write out raw ninja rules for a configuration.
---
-	function ninja.settings(cfg, toolset)
-		if #cfg.rawninja > 0 then
-			for _, value in ipairs(cfg.rawninja) do
-				_p(value)
-			end
+	
+	function ninjaVar:include(otherScopeName)	
+		local otherScope = ninja.scope[otherScopeName]
+		if not otherScope then
+			error('Could not find ninja var scope ' .. otherScopeName)
+		end
+		for k,v in pairs(otherScope.nameToValue) do
+			self.nameToValue[k] = v
+			self.valueToName[v] = k 
 		end
 	end
-
-

@@ -54,30 +54,32 @@
 		-- a bit of a hack, but check for the new next-gen actions, and
 		-- translate things accordingly. I'll yank this once the next-gen
 		-- actions are done and official
-		if a.isnextgen then
-			if _ACTION:endswith("ng") then
-				_ACTION = _ACTION:sub(1, -3)
-			end
-			for sln in premake.solution.each() do
-				if a.onSolution then a.onSolution(sln) end
-				if a.onsolution then a.onsolution(sln) end
-				
-				for prj in premake.solution.eachproject_ng(sln) do
-					if a.onProject then a.onProject(prj) end
-					if a.onproject then a.onproject(prj) end
+		if not a.ishelp then
+			if a.isnextgen then
+				if _ACTION:endswith("ng") then
+					_ACTION = _ACTION:sub(1, -3)
 				end
-			end
-			if a.onSolutionEnd then
-				a.onSolutionEnd()
-			end
-		else
-			for sln in premake.solution.each() do
-				if a.onsolution then
-					a.onsolution(sln)
+				for sln in premake.solution.each() do
+					if a.onSolution then a.onSolution(sln) end
+					if a.onsolution then a.onsolution(sln) end
+					
+					for prj in premake.solution.eachproject_ng(sln) do
+						if a.onProject then a.onProject(prj) end
+						if a.onproject then a.onproject(prj) end
+					end
 				end
-				for prj in premake.solution.eachproject(sln) do
-					if a.onproject and not prj.external then
-						a.onproject(prj)
+				if a.onSolutionEnd then
+					a.onSolutionEnd()
+				end
+			else
+				for sln in premake.solution.each() do
+					if a.onsolution then
+						a.onsolution(sln)
+					end
+					for prj in premake.solution.eachproject(sln) do
+						if a.onproject and not prj.external then
+							a.onproject(prj)
+						end
 					end
 				end
 			end

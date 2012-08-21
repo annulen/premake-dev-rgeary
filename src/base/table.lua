@@ -155,7 +155,9 @@
 --
 
 	function table.insertflat(tbl, values)
-		if type(values) == "table" then
+		if values == nil then
+			return
+		elseif type(values) == "table" then
 			for _, value in ipairs(values) do
 				table.insertflat(tbl, value)
 			end

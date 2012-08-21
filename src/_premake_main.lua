@@ -74,6 +74,7 @@
 
 	function _premake_main(scriptpath)
 
+		local ok,err
 		if(_OPTIONS["attach"] ) then
 			local debuggerIP = _OPTIONS["attach"]
 			if(debuggerIP=='') then debuggerIP = '127.0.0.1'; end
@@ -86,7 +87,7 @@
 			if(debuggerIP=='') then debuggerIP = '127.0.0.1'; end
 			--print("Listening for debugger on " .. tostring(debuggerIP) .. ':10000')
 			local connection = require("debugger")
-			local ok, err = xpcall(function() connection(debuggerIP,10000, nil, 0); end, function(errobj) end)
+			ok, err = xpcall(function() connection(debuggerIP,10000, nil, 0); end, function(errobj) end)
 			if ok then
 				print('Connected to debugger')
 			end
@@ -105,6 +106,11 @@
 
 		if (_OPTIONS['profile']) then
 			timer.enable()
+		end
+		
+		-- Make it easier to test for build args
+		for _,v in ipairs(_ARGS) do
+			_ARGS[v] = v
 		end
 		
 		-- Expose flags as root level objects, so you can write "flags { Symbols }"
@@ -178,7 +184,7 @@
 		-- Validate the command-line arguments. This has to happen after the
 		-- script has run to allow for project-specific options
 		
-		action = premake.action.current()
+		local action = premake.action.current()
 		if (not action) then
 			error("Error: no such action '" .. _ACTION .. "'", 0)
 		end
@@ -202,36 +208,41 @@
 		-- Quick hack: disable the old configuration baking logic for the new
 		-- next-gen actions; this code will go away when everything has been
 		-- ported to the new API
-		print("Building configurations...")
-		timer.start('Bake configurations')
-		if not action.isnextgen then
-			premake.bake.buildconfigs()		
-			ok, err = premake.checkprojects()
-			if (not ok) then error("Error: " .. err, 0) end
-		else
-			premake5.globalContainer.bakeall()
+		if not action.ishelp then
+			print("Building configurations...")
+			timer.start('Bake configurations')
+			if not action.isnextgen then
+				premake.bake.buildconfigs()		
+				ok, err = premake.checkprojects()
+				if (not ok) then error("Error: " .. err, 0) end
+			else
+				premake5.globalContainer.bakeall()
+			end
+			timer.stop()
 		end
-		timer.stop()
 			
 		
 		-- Hand over control to the action
-		printf("Running action '%s'...", action.trigger)
+		printDebug("Running action '%s'...", action.trigger)
 		timer.start('Run action ' .. action.trigger)
 		premake.action.call(action.trigger)
 		timer.stop()
 
 		timer.print()
 		
-		print("Done.")
+		if not action.ishelp then
+			print("Done.")
+		end
 		return 0
 
 	end
 	
-	function defaultaction(osName, actionName)
-	   if (actionName == nil) then
-	     _ACTION = _ACTION or osName
-	   end	   
-	   if os.is(osName) then
-	      _ACTION = _ACTION or actionName
-	   end
+	function defaultaction(actionName)
+		if not premake.action.current() then
+			if _ACTION then 
+				table.insert( _ARGS, 1, _ACTION )
+				_ARGS[_ACTION] = _ACTION
+			end
+			_ACTION=actionName
+		end
 	end

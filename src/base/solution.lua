@@ -45,6 +45,12 @@
 			sln.blocks 			= oven.merge({}, slnTemplate.blocks)
 			sln.platforms		= oven.merge({}, slnTemplate.platforms or {})
 			sln.language		= slnTemplate.language
+			
+			for name,info in pairs(premake.fields) do
+				if slnTemplate[name] and (not sln[name]) then
+					sln[name] = slnTemplate[name]
+				end
+			end
 		else
 			sln.configurations = { }
 			sln.blocks         = { }
@@ -348,3 +354,23 @@
 		end
 		return sln.projects[idx]
 	end
+	
+--
+-- Return a list of all solution includes (recurse through tree)
+-- 
+	function solution.getAllSolutionIncludes(slnName, result)
+		local sln = solution.list[slnName]
+		if not sln then
+			error('Unknown solution include : '..slnName)
+		end
+		result = result or {}
+		result[slnName] = 1
+		
+		if sln.includesolution then
+			for _,cSln in ipairs(sln.includesolution) do
+				solution.getAllSolutionIncludes(cSln.name, result)
+			end
+		end
+		return result
+	end
+	

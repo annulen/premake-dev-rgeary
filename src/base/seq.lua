@@ -255,15 +255,23 @@ function Seq:concat(seq2)
 		-- setup
 		local iter1 = self.iterate()
 		local iter2 = seq2.iterate()
+		local offset = 0
 		-- moveNext
 		return function()
 			local i,v
 			if iter1 then 
 				i,v = iter1()
-				if not i then iter1 = nil end				 
+				if not i then 
+					iter1 = nil
+				elseif type(i) == 'number' then
+					offset = math.max(offset, i) 
+				end								 
 			end
 			if not iter1 then 
 				i,v = iter2()
+				if (i ~= nil) and (type(i) == 'number') then
+					i = i + offset
+				end
 			end
 			return i,v
 		end	
@@ -343,7 +351,61 @@ function Seq:max()
 	return maxValue
 end
 
-function testSeq()
+--
+-- Create all permutations of elements in the 2d table 
+--  eg. for { {a,b}, {c,d,e} }, return { a_c, a_d, a_e, b_c, b_d, b_e } 
+--
+function Seq:permutations(separator)
+	separator = separator or '_'
+	local s = Seq:new(nil)
+	s.iterate = function()
+		-- setup. Have to enumerate self completely before we can produce the first value.
+		local rv = {}
+		for k,v in self:each() do
+			-- Generate permutations of v's with current rv
+			local rv2 = {}
+			if #rv == 0 then
+				rv2 = v
+			else
+				for _,v1 in ipairs(rv) do
+					for _,v2 in ipairs(v) do
+						table.insert(rv2, v1..separator..v2)
+					end
+				end
+			end
+			rv = rv2
+		end
+		-- iter
+		local i = 0
+		return function()
+			i = i + 1
+			if i <= #rv then return i,rv[i]
+			else return nil
+			end
+		end
+	end
+	return s
+end
+
+function Seq.test()
+	local function equals(a,b)
+		if Seq.isSeq(a) then a = a:toTable() end
+		if Seq.isSeq(b) then b = b:toTable() end
+		if type(a) ~= type(b) then return false end
+		if #a ~= #b then return false end
+		if type(a) == 'table' then
+			for i=1,#a do 
+				if not equals(a[i], b[i]) then return false end
+			end
+			return true
+		else
+			return a == b
+		end
+	end		
+	local function assert(a,b)
+		if not equals(a,b) then error('assert failed '..mkstring(a)..' ~= '..mkstring(b)) end
+	end
+				
 	bigT = { 'one', 'two', 'three', 'four', 'five', 'six', 'seven' }
 	t2 = { 'door', 'stop' }
 	
@@ -351,13 +413,19 @@ function testSeq()
 	local no2 = bigTseq:where(function(v) return v ~= 'two'; end)
 	local no23 = no2:where(function(v) return v ~= 'three'; end)
 	local no23_2 = no23:select(function(v) return v .. string.upper(v); end)
+	local perm = Seq:new({ { 'a', 'b' }, t2, { 'apple', 'orange' } }):permutations()
 	
 	local tconcat = bigTseq:take(2):concat(t2)
 	local ticoncat = Seq:ipairs(bigT):concat(Seq:ipairs(t2))
 
-	print('bigTseq ' .. bigTseq:tostring()) 
+	print('bigTseq ' .. bigTseq:mkstring()) 
 	print('tconcat ' .. tconcat:mkstring(' ')) 
-	print('ticoncat ' .. ticoncat:mkstring(' ')) 
+	print('ticoncat ' .. ticoncat:mkstring(' '))
+	assert(bigTseq, bigT) 
+	assert(tconcat, { 'one', 'two', 'door', 'stop' })
+	assert(ticoncat, { 'one','two','three','four','five','six','seven','door','stop' })
+	assert(perm, {'a_door_apple', 'a_door_orange', 'a_stop_apple', 'a_stop_orange', 'b_door_apple', 'b_door_orange', 'b_stop_apple', 'b_stop_orange' })
+	--perm:mkstring(), { 'a_door_apple' }
 	--print('no2     ' .. no2:tostring()) 
 	--print('no23    ' .. no23:tostring()) 
 	--print('no23_2  ' .. no23_2:tostring()) 

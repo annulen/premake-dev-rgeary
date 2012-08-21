@@ -86,7 +86,7 @@
 	function premake.generate(obj, filename, callback)
 		filename = premake.project.getfilename(obj, filename)
 		local f = premake.generateStart(filename)
-		callback(obj)
+		callback(obj, filename)
 		premake.generateEnd(f)
 	end
 
@@ -106,7 +106,7 @@
 	end
 	
 	function premake.generateEnd(fileHandle)
-		if _OPTIONS['debug'] then
+		if _OPTIONS['debug'] and type(fileHandle) == 'userdata' then
 			local fileLen = fileHandle:seek('end', 0)
 			if fileLen then
 				printf('  %.0f kb'
