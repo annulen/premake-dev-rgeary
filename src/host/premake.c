@@ -20,7 +20,7 @@
 
 static int find_premake_executable(lua_State* L, const char* argv0);
 static int process_arguments(lua_State* L, int argc, const char** argv);
-static int process_option(lua_State* L, const char* arg);
+static int process_option(lua_State* L, const char* arg, int singleHyphen);
 static int load_builtin_scripts(lua_State* L);
 
 
@@ -190,6 +190,7 @@ int find_premake_executable(lua_State* L, const char* argv0)
 int process_arguments(lua_State* L, int argc, const char** argv)
 {
 	int i;
+	int iaction = -1;
 
 	/* Create empty lists for Options and Args */
 	lua_newtable(L);
@@ -198,30 +199,30 @@ int process_arguments(lua_State* L, int argc, const char** argv)
 	for (i = 1; i < argc; ++i)
 	{
 		/* Options start with '/' or '-' or '--'. The first argument that isn't an option
-		 * is the action. Anything after that is an argument to the action */
+		 * is the action. */
 		if (argv[i][0] == '/')
 		{
-			process_option(L, argv[i] + 1);
+			process_option(L, argv[i] + 1, 0);
 		}
 		else if (argv[i][0] == '-')
 		{
 			if( argv[i][1] == '-' )
-				process_option(L, argv[i] + 2);
+				process_option(L, argv[i] + 2, 0);
 			else
-				process_option(L, argv[i] + 1);
+				process_option(L, argv[i] + 1, 1);
+		}
+		else if( iaction < 0 )
+		{
+			/* not an option, is the action */
+			lua_pushstring(L, argv[i]);
+			lua_setglobal(L, "_ACTION");
+			iaction = i;
 		}
 		else
 		{
-			/* not an option, is the action */
-			lua_pushstring(L, argv[i++]);
-			lua_setglobal(L, "_ACTION");
-
 			/* everything else is an argument */
-			while (i < argc)
-			{
-				lua_pushstring(L, argv[i++]);
-				lua_rawseti(L, -2, luaL_getn(L, -2) + 1);
-			}
+			lua_pushstring(L, argv[i]);
+			lua_rawseti(L, -2, luaL_getn(L, -2) + 1);
 		}
 	}
 
@@ -237,7 +238,7 @@ int process_arguments(lua_State* L, int argc, const char** argv)
  * Parse an individual command-line option.
  * \returns OKAY if successful.
  */
-int process_option(lua_State* L, const char* arg)
+int process_option(lua_State* L, const char* arg, int singleHyphen)
 {
 	char key[512];
 	const char* value;
@@ -251,6 +252,12 @@ int process_option(lua_State* L, const char* arg)
 		strncpy(key, arg, len);
 		key[len] = '\0';
 		value = ptr + 1;
+	}
+	else if( singleHyphen != 0 )
+	{
+		key[0] = arg[0];
+		key[1] = '\0';
+		value = arg + 1;
 	}
 	else
 	{
