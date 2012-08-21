@@ -121,9 +121,11 @@ function tool:decorateInputs(cfg, outputVar, inputVar)
 	rv.sysflags = self:decorateInput('sysflags', self:getsysflags(cfg), true)
 	
 	if self.isCompiler then
+		table.sort(cfg.buildoptions)
 		rv.buildoptions = self:decorateInput('buildoptions', cfg.buildoptions, true)
 	end
 	if self.isLinker then
+		table.sort(cfg.linkoptions)
 		rv.linkoptions = self:decorateInput('linkoptions', cfg.linkoptions, true)
 	end
 
