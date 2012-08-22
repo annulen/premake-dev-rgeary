@@ -65,7 +65,7 @@
 	function project.bakeconfig(prj, buildcfg, platform)
 		local system
 		local architecture
-
+local tmr1 = timer.start('bakeconfig1')
 		-- for backward compatibility with the old platforms API, use platform
 		-- as the default system or architecture if it would be a valid value.
 		if platform then
@@ -88,7 +88,9 @@
 		if architecture == nil and os.is64bit() then
 			architecture = 'x86_64'
 		end
-		-- Look to see what kind of project this is, and use that to further filter results
+timer.stop(tmr1)
+local tmr2 = timer.start('bakeconfig2')
+		-- Look to see what kind of project this is, and use that to filter for further configurations
 		local cfgKind = oven.bake(prj, prj.solution, filter, "kind")
 		filter.kind = cfgKind.kind
 		
@@ -99,10 +101,11 @@
 		cfg.architecture = cfg.architecture or architecture
 		cfg.isUsage = prj.isUsage
 		ptypeSet( cfg, 'configprj' )
-		
+timer.stop(tmr2)
+local tmr3 = timer.start('bakeconfig3')
 		-- fill in any calculated values
 		premake5.config.bake(cfg)
-
+timer.stop(tmr3)
 		return cfg
 	end
 
