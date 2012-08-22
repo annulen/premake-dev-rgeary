@@ -153,6 +153,10 @@
 			target[field.name] = target[field.name] or {}
 			api.setkeyvalue(target[field.name], field, value)
 		
+		-- Object lists dealt with separately, don't want to flatten the tables
+		elseif field.kind == 'object-list' then
+			api.setobjectlist(target, field.name, field, value)
+			
 		-- Lists is an array containing values of another type
 		elseif api.islistfield(field) then
 			api.setlist(target, field.name, field, value)
@@ -407,7 +411,11 @@
 	function api.setobject(target, name, field, value)
 		target[name] = value
 	end
-
+	
+	function api.setobjectlist(target, name, field, value)
+		target[name] = target[name] or {}
+		table.insert( target[name], value )
+	end
 
 --
 -- Set a new path value on an API field.
@@ -485,7 +493,7 @@
 	api.register {
 		name = "buildrule",
 		scope = "config",
-		kind = "object",
+		kind = "object-list",
 		expandtokens = true,
 	}
 
@@ -581,6 +589,7 @@
 		scope = "config",
 		kind  = "string-list",
 		usagefield = true,
+		defaultValue = {},
 		allowed = {
 			"AddPhonyHeaderDependency",		 -- for Makefiles, requires CreateDependencyFile
 			"CreateDependencyFile",
@@ -602,7 +611,7 @@
 			"InlineAnything",
 			"Managed",
 			"MFC",
-			"ThreadingMulti",		-- Multithreaded system libs
+			"ThreadingMulti",		-- Multithreaded system libs. Propagated to usage.
 			"NativeWChar",
 			"No64BitChecks",
 			"NoEditAndContinue",
@@ -622,8 +631,8 @@
 			"OptimizeOff",
 			"SEH",
 			"StaticRuntime",
-			"StdlibShared",			-- Use shared standard libraries
-			"StdlibStatic",			-- Use static standard libraries
+			"StdlibShared",			-- Use shared standard libraries. Propagated to usage.
+			"StdlibStatic",			-- Use static standard libraries. Propagated to usage.
 			"Symbols",
 			"Unicode",
 			"Unsafe",
@@ -1334,11 +1343,11 @@
 
 		-- initialize list-type fields to empty tables
 		for name, field in pairs(premake.fields) do
-			if field.kind:endswith("-list") then
+			if field.defaultValue then
 				if isUsageProj and field.usagefield then
-					cfg[name] = { }
+					cfg[name] = field.defaultValue
 				else
-					cfg[name] = { }
+					cfg[name] = field.defaultValue
 				end
 			end
 		end

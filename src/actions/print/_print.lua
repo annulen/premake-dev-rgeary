@@ -76,7 +76,7 @@
 		end
 
 		local uProj = project.getUsageProject(prj.name)
-		p('Usage Project', usageProj.name)
+		p('Usage Project', uProj.name)
 		indent(2)
 			local ucfg = project.getConfigs(uProj):first() or {}
 			for k,v in pairs(ucfg) do
@@ -98,6 +98,7 @@
 			p('kind', cfg.kind)
 			p('uses', cfg.uses)
 			p('config', cfg.shortname)
+			indent(2)
 			if cfg.toolset then
 				local toolset = premake.tools[cfg.toolset]
 				p('toolset ' .. cfg.toolset)
@@ -153,6 +154,8 @@
 					end
 				indent(-2)
 			end -- if toolset
+			
+			indent(-2) -- config
 		end
 		indent(-2)
 		for k,v in pairs(prj) do

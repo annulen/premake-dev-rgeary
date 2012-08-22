@@ -29,7 +29,6 @@ local icc_cc = newtool {
 		OptimizeSpeed  = "-O3",
 		OptimizeOff    = "-O0",
 		Symbols        = "-g",
-		ThreadingMulti = "-pthread",
 	},
 	prefixes = {
 		defines 		= '-D',
@@ -41,11 +40,23 @@ local icc_cc = newtool {
 		depfileOutput   = '.d',
 	},
 	
+	-- System specific flags
 	getsysflags = function(self, cfg)
 		local cmdflags = ''
 		if cfg.system ~= premake.WINDOWS and cfg.kind == premake.SHAREDLIB then
 			cmdflags = '-fPIC'
 		end
+		
+		if cfg.flags.ThreadingMulti then
+			if cfg.system == premake.LINUX then
+				cmdflags = cmdflags .. '-pthread'
+			elseif cfg.system == premake.WINDOWS then 
+				cmdflags = cmdflags .. '-mthreads'
+			elseif cfg.system == premake.SOLARIS then 
+				cmdflags = cmdflags .. '-pthreads'
+			end
+		end
+		
 		return cmdflags
 	end
 }
@@ -85,9 +96,8 @@ local icc_link = newtool {
 	binaryName = 'icpc',
 	fixedFlags = '-Wl,--start-group',
 	flagMap = {
-		ThreadingMulti 	= '-pthread',
-		StdlibShared	= '-shared-libgcc -static-intel',
-		StdlibStatic	= '-static-libgcc -shared-intel',		-- Might not work, test final binary with ldd. See http://www.trilithium.com/johan/2005/06/static-libstdc/
+		StdlibShared	= '-shared-libgcc -shared-intel',
+		StdlibStatic	= '-static-libgcc -static-intel',		-- Might not work, test final binary with ldd. See http://www.trilithium.com/johan/2005/06/static-libstdc/
 	},
 	prefixes = {
 		libdirs 		= '-L',
@@ -123,6 +133,13 @@ local icc_link = newtool {
 			table.insert(cmdflags, rpath)
 		end
 		
+
+		if cfg.flags.ThreadingMulti then
+			if cfg.system ~= premake.WINDOWS then
+				table.insert(cmdflags, '-pthread -lrt')
+			end
+		end
+
 		return table.concat(cmdflags, ' ')
 	end	
 }

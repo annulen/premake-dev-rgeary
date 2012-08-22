@@ -320,20 +320,21 @@ function ninja.writeProjectTargets(prj, scope)
 		end
 		
 		-- Post build commands
-		if cfg.postbuildcommands then
+		local postbuildNumber = 1
+		if cfg.postbuildcommands and #cfg.postbuildcommands > 0 then
 			if verboseComments then
 				_p('# Post build commands')
 			end
 			local linkTargetN = targetdirN..'/'..targetName
-			-- Generate a unique name to reference this post build command
 			local description = nil
 			for i,cmd in ipairs(cfg.postbuildcommands) do
 			
 				if string.sub(cmd,1,1) == '#' then
 					description = string.sub(cmd,2)
 				else
-					
-					local postBuildTarget = finalTargetN..'postbuild'..tostring(i)
+					-- Generate a unique name to reference this post build command
+					local postBuildTarget = finalTargetN..'.postbuild'..tostring(postbuildNumber)
+					postbuildNumber = postbuildNumber + 1
 					repeat
 						local cmd2 = cmd
 						cmd = scope:getBest(cmd)
@@ -350,6 +351,32 @@ function ninja.writeProjectTargets(prj, scope)
 			_p('')
 		end
 		
+		-- Post build commands v2
+		if cfg.buildrule and #cfg.buildrule > 0 then
+			if verboseComments then
+				_p('# Post build commands')
+			end
+			local linkTargetN = targetdirN..'/'..targetName
+			for i,buildrule in ipairs(cfg.buildrule) do
+			
+				-- Generate a unique name to reference this post build command
+				local postBuildTarget = finalTargetN..'.postbuild'..tostring(postbuildNumber)
+				postbuildNumber = postbuildNumber + 1
+				local cmd = buildrule.command
+				repeat
+					local cmd2 = cmd
+					cmd = scope:getBest(cmd)
+				until #cmd2 == #cmd
+				
+				_p('build '..postBuildTarget..' : exec '..table.concat(finalTargetInputs, ' '))
+				_p(' cmd='..cmd)
+				if buildrule.description then
+				  _p(' description='..buildrule.description)
+				end
+				table.insert(finalTargetInputs, postBuildTarget)
+			end
+			_p('')
+		end		
 		-- Phony rule to build it all
 		_p('build '..finalTargetN..': phony '..table.concat(finalTargetInputs, ' '))
 		_p('')

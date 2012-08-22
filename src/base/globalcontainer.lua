@@ -75,13 +75,14 @@
 				-- Bake the real project first
 				bakeUsageDefaults(realProj)
 			
-				-- Copy in default build target from the real proj
+				-- Set up the usage target defaults
 				for cfgName,useCfg in pairs(usageProj.configs) do
 					local realCfg = realProj.configs[cfgName]
 				
 					-- usage kind = real proj kind
 					useCfg.kind = useCfg.kind or realCfg.kind
 
+					-- Copy in default build target from the real proj
 					if realCfg.buildtarget and realCfg.buildtarget.abspath then
 						local realTarget = realCfg.buildtarget.abspath
 						if realCfg.kind == 'SharedLib' then
@@ -92,8 +93,19 @@
 							oven.mergefield(useCfg, "linkAsStatic", { realTarget })
 						end
 					end
+					
+					-- Copy across some flags
+					local function mergeflag(destFlags, srcFlags, flagName)
+						if srcFlags and srcFlags[flagName] and (not destFlags[flagName]) then
+							destFlags[flagName] = flagName
+							table.insert(destFlags, flagName)
+						end
+					end
+					mergeflag(useCfg.flags, realCfg.flags, 'ThreadingMulti')
+					mergeflag(useCfg.flags, realCfg.flags, 'StdlibShared')
+					mergeflag(useCfg.flags, realCfg.flags, 'StdlibStatic')
 				
-					-- Finally, resolve the links in to linkAsStatic, linkAsShared
+					-- Resolve the links in to linkAsStatic, linkAsShared
 					if useCfg.kind == 'SharedLib' then
 						-- If you link to a shared library, you also need to link to any shared libraries that it uses
 						oven.mergefield(useCfg, "linkAsShared", realCfg.linkAsShared )
@@ -111,7 +123,7 @@
 				for _,useProjName in ipairs(uses) do
 					local useProj = project.getUsageProject( useProjName )
 					if not useProj then
-						error("Could not find project/usage "..useProjName)
+						error("Could not find project/usage "..useProjName..' in project '..prj.name)
 					end
 					local useCfg
 									

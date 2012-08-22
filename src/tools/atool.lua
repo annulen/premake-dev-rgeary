@@ -120,13 +120,21 @@ function tool:decorateInputs(cfg, outputVar, inputVar)
 	--rv.flags = self:decorateInput('fixedFlags', self:getFixedFlags(), true)
 	rv.sysflags = self:decorateInput('sysflags', self:getsysflags(cfg), true)
 	
+	-- Some options should always be outputted
 	if self.isCompiler then
+		cfg.buildoptions = cfg.buildoptions or {}
+		
+		-- sort the flags, as premake may reorder them unnecessarily which causes unnecessary rebuilds
 		table.sort(cfg.buildoptions)
 		rv.buildoptions = self:decorateInput('buildoptions', cfg.buildoptions, true)
 	end
 	if self.isLinker then
+		cfg.linkoptions = cfg.linkoptions or {}
+		cfg.libdirs = cfg.libdirs or {}
+		
 		table.sort(cfg.linkoptions)
 		rv.linkoptions = self:decorateInput('linkoptions', cfg.linkoptions, true)
+		rv.libdirs = self:decorateInput('libdirs', cfg.linkoptions, true)
 	end
 
 	local output = self:decorateInput('output', outputVar, true)

@@ -142,7 +142,19 @@
 	function include(filename)
 		-- if a directory, load the premake script inside it
 		if os.isdir(filename) then
-			filename = path.join(filename, "premake4.lua")
+			local dir = filename
+			filename = path.join(dir, "premake4.lua")
+			
+			if not os.isfile(filename) then
+				local files = os.matchfiles(path.join(dir,'premake*.lua'))
+				if #files > 0 then
+					filename = files[1]
+				end
+			end
+			
+		end
+		if not os.isfile(filename) then
+			error('Could not find file '..filename)
 		end
 				
 		-- but only load each file once

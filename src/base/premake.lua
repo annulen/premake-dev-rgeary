@@ -18,6 +18,8 @@
 	premake.MACOSX      = "macosx"
 	premake.POSIX       = "posix"
 	premake.PS3         = "ps3"
+	premake.LINUX       = "linux"
+	premake.SOLARIS     = "solaris"
 	premake.SHAREDLIB   = "SharedLib"
 	premake.STATICLIB   = "StaticLib"
 	premake.UNIVERSAL   = "universal"
