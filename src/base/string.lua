@@ -21,7 +21,14 @@
 		table.insert(arr, s:sub(pos))
 		return arr
 	end
-	
+
+--
+-- Split is similar to explode, but with a better name & default delimiters
+--
+	function string.split(s, delimiters)
+		local pattern = delimiters or ", \t\n|"
+		return string.explode(s, pattern)
+	end	
 
 
 --
