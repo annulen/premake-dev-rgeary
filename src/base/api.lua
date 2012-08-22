@@ -385,6 +385,13 @@
 		-- find the contained data type
 		local kind = api.getbasekind(field)
 		local setter = api["set" .. kind]
+		
+		if field.uniqueValues then
+			if target[value] then
+				return
+			end
+			target[value] = true
+		end
 
 		-- function to add values
 		local function addvalue(value, depth)
@@ -713,6 +720,7 @@
 		name = "includedirs",
 		scope = "config",
 		kind = "directory-list",
+		uniqueValues = true,				-- values in includedirs are unique. Duplicates are discarded 
 		expandtokens = true,
 		usagefield = true,
 		namealiases = { "includedir" },
