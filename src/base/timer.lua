@@ -6,6 +6,7 @@ local enabled = {}
 local disabled = {}
 timer = disabled
 
+enabled.order = {}
 enabled.totals = {}				-- { allTime, childTime, numCalls }
 enabled.startTime = {}
 enabled.stackName = {}
@@ -22,6 +23,10 @@ end
 function enabled.start(name)
 	table.insert( timer.stackName, name )
 	table.insert( timer.stackChildTime, 0.0 )
+	if not enabled.order[name] then
+		table.insert(enabled.order, name)
+		enabled.order[name] = 1
+	end
 	enabled.totals[name] = enabled.totals[name] or { 0.0, 0.0, 0 }
 	local t = os.clock()
 	timer.startTime[name] = t
@@ -38,7 +43,7 @@ function enabled.stop(name_)
 	
 	local name = table.remove( enabled.stackName )
 	if name_ and name ~= name_ then
-		error('Mismatched timer.stop. Expected %s got %s', name, name_ or '(nil)')
+		error('Mismatched timer.stop. Expected '..name..' got '.. (name_ or '(nil)'))
 	end
 	local startTime = enabled.startTime[name]
 	local childTime = table.remove( enabled.stackChildTime )
@@ -57,7 +62,8 @@ function enabled.print()
 	local totalTime = 0.0
 	local maxLen = Seq:new(enabled.totals):getKeys():max()
 	local sName = '%'..maxLen..'s'
-	for name,timeT in pairs(enabled.totals) do
+	for _,name in ipairs(enabled.order) do
+		local timeT = enabled.totals[name]
 		local selfTime = timeT[1]-timeT[2]
 		printf(sName.." : %.4f    (self %.4f  child %.4f   calls %d)", name, timeT[1], selfTime, timeT[2], timeT[3])
 		totalTime = totalTime + selfTime
