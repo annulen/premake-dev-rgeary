@@ -185,6 +185,11 @@
 		-- script has run to allow for project-specific options
 		
 		local action = premake.action.current()
+		if not action and premake.defaultaction then
+			-- retry with default action
+			_ACTION = premake.defaultaction
+			action = premake.action.current()
+		end
 		if (not action) then
 			error("Error: no such action '" .. _ACTION .. "'", 0)
 		end
@@ -238,11 +243,6 @@
 	end
 	
 	function defaultaction(actionName)
-		if not premake.action.current() then
-			if _ACTION then 
-				table.insert( _ARGS, 1, _ACTION )
-				_ARGS[_ACTION] = _ACTION
-			end
-			_ACTION=actionName
-		end
+		_ACTION = _ACTION or actionName
+		premake.defaultaction = actionName
 	end

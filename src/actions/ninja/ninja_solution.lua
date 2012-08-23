@@ -46,7 +46,10 @@ function ninja.generateSolution(sln, scope)
 		if #cfgName > 0 then
 			slnCfg = slnCfg ..'.'..cfgName
 		end
-		_p('build '..slnCfg..': phony '.. table.concat(targets, ' '))
+		local prjTargets = table.concat(targets, ' ')
+		if slnCfg ~= prjTargets then
+			_p('build '..slnCfg..': phony '.. prjTargets)
+		end
 		slnTargets[cfgName] = slnTargets[cfgName] or {}
 		table.insert( slnTargets[cfgName], slnCfg )
 	end

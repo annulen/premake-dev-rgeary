@@ -129,6 +129,9 @@ local icc_link = newtool {
 		
 		if cfg.kind == premake.CONSOLEAPP then
 			local intelLibDir = os.findlib('imf') 		-- Intel default libs
+			if not intelLibDir then
+				error('Unable to find libimf')
+			end
 			local rpath = iif( intelLibDir, '-Wl,-rpath='..intelLibDir, '')
 			table.insert(cmdflags, rpath)
 		end

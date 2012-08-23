@@ -684,7 +684,7 @@
 		
 		-- remove excluded files from the file list
 		local files = { }
-		for _, fname in ipairs(cfg.files) do
+		for _, fname in ipairs(cfg.files or {}) do
 			local excluded = false
 			for _, exclude in ipairs(cfg.excludes) do
 				excluded = (fname == exclude)

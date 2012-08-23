@@ -211,18 +211,19 @@ int process_arguments(lua_State* L, int argc, const char** argv)
 			else
 				process_option(L, argv[i] + 1, 1);
 		}
-		else if( iaction < 0 )
-		{
-			/* not an option, is the action */
-			lua_pushstring(L, argv[i]);
-			lua_setglobal(L, "_ACTION");
-			iaction = i;
-		}
 		else
 		{
 			/* everything else is an argument */
 			lua_pushstring(L, argv[i]);
 			lua_rawseti(L, -2, luaL_getn(L, -2) + 1);
+
+			/* first non-option is the action */
+			if( iaction < 0 )
+			{
+				lua_pushstring(L, argv[i]);
+				lua_setglobal(L, "_ACTION");
+				iaction = i;
+			}
 		}
 	}
 

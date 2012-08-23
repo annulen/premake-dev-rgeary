@@ -40,7 +40,7 @@
 		buildFileHandle = nil,
 		
 		onStart = function()
-			ninjaRoot = ninjaRoot or _WORKING_DIR
+			ninjaRoot = ninjaRoot or path.getabsolute(_WORKING_DIR)
 			ninja.openFile(path.join(ninjaRoot, 'build.ninja'))
 			globalScope = ninja.newScope('build.ninja')
 		end,
