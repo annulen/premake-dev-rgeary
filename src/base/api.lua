@@ -25,7 +25,7 @@
 			scope = "config",
 		},
 	}
-		
+	premake.defaultfields = nil
 
 
 --
@@ -385,13 +385,6 @@
 		-- find the contained data type
 		local kind = api.getbasekind(field)
 		local setter = api["set" .. kind]
-		
-		if field.uniqueValues then
-			if target[value] then
-				return
-			end
-			target[value] = true
-		end
 
 		-- function to add values
 		local function addvalue(value, depth)
@@ -403,6 +396,12 @@
 			
 			-- insert simple values
 			else
+				if field.uniqueValues then
+					if target[value] then
+						return
+					end
+					target[value] = true
+				end			
 				setter(target, #target + 1, field, value)
 			end
 		end
@@ -491,7 +490,7 @@
 		scope = "config",
 		kind = "string-list",
 		expandtokens = true,
-		namealiases = { "compileoptions" },
+		namealiases = { "compileoptions", "buildflags" },
 		-- 'usagefield = true' means that the field can be a "usage requirement". It will copy this field's values
 		--   from the usage secton in to the destination project 
 		usagefield = true,							
@@ -596,7 +595,8 @@
 		scope = "config",
 		kind  = "string-list",
 		usagefield = true,
-		defaultValue = {},
+		getDefaultValue = function() return {} end,
+		uniqueValues = true,
 		allowed = {
 			"AddPhonyHeaderDependency",		 -- for Makefiles, requires CreateDependencyFile
 			"CreateDependencyFile",
@@ -766,6 +766,7 @@
 		kind = "directory-list",
 		expandtokens = true,
 		usagefield = true,
+		namealiases = { 'libdir' }
 	}
 
 	api.register {
@@ -1350,15 +1351,18 @@
 		local isUsageProj = container.isUsage
 
 		-- initialize list-type fields to empty tables
-		for name, field in pairs(premake.fields) do
-			if field.defaultValue then
-				if isUsageProj and field.usagefield then
-					cfg[name] = field.defaultValue
-				else
-					cfg[name] = field.defaultValue
+		if not premake.defaultfields then
+			premake.defaultfields = {}
+			for name, field in pairs(premake.fields) do
+				if field.getDefaultValue then
+					premake.defaultfields[name] = field
 				end
 			end
 		end
+		for name, field in pairs(premake.defaultfields) do
+			cfg[name] = field.getDefaultValue()
+		end
+		
 		
 		-- this is the new place for storing scoped objects
 		api.scope.configuration = cfg

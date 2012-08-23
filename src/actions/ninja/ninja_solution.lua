@@ -84,6 +84,9 @@ function ninja.writeFooter(scope)
 		local defaultTarget = allTargets['']
 		if defaultTarget then
 			_p('default '..table.concat(defaultTarget, ' '))
+		else
+			-- Build all configurations by default
+			_p('default '..table.concat(getKeys(allTargets), ' '))
 		end
 	end
 	_p('')
@@ -407,6 +410,8 @@ function ninja.writeEnvironment(sln)
 end
 
 function ninja.writeHeader()
+	ninjaRoot = ninjaRoot or path.getabsolute(os.getcwd())
+	print('ninjaroot = "'..ninjaRoot..'"') 
 	_p('root=' .. ninjaRoot)
 	_p('rule exec')
 	_p(' command=$cmd')

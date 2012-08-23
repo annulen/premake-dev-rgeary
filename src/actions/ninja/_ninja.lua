@@ -295,7 +295,7 @@
 	function ninjaVar:getBest(v)
 		local tmr = timer.start('getBest')
 		-- try $root first
-		v = string.replace(v, repoRoot, '$root')
+		v = string.replace(v, ninjaRoot, '$root')
 		local bestV = v
 		
 		for varValue,varName in pairs(self.valueToName) do

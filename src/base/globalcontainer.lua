@@ -117,10 +117,10 @@
 				end
 			end -- isUsage
 				
-			-- Resolve "uses" & "links" for each config
+			-- Resolve "uses" for each config
 			for cfg in project.eachconfig(prj) do
-				local uses = concat(cfg.uses or {}, cfg.links or {})
-				for _,useProjName in ipairs(uses) do
+				--local uses = concat(cfg.uses or {}, cfg.links or {})
+				for _,useProjName in ipairs(cfg.uses or {}) do
 					local useProj = project.getUsageProject( useProjName )
 					if not useProj then
 						error("Could not find project/usage "..useProjName..' in project '..prj.name)
@@ -140,16 +140,23 @@
 						end
 					else
 						useCfg = project.getconfig(useProj, cfg.buildcfg, cfg.platform)
+						
+						-- try without platform, then without config
+						if not useCfg then
+							useCfg = project.getconfig(useProj, cfg.buildcfg, '')
+						end
+						if not useCfg then
+							useCfg = project.getconfig(useProj, '*', '')
+						end
 					end
 				
+					cfg.linkAsStatic = cfg.linkAsStatic or {}
+					cfg.linkAsShared = cfg.linkAsShared or {}
+					
 					if useProj and useCfg then 
 						-- make sure the usage project also has its defaults baked
 						bakeUsageDefaults(useProj)
 					
-						-- Separate links in to linkAsStatic, linkAsShared
-						cfg.linkAsStatic = cfg.linkAsStatic or {}
-						cfg.linkAsShared = cfg.linkAsShared or {}
-											
 						-- Merge in the usage requirements from the usage project
 						local usageFields = Seq:new(premake.fields):where(function(v) return v.usagefield; end)
 						local usageRequirements = {}
@@ -159,13 +166,14 @@
 						end
 					
 					else
+						print("Error : Can't find usage project "..useProjName..' for configuration '..cfg.buildcfg..'.'..cfg.platform)
 						-- Can't find the usage project, assume the string is a file
-						local linkName = useProjName
-						if string.find(linkName, '.so',1,true) then
-							table.insert( cfg.linkAsShared, linkName )
-						else
-							table.insert( cfg.linkAsStatic, linkName )
-						end				
+--						local linkName = useProjName
+--						if string.find(linkName, '.so',1,true) then
+--							table.insert( cfg.linkAsShared, linkName )
+--						else
+--							table.insert( cfg.linkAsStatic, linkName )
+--						end				
 					end -- if valid useProj
 							
 				end -- each use

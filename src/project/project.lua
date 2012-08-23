@@ -51,8 +51,19 @@
 				configs[(buildcfg or "*") .. (platform or "")] = cfg
 			end
 		end
+		
+		-- Pure usage projects should have a blank default configuration
+		--  eg. If in the global scope we create a usage project, and define configurations { "debug", "release" }
+		--   Then we create a solution with configurations { "DebugAll", "ReleaseBeta", "ReleaseFinal" }
+		--   If a project in the solution tries to use the global usage it can't find the configuration & fails.
+		--   A default configuration makes sense for a pure usage project, thus we need to store it.		
+		if prj.isUsage and not project.getRealProject(prj.name) then
+			local cfg = project.bakeconfig(result, '', nil)
+			configs["*"] = cfg
+		end
+		
 		result.configs = configs
-				
+		
 		timer.stop(tmr)
 		return result
 	end
@@ -100,6 +111,13 @@ local tmr2 = timer.start('bakeconfig2')
 		cfg.system = cfg.system or system
 		cfg.architecture = cfg.architecture or architecture
 		cfg.isUsage = prj.isUsage
+		cfg.platform = cfg.platform or ''
+
+		-- add back any missing default values		
+		for name,field in pairs(premake.defaultfields) do
+			cfg[name] = cfg[name] or field.getDefaultValue()
+		end
+		
 		ptypeSet( cfg, 'configprj' )
 timer.stop(tmr2)
 local tmr3 = timer.start('bakeconfig3')

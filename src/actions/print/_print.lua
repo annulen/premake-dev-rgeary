@@ -146,10 +146,10 @@
 					p('link target  ', cfg.linktarget.directory .. '/' .. cfg.linktarget.name)
 					p('build target  ', cfg.buildtarget.directory .. '/' .. cfg.buildtarget.name)
 					p('build targetdir', cfg.targetdir )
-					if 0 < #cfg.prebuildcommands then
+					if cfg.prebuildcommands and 0 < #cfg.prebuildcommands then
 						p('prebuild cmd ', table.concat(cfg.prebuildcommands, "\n" .. indentStr .. '                '))
 					end
-					if 0 < #cfg.postbuildcommands then
+					if cfg.postbuildcommands and 0 < #cfg.postbuildcommands then
 						p('postbuild cmd', table.concat(cfg.postbuildcommands, "\n".. indentStr .. '                '))
 					end
 				indent(-2)

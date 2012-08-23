@@ -42,22 +42,22 @@ local icc_cc = newtool {
 	
 	-- System specific flags
 	getsysflags = function(self, cfg)
-		local cmdflags = ''
+		local cmdflags = {}
 		if cfg.system ~= premake.WINDOWS and cfg.kind == premake.SHAREDLIB then
-			cmdflags = '-fPIC'
+			table.insert(cmdflags, '-fPIC')
 		end
 		
 		if cfg.flags.ThreadingMulti then
 			if cfg.system == premake.LINUX then
-				cmdflags = cmdflags .. '-pthread'
+				table.insert(cmdflags, '-pthread')
 			elseif cfg.system == premake.WINDOWS then 
-				cmdflags = cmdflags .. '-mthreads'
+				table.insert(cmdflags, '-mthreads')
 			elseif cfg.system == premake.SOLARIS then 
-				cmdflags = cmdflags .. '-pthreads'
+				table.insert(cmdflags, '-pthreads')
 			end
 		end
 		
-		return cmdflags
+		return table.concat(cmdflags, ' ')
 	end
 }
 local icc_cxx = newtool {
