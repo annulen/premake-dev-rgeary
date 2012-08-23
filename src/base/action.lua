@@ -59,6 +59,10 @@
 				if _ACTION:endswith("ng") then
 					_ACTION = _ACTION:sub(1, -3)
 				end
+				if a.onStart then
+					a.onStart()
+				end
+				
 				for sln in premake.solution.each() do
 					if a.onSolution then a.onSolution(sln) end
 					if a.onsolution then a.onsolution(sln) end

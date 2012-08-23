@@ -16,7 +16,7 @@
 	local slnDone = {}
 	local globalScope = {}
 	
-	ninjaRoot = ninjaRoot or os.getcwd()
+	ninjaRoot = ninjaRoot or repoRoot
 	
 --
 -- The Ninja build action
@@ -38,6 +38,12 @@
 		},
 		
 		buildFileHandle = nil,
+		
+		onStart = function()
+			ninjaRoot = ninjaRoot or _WORKING_DIR
+			ninja.openFile(path.join(ninjaRoot, 'build.ninja'))
+			globalScope = ninja.newScope('build.ninja')
+		end,
 		
 		onSolution = function(sln)
 			ninja.onSolution(sln.name)
@@ -67,11 +73,7 @@
 					ninja.onSolution(v)
 				end
 			end
-			
-			if ninja.openFile(path.join(_WORKING_DIR, 'build.ninja')) then
-				globalScope = ninja.newScope('build.ninja')
-			end
-				
+							
 			ninja.generateSolution(sln, globalScope)
 			--premake.generate(sln, ninja.getSolutionBuildFilename(sln), ninja.generateSolution)
 			--premake.generate(sln, ninja.getDefaultBuildFilename(sln), ninja.generateDefaultBuild) 

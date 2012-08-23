@@ -32,21 +32,23 @@ function ninja.generateSolution(sln, scope)
 	_p('# Solution ' .. sln.name)
 	_p('')
 		
-	local slnTargets = {}
+	local slnPrjTargets = {}
 	for _,prj in ipairs(sln.projects) do
 		local prjTargets = ninja.generateProject(prj, scope)
-		mergeTargets(slnTargets, prjTargets)
+		mergeTargets(slnPrjTargets, prjTargets)
 	end
 	
 	_p('# Solution build commands')
-	local allTargets = {}
-	for cfgName,targets in pairs(slnTargets) do
+	_p('')
+	local slnTargets = {}
+	for cfgName,targets in pairs(slnPrjTargets) do
 		local slnCfg = sln.name
 		if #cfgName > 0 then
 			slnCfg = slnCfg ..'.'..cfgName
 		end
 		_p('build '..slnCfg..': phony '.. table.concat(targets, ' '))
-		table.insert( allTargets, slnCfg )
+		slnTargets[cfgName] = slnTargets[cfgName] or {}
+		table.insert( slnTargets[cfgName], slnCfg )
 	end
 	_p('')
 	scope.alltargets = scope.alltargets or {}
@@ -410,8 +412,7 @@ function ninja.writeEnvironment(sln)
 end
 
 function ninja.writeHeader()
-	ninjaRoot = ninjaRoot or path.getabsolute(os.getcwd())
-	print('ninjaroot = "'..ninjaRoot..'"') 
+	printDebug('ninjaroot = "'..ninjaRoot..'"') 
 	_p('root=' .. ninjaRoot)
 	_p('rule exec')
 	_p(' command=$cmd')

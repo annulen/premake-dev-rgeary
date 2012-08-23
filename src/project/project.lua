@@ -111,7 +111,7 @@ local tmr2 = timer.start('bakeconfig2')
 		cfg.system = cfg.system or system
 		cfg.architecture = cfg.architecture or architecture
 		cfg.isUsage = prj.isUsage
-		cfg.platform = cfg.platform or ''
+		cfg.platform = cfg.platform or ''		-- should supply '' as you could ask for %{cfg.platform} in a token
 
 		-- add back any missing default values		
 		for name,field in pairs(premake.defaultfields) do

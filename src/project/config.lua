@@ -17,8 +17,9 @@
 
 	function config.bake(cfg)		
 		-- assign human-readable names
-		cfg.longname = table.concat({ cfg.buildcfg, cfg.platform }, "|")
-		cfg.shortname = table.concat({ cfg.buildcfg, cfg.platform }, " ")
+		local platform = iif( cfg.platform == '', nil, cfg.platform )
+		cfg.longname = table.concat({ cfg.buildcfg, platform }, "|")
+		cfg.shortname = table.concat({ cfg.buildcfg, platform }, " ")
 		cfg.shortname = cfg.shortname:gsub(" ", "_"):lower()
 
 		if cfg.project and cfg.kind and cfg.kind ~= 'None' then

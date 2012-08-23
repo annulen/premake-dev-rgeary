@@ -211,7 +211,7 @@
 			local dir = path.getabsolute(path.join(project.getlocation(cfg.project), cfg.objdir or "obj"))
 			table.insert(dirs, dir)
 			
-			if cfg.platform then
+			if cfg.platform and cfg.platform ~= '' then
 				dir = path.join(dir, cfg.platform)
 				table.insert(dirs, dir)
 			end

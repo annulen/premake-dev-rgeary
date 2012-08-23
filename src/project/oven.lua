@@ -95,7 +95,7 @@
 			solution = cfg.solution,
 			project = cfg.project,
 			buildcfg = cfg.buildcfg,
-			platform = cfg.platform
+			platform = iif(cfg.platform ~= '', cfg.platform, nil), 
 		}
 		
 		filename = { filename:lower() }
