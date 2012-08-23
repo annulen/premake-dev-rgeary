@@ -17,7 +17,9 @@
 		s = s:gsub("[\r]", "")
 				
 		-- strip out block comments
-		s = s:gsub("%-%-%[%[.-%-%-%]%]", "")
+		s = s:gsub("%-%-%[%[.-%]%]", "")
+		s = s:gsub("%-%-%[=%[.-%]=%]", "")
+		s = s:gsub("%-%-%[==%[.-%]==%]", "")
 
 		-- strip out inline comments
 		s = s:gsub("\n%-%-[^\n]*", "")

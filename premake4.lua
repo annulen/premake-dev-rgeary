@@ -37,11 +37,13 @@
 			
 		configuration "Debug"
 			targetdir   "bin/debug"
+			objdir			"obj/debug"
 			defines     "_DEBUG"
 			flags       { "Symbols" }
 			
 		configuration "Release"
 			targetdir   "bin/release"
+			objdir			"obj/release"
 			defines     "NDEBUG"
 			flags       { "OptimizeSize" }
 
@@ -113,6 +115,7 @@
 	
 	newaction {
 		trigger     = "embed",
+		isnextgen		= true,
 		description = "Embed scripts in scripts.c; required before release builds",
 		execute     = doembed
 	}

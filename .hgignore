@@ -27,6 +27,9 @@ Makefile
 *.project
 *.tags
 
+*.ninja
+.ninja_log
+
 *.bbprojectsettings
 Scratchpad.txt
 Unix Worksheet.worksheet
