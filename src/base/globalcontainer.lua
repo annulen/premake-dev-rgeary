@@ -7,6 +7,7 @@
 	local project 	= premake5.project
 	local oven 		= premake5.oven
 	local solution	= premake.solution  
+	local keyedblocks = premake.keyedblocks  
 
 	-- List of all real & all usage projects
 	globalContainer.allUsage = {}
@@ -29,7 +30,7 @@
 		-- Bake all usage projects
 		result = {}
 		for i,prj in ipairs(globalContainer.allUsage) do
-			local bakedPrj = project.bake(prj)
+			local bakedPrj = keyedblocks.bake(prj)
 			result[i] = bakedPrj
 			result[bakedPrj.name] = bakedPrj
 		end
@@ -76,7 +77,7 @@
 				bakeUsageDefaults(realProj)
 			
 				-- Set up the usage target defaults
-				for cfgName,useCfg in pairs(usageProj.configs) do
+				for cfgName,useCfg in pairs(realProj.configs) do
 					local realCfg = realProj.configs[cfgName]
 				
 					-- usage kind = real proj kind

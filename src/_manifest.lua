@@ -10,7 +10,9 @@
 	return
 	{
 		-- core files
+		"base/_declare.lua",
 		"base/timer.lua",
+		"base/cache.lua",
 		"base/seq.lua",
 		"base/os.lua",
 		"base/path.lua",
@@ -32,6 +34,7 @@
 		"base/premake.lua",
 		
 		-- project APIs
+		"project/keyedblocks.lua",
 		"base/globalcontainer.lua",
 		"project/oven.lua",
 		"project/project.lua",

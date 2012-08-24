@@ -102,6 +102,7 @@ local icc_link = newtool {
 	prefixes = {
 		libdirs 		= '-L',
 		output 			= '-o',
+		rpath			= '-Wl,-rpath=',
 	},
 	suffixes = {
 		input 			= ' -Wl,--end-group',

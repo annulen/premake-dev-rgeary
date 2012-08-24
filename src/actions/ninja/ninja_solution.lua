@@ -440,7 +440,12 @@ function ninja.writeToolsets(cfgs, scope)
 	for _,cfg in cfgs
 		:each() 
 	do
-		local toolsetName = cfg.toolset or 'icc'
+		local toolsetName = cfg.toolset
+		
+		if not toolsetName or toolsetName == '' then
+			printDebug('Toolset not specified for project ' .. cfg.project.name .. ' configuration ' .. cfg.shortname..'. Using default')
+			toolsetName = 'icc'
+		end 
 		
         local toolset = premake.tools[toolsetName]
 		if not toolset then

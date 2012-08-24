@@ -16,13 +16,30 @@
 -- Note that these are deprecated in favor of the api.register() calls below,
 -- and will be going away as soon as I have a chance to port them.
 --
+
+--	kind			Description						Multiple instance behaviour			Comments
+------------------------------------------------------------------------------------------------
+--  string			A single string value			overwrite
+--  string-list		A list of strings				append new elements to the list
+--  path			A single path 					overwrite							Paths are converted to absolute
+--  path-list		A list of paths					append new elements to the list		Paths are converted to absolute
+--  directory-list	A list of paths					append new elements to the list		Can contain wildcards
+--  file-list		A list of files					append new elements to the list		Can contain wildcards
+--  key-array		A keyed table					overwrite
+--  object			A table							overwrite
+--  object-list		A list of tables				append new elements to the list
+
+-- Modifiers :
+--  overwrite		Multiple instances will overwrite. Used on string-list.
+--  uniqueValues	The final list will contain only unique elements 
 	
 	premake.fields = 
 	{
-		uses =
+		["uses"] =
 		{
 			kind  = "list",
 			scope = "config",
+			namealiases = { "using" },
 		},
 	}
 	premake.defaultfields = nil
@@ -335,7 +352,9 @@
 				name = name + 1
 			end
 		else
-			target[name] = path.getabsolute(value)
+			-- make absolute later if it starts with %
+			value = iif( value:startswith('%'), value, path.getabsolute(value)) 
+			target[name] = value
 		end
 	end
 	
@@ -731,6 +750,15 @@
 		scope = "solution",
 		kind = "string-list",
 	}
+	
+	-- Include the specified configuration in this configuration 
+	-- eg. declare the debug build of the boost libs with configuration "boostdebug"
+	--      and add useconfig "boostdebug" to your project
+	api.register {
+		name = "useconfig",
+		scope = "config",
+		kind = "string-list",
+	}
 
 	api.register {
 		name = "kind",
@@ -874,14 +902,6 @@
 		kind = "string-list",
 		expandtokens = true,
 	}
-	
-	-- custom rule to create settings only for ninja build files
-	api.register {
-	 	name = "rawninja",
-	 	scope = "config",
-	 	kind = "string-list",
-	 	expandtokens = true,
-	} 		
 
 	api.register {
 		name = "resdefines",
@@ -903,6 +923,15 @@
 		name = "resoptions",
 		scope = "config",
 		kind = "string-list",
+		expandtokens = true,
+		usagefield = true,
+	}
+	
+	-- Specify a [.so/.dll] search directory to hard-code in to the executable
+	api.register {
+		name = "rpath",
+		scope = "config",
+		kind = "path-list",
 		expandtokens = true,
 		usagefield = true,
 	}
@@ -1293,6 +1322,12 @@
 		if not info.name then
 			_G[name] = function(value)
 				return accessor(name, value)
+			end
+			
+			for _,alias in pairs(info.namealiases or {}) do
+				_G[alias] = function(value)
+					return accessor(name, value)
+				end
 			end
 			
 			-- list value types get a remove() call too

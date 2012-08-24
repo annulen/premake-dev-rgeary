@@ -380,8 +380,9 @@
 -- @returns
 --    The corresponding Lua pattern.
 --
-
+	--local patternCache = cache.new()
 	function path.wildcards(pattern)
+local tmr = timer.start('path.wildcards')
 		-- Escape characters that have special meanings in Lua patterns
 		pattern = pattern:gsub("([%+%.%-%^%$%(%)%%])", "%%%1")
 
@@ -393,6 +394,6 @@
 		-- Replace the placeholders with their Lua patterns
 		pattern = pattern:gsub("\001", ".*")
 		pattern = pattern:gsub("\002", "[^/]*")
-		
+timer.stop(tmr)		
 		return pattern
 	end
