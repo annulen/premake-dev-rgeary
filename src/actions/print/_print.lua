@@ -30,7 +30,7 @@
 	end
 	
 	local function pRecursive(name, obj, depth)
-		depth = depth or 2
+		depth = depth or 4
 		local str = iif(name, tostring(name) .. ' : ', '')
 		if( obj and type(obj) == "table" ) then
 			if depth < 0 then
@@ -55,9 +55,10 @@
 	end
 	
 	-- need to separate out this from pRecursive otherwise calling with tables will put the 2nd value as the depth
-	local function p(name, obj)
+	function Print.print(name, obj)
 		return pRecursive(name, obj, nil)
 	end
+	local p = Print.print
 	
 	function Print.onSolution(sln)
 		p('Solution ', sln.name)
@@ -124,7 +125,10 @@
 					local compileCmdArgs = compileTool:decorateInputs(cfg, '$out', '$in')
 					--local compileVars = Seq:new(compileCmdArgs):getKeys():prependEach('$'):prepend(compileSysflags):mkstring(' ')
 					local compileCmdArgsFlat = flattenArgs(compileCmdArgs)
-					local linkCmdArgs = linkTool:decorateInputs(cfg, '$out', '$in')
+					local linkCmdArgs = {}
+					if linkTool then
+						linkCmdArgs = linkTool:decorateInputs(cfg, '$out', '$in')
+					end
 					local linkVars = Seq:new(linkCmdArgs):getKeys():prependEach('$'):prepend(linkSysflags):mkstring(' ')
 					local linkCmdArgsFlat = flattenArgs(linkCmdArgs)
 					
@@ -144,6 +148,8 @@
 					 p(' .' .. tostring(k) ..' = '..v)
 					end				
 					p('link target  ', cfg.linktarget.directory .. '/' .. cfg.linktarget.name)
+					p('linkAsStatic ', cfg.linkAsStatic)
+					p('linkAsShared ', cfg.linkAsShared)
 					p('build target  ', cfg.buildtarget.directory .. '/' .. cfg.buildtarget.name)
 					p('build targetdir', cfg.targetdir )
 					if cfg.prebuildcommands and 0 < #cfg.prebuildcommands then
