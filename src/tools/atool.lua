@@ -164,6 +164,9 @@ function tool:decorateInput(category, inputList, alwaysReturnString)
 	local str = ''
 	inputList = toList(inputList)
 	
+	-- consistent sort order to prevent ninja rebuilding needlessly
+	table.sort(inputList)
+	
 	if self.decorateFn[category] then
 	
 		-- Override prefix/suffix behaviour

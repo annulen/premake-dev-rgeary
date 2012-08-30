@@ -90,7 +90,9 @@ local tmr1 = timer.start('bakeconfig1')
 		local filter
 		
 		if newFilter then
-			filter = { buildcfg, platform, _ACTION }
+			filter = { buildcfg, _ACTION }
+			if platform then table.insert(filter, platform) end
+
 			system = keyedblocks.getfield(prj, filter, 'system' )
 			system = system or premake.action.current().os or os.get()
 			table.insert(filter, system)
@@ -110,9 +112,9 @@ local tmr1 = timer.start('bakeconfig1')
 		else
 			filter = {
 				["buildcfg"] = buildcfg,
-				["platform"] = platform,
 				["action"] = _ACTION
 			}
+			if platform then table.insert(filter, platform) end
 			
 			-- look to see if this configuration specifies a target system and, if so,
 			-- use that to further filter the results
