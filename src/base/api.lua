@@ -509,7 +509,7 @@
 		scope = "config",
 		kind = "string-list",
 		expandtokens = true,
-		namealiases = { "compileoptions", "buildflags" },
+		namealiases = { "buildflags" },
 		-- 'usagefield = true' means that the field can be a "usage requirement". It will copy this field's values
 		--   from the usage secton in to the destination project 
 		usagefield = true,							
@@ -751,13 +751,15 @@
 		kind = "string-list",
 	}
 	
-	-- Include the specified configuration in this configuration 
+	-- Add a new keyword to the configuration filter
+	--  for any project we use which defines a configuration with this keyword will have that section applied
 	-- eg. declare the debug build of the boost libs with configuration "boostdebug"
-	--      and add useconfig "boostdebug" to your project
+	--      and add usekeyword "boostdebug" to your project
 	api.register {
-		name = "useconfig",
+		name = "usekeywords",
 		scope = "config",
 		kind = "string-list",
+		namealiases = { "usekeyword" },
 	}
 
 	api.register {
@@ -765,7 +767,6 @@
 		scope = "config",
 		kind = "string",
 		allowed = {
-			"None",				-- don't build anything. Useful for usage projects where you just want to pass requirements
 			"ConsoleApp",
 			"WindowedApp",
 			"StaticLib",
@@ -788,6 +789,14 @@
 		},
 	}
 
+	-- Command line flags passed to both 'ar' and 'link' tools	
+	api.register {
+		name = "ldflags",
+		scope = "config",
+		kind = "string-list",
+		usagefield = true,
+	}
+
 	api.register {
 		name = "libdirs",
 		scope = "config",
@@ -797,12 +806,14 @@
 		namealiases = { 'libdir' }
 	}
 
+	-- Command line flags passed to the link tool (and not 'ar') 
 	api.register {
 		name = "linkoptions",
 		scope = "config",
 		kind = "string-list",
 		expandtokens = true,
 		usagefield = true,
+		namealiases = { "linkflags" }
 	}
 	
 	api.register {
