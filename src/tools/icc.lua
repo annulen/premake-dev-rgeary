@@ -114,15 +114,17 @@ local icc_link = newtool {
 			end
 		end
 		
+		--[[
 		if cfg.kind == premake.CONSOLEAPP then
 			local intelLibDir = os.findlib('imf') 		-- Intel default libs
 			if not intelLibDir then
-				error('Unable to find libimf')
+				printDebug('Warning: Unable to find libimf')
+			else
+				local rpath = iif( intelLibDir, '-Wl,-rpath='..intelLibDir, '')
+				table.insert(cmdflags, rpath)
 			end
-			local rpath = iif( intelLibDir, '-Wl,-rpath='..intelLibDir, '')
-			table.insert(cmdflags, rpath)
 		end
-		
+		]]
 
 		if cfg.flags.ThreadingMulti then
 			if cfg.system ~= premake.WINDOWS then
