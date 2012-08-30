@@ -91,6 +91,10 @@ function premake.tools.newtoolset(toolsetDef)
 		for _,tool in ipairs(t.tools) do
 			t.tools[tool.toolName] = tool
 			
+			if toolsetDef.binarydir then
+				tool.binaryDir = tool.binaryDir or toolsetDef.binaryDir
+			end
+			
 			-- Construct lookup sets for extensions
 			tool.extensionsForCompiling = toSet(tool.extensionsForCompiling)
 			tool.extensionsForLinking = toSet(tool.extensionsForLinking)
