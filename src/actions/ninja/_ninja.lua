@@ -140,6 +140,7 @@
 			return prj.filesPerConfig
 		end
 		
+local tmr = timer.start('ninja.getInputFiles')
 		local tr = project.getsourcetree(prj)
 		local filesPerConfig = {}	-- list of files per config
 		local defaultAction = 'Compile'
@@ -167,6 +168,8 @@
 			end
 		})
 		prj.filesPerConfig = filesPerConfig
+		
+timer.stop(tmr)		
 		return filesPerConfig
 	end
 
@@ -295,9 +298,11 @@
 	
 	-- Substitutes variables in to v, to make the string the smallest size  
 	function ninjaVar:getBest(v)
-		local tmr = timer.start('getBest')
+		local tmr = timer.start('ninja.getBest')
 		-- try $root first
 		v = string.replace(v, ninjaRoot, '$root')
+		local bestV = self.valueToName[v] or v
+		--[[
 		local bestV = v
 		
 		for varValue,varName in pairs(self.valueToName) do
@@ -313,6 +318,7 @@
 				end
 			end
 		end
+		]]
 		timer.stop(tmr)
 		return bestV
 	end

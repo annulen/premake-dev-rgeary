@@ -133,6 +133,7 @@ function ninja.writeProjectTargets(prj, scope)
 		table.insert(cfgs, cfg)
 	end
 	
+local tmr = timer.start('ninja.writeProjectTargets')
 	-- Compile
 	for _,cfg in ipairs(cfgs) do
 				
@@ -242,7 +243,7 @@ function ninja.writeProjectTargets(prj, scope)
 				end
 				
 				table.insert( allLinkInputs, outputFullpath )
-			elseif linkTool:isLinkInput(cfg, fileName ) then
+			elseif linkTool and linkTool:isLinkInput(cfg, fileName ) then
 				table.insert( allLinkInputs, fileName )
 			end
 		end
@@ -390,6 +391,7 @@ function ninja.writeProjectTargets(prj, scope)
 		_p('')
 		prjTargets[cfgname] = { finalTargetN }
 	end -- for cfgs
+timer.stop(tmr)
 	
 	if prj.defaultconfiguration and prj.configs[prj.defaultconfiguration] then
 		local defaultTarget = prj.name..'.'..prj.defaultconfiguration 
@@ -431,6 +433,8 @@ end
 --  Run for each config, for each project
 --
 function ninja.writeToolsets(cfgs, scope)
+
+local tmr = timer.start('ninja.writeToolsets')
 
 	local function _pt(str)
 		--toolsetNinjaStr = toolsetNinjaStr .. str .. '\n'
@@ -526,7 +530,9 @@ function ninja.writeToolsets(cfgs, scope)
 				end
 			_pt('')
 		end
-	end 
+	end
+	
+timer.stop(tmr)	 
 end 
 
 --
