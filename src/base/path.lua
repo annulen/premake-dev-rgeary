@@ -36,13 +36,18 @@
 -- Get the absolute file path from a relative path. The requested
 -- file path doesn't actually need to exist.
 --
-	
+local absPathCache = {}
+
 	function path.getabsolute(p)
+		if absPathCache[p] then return absPathCache[p] end
+		local result
+		
 		if type(p) == "table" then
 			local result = {}
 			for _, value in ipairs(p) do
 				table.insert(result, path.getabsolute(value))
 			end
+			absPathCache[p] = result
 			return result
 		end
 		
@@ -51,28 +56,34 @@
 		if (p == "") then p = "." end
 		
 		-- if the directory is already absolute I don't need to do anything
-		local result = iif (path.isabsolute(p), nil, os.getcwd())
-
-		-- split up the supplied relative path and tackle it bit by bit
-		for n, part in ipairs(p:explode("/", true)) do
-			if (part == "" and n == 1) then
-				result = "/"
-			elseif (part == "..") then
-				result = path.getdirectory(result)
-			elseif (part ~= ".") then
-				-- Environment variables embedded in the path need to be treated
-				-- as relative paths; path.join() makes them absolute
-				if (part:startswith("$") and n > 1) then
+		local isabsolute = path.isabsolute(p)
+		local result
+		
+		if not isabsolute or (p:find('/.',1,true) or p:find('$',1,true)) then
+local tmr=timer.start('path.getabsolute')
+			result = iif (isabsolute, '', os.getcwd())
+			
+			-- split up the supplied relative path and tackle it bit by bit
+			for n, part in ipairs(p:explode("/", true)) do
+				if (part == "" and n == 1) then
+					result = "/"
+				elseif (part == "..") then
+					result = path.getdirectory(result)
+				elseif (part ~= ".") then
+					-- Environment variables embedded in the path need to be treated
+					-- as relative paths; path.join() makes them absolute
 					result = result .. "/" .. part
-				else
-					result = path.join(result, part)
 				end
 			end
+timer.stop(tmr)
+		else
+			result = p
 		end
 		
 		-- if I end up with a trailing slash remove it
 		result = iif(result:endswith("/"), result:sub(1, -2), result)
 		
+		absPathCache[p] = result
 		return result
 	end
 	
