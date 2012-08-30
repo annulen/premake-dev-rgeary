@@ -53,7 +53,7 @@ function keyedblocks.expandTerms(terms)
 end
 
 -- Generate the keyedblocks from the blocks. obj can be sln, prj or cfg
-function keyedblocks.bake(obj, isUsage, usesIncluded)
+function keyedblocks.create(obj, isUsage, usesIncluded)
 	local kbBase = {}
 	
 	-- Prevent infinite recursion
@@ -68,7 +68,7 @@ function keyedblocks.bake(obj, isUsage, usesIncluded)
 		return obj
 	end
 	
-timer.start('keyedblocks.bake')
+timer.start('keyedblocks.create')
 	for _,block in ipairs(obj.blocks or {}) do
 		local terms = block.keywords
 		
@@ -118,14 +118,6 @@ timer.start('keyedblocks.bake')
 									error('Could not find usage project '..tostring(useProjName))
 								end
 								kb.__uses[useProjName] = usageProj
-								--[[
-								keyedblocks.bake(usageProj, isUsage, usesIncluded)
-								if not usageProj.keyedblocks then
-									print('Warning : Usage '..useProjName..' contains a cyclic dependency on '..tostring(obj.name)..'. Processing may not be complete.')
-								end  
-								-- Merge with the other usage
-								keyedblocks.merge(kb, usageProj.keyedblocks)
-								]]
 							end
 														
 						else
@@ -175,7 +167,11 @@ function keyedblocks.merge(dest, src)
 end
 
 
--- eg. keyedblocks.getfield(cfg, {"debug"}, 'system')
+--
+-- Returns a field from the keyedblocks
+--   eg. keyedblocks.getfield(cfg, {"debug"}, 'system')
+-- May have to create the usage & bake the project if it's not already created 
+--
 function keyedblocks.getfield(obj, keywords, fieldName, dest)
 	local rv = nil
 	local removes = nil
@@ -239,7 +235,10 @@ function keyedblocks.getfield(obj, keywords, fieldName, dest)
 			
 			if kb.__uses then
 				for useProjName,useProj in pairs(kb.__uses) do
-					globalContainer.bakeUsageProject(useProj)
+					if useProj.hasBakedUsage then
+						error('Usage '.._useProj.name..' is unbaked')
+					end
+					--globalContainer.bakeUsageProject(useProj)
 					findValues(useProj.keyedblocks)
 				end
 			end
@@ -326,9 +325,9 @@ function keyedblocks.test()
 	
 	local gc = premake5.globalContainer
 	local Print = premake.actions.Print
-	local testUsage = keyedblocks.bake(gc.allUsage["testUsage"])
-	local testRecursion = keyedblocks.bake(gc.allUsage["testRecursion"])
-	local testBase = keyedblocks.bake(gc.allUsage["testBase"])
+	local testUsage = keyedblocks.create(gc.allUsage["testUsage"])
+	local testRecursion = keyedblocks.create(gc.allUsage["testRecursion"])
+	local testBase = keyedblocks.create(gc.allUsage["testBase"])
 	local xU = keyedblocks.getfield(testUsage, { 'release', 'debug' }, nil)
 	local xB = keyedblocks.getfield(testBase, { 'release', 'debug' }, nil)
 	local xR = keyedblocks.getfield(testRecursion, { 'release', 'debug' }, nil)

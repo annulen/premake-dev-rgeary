@@ -25,21 +25,23 @@
 			print("Building configurations : "..cfgNameList:mkstring(', ').." ...")
 		end
 		
-		-- Bake all real projects
-		local result = {}
+		-- Bake all real projects, but don't resolve usages		
+		local tmr = timer.start('Bake projects')
 		for i,prj in ipairs(globalContainer.allReal) do
-			local bakedPrj = project.bake(prj)
-			result[i] = bakedPrj
-			result[bakedPrj.name] = bakedPrj
+			project.bake(prj)
 		end
-		globalContainer.allReal = result
+		timer.stop(tmr)
 		
 		-- Assign unique object directories to every project configurations
+		-- Note : objdir & targetdir can't be inherited from a usage for ordering reasons 
 		globalContainer.bakeobjdirs(globalContainer.allReal)
+		
+		-- Apply the usage requirements now we have resolved the objdirs
+		--  This function may recurse
+		for _,prj in ipairs(globalContainer.allReal) do
+			globalContainer.applyUsageRequirements(prj)
+		end		
 				
- 		-- Apply usage requirements
- 		globalContainer.bakeAllUsageRequirements()
-
 		-- expand all tokens (must come after baking objdirs)
 		local tmr=timer.start('expandTokens')
 		for i,prj in ipairs(globalContainer.allReal) do
@@ -54,6 +56,7 @@
 		solution.bakeall()
 	end
 	
+	-- May recurse
 	function globalContainer.bakeUsageProject(usageProj)
 	
 		-- Look recursively at the uses statements in each project and add usage project defaults for them  
@@ -62,16 +65,16 @@
 		end
 		usageProj.hasBakedUsage = true
 		
-		-- For usage project, first ensure that the real project's usage is baked, and then copy in any defaults
-		keyedblocks.bake(usageProj)
+		keyedblocks.create(usageProj)
 
 		local realProj = project.getRealProject(usageProj.name)
 		if realProj then
 		
-			-- Bake the real project first
-			globalContainer.bakeRealProject(realProj)
+			-- Bake the real project (RP) first, and apply RP's usages to RP
+			project.bake(realProj)
+			globalContainer.applyUsageRequirements(realProj)
 			
-			-- Set up the usage target defaults
+			-- Set up the usage target defaults from RP
 			for _,cfgPairing in ipairs(realProj.cfglist) do
 				
 				local buildcfg = cfgPairing[1]
@@ -121,19 +124,21 @@
 		end -- realProj
 
 	end
-
-	-- Resolve the uses statements for the project, bake in to the configuration
-	function globalContainer.bakeRealProject(prj)
+	
+	-- May recurse
+	function globalContainer.applyUsageRequirements(prj)
+	
 		if prj.isUsage or prj.hasBakedUsage then
 			return true
 		end
 		prj.hasBakedUsage = true
 		
+		-- Bake the project's configs if we haven't already
 		project.bake(prj)
-		
-		-- Resolve "uses" for each config
+	
+		-- Resolve "uses" for each config, and apply
 		for cfg in project.eachconfig(prj) do
-			--local uses = concat(cfg.uses or {}, cfg.links or {})
+
 			for _,useProjName in ipairs(cfg.uses or {}) do
 				local useProj = project.getUsageProject( useProjName )
 				local cfgFilterTerms = getValues(cfg.usekeywords)
@@ -167,24 +172,9 @@
 				end
 				cfg.links = nil
 			end
-		end  -- each cfg
-			
+		end  -- each cfg			
+		
 	end
-
---
--- Read the "uses" field and bake in any requirements from those projects
---
-	function globalContainer.bakeAllUsageRequirements()
-
-		-- bake each project
-		local tmr = timer.start('Bake usage requirements')
-		for i,prj in ipairs(globalContainer.allReal) do
-			globalContainer.bakeRealProject(prj)
-		end
-		timer.stop(tmr)
-
-	end
-
 
 --
 -- Assigns a unique objects directory to every configuration of every project

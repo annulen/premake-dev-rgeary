@@ -172,7 +172,9 @@
 --
 
 	function table.isempty(t)
-		return not next(t)
+		if t and type(t) == 'table' then 
+			return not next(t)
+		end
 	end
 
 

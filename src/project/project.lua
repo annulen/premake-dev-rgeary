@@ -20,7 +20,7 @@
 		prj = prj.project or prj
 		local sln = prj.solution
 		
-		keyedblocks.bake(prj)
+		keyedblocks.create(prj)
 		
 		if prj.isbaked then
 			return prj
