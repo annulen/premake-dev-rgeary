@@ -39,15 +39,22 @@
 local absPathCache = {}
 
 	function path.getabsolute(p)
-		if absPathCache[p] then return absPathCache[p] end
 		local result
+
+		if absPathCache[p] then 
+			return absPathCache[p] 
+		end
+
+		local isabsolute = path.isabsolute(p)
 		
 		if type(p) == "table" then
 			local result = {}
 			for _, value in ipairs(p) do
 				table.insert(result, path.getabsolute(value))
 			end
-			absPathCache[p] = result
+			if isabsolute then
+				absPathCache[p] = result
+			end
 			return result
 		end
 		
@@ -55,24 +62,24 @@ local absPathCache = {}
 		p = path.translate(p, "/")
 		if (p == "") then p = "." end
 		
-		-- if the directory is already absolute I don't need to do anything
-		local isabsolute = path.isabsolute(p)
 		local result
 		
-		if not isabsolute or (p:find('/.',1,true) or p:find('$',1,true)) then
+		if (not isabsolute) or (p:find('/.',1,true) or p:find('$',1,true)) then
 local tmr=timer.start('path.getabsolute')
-			result = iif (isabsolute, '', os.getcwd())
+			result = iif (isabsolute, nil, os.getcwd())
 			
 			-- split up the supplied relative path and tackle it bit by bit
 			for n, part in ipairs(p:explode("/", true)) do
-				if (part == "" and n == 1) then
-					result = "/"
-				elseif (part == "..") then
+				if (part == "..") then
 					result = path.getdirectory(result)
 				elseif (part ~= ".") then
 					-- Environment variables embedded in the path need to be treated
 					-- as relative paths; path.join() makes them absolute
-					result = result .. "/" .. part
+					if result then
+						result = result .. '/' .. part
+					else
+						result = part
+					end
 				end
 			end
 timer.stop(tmr)
@@ -83,7 +90,9 @@ timer.stop(tmr)
 		-- if I end up with a trailing slash remove it
 		result = iif(result:endswith("/"), result:sub(1, -2), result)
 		
-		absPathCache[p] = result
+		if isabsolute then
+			absPathCache[p] = result
+		end
 		return result
 	end
 	
