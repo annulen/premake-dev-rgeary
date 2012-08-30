@@ -377,26 +377,35 @@
 		return rv
 	end
 	
-	function mkstring(t, delimiter)
+	function mkstring(t, delimiter, seen)
 		delimiter = delimiter or ' '
+		seen = seen or {}
+		if seen[t] then
+			return seen[t]
+		end
+		seen[t] = ''
+		
+		local rv
 		if t == nil then
-			return ''
+			rv = ''
 		elseif type(t) == 'string' then
-			return t
+			rv = t
 		elseif type(t) == 'table' then
 			local s = ''
 			for k,v in pairs(t) do
 				if #s > 0 then s = s .. delimiter end
 				if type(k) == 'number' then
-					s = s .. mkstring(v)
+					s = s .. mkstring(v, delimiter, seen)
 				else
-					s = s .. mkstring(k) ..'='..mkstring(v)
+					s = s .. mkstring(k, delimiter, seen) ..'='..mkstring(v, delimiter, seen)
 				end
 			end
-			return s
+			rv = s
 		else
-			return tostring(t)
+			rv = tostring(t)
 		end
+		seen[t] = rv
+		return rv
 	end
 	
 	function toSet(vs)
