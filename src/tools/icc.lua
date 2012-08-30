@@ -1,7 +1,7 @@
 --
 -- Intel Compiler toolset
 --
-
+local atool = premake.abstract.buildtool
 
 local icc_cc = newtool {
 	toolName = 'cc',
@@ -76,21 +76,6 @@ local icc_ar = newtool {
 	redirectStderr = true,
 	targetNamePrefix = 'lib',
 }
-local function decorateLibList(list, startPrefix, systemlibPrefix)
-	if not list or #list == 0 then
-		return ''
-	else
-		local s = startPrefix
-		for _,lib in ipairs(list) do
-			if path.containsSlash(lib) then
-				s = s..' '..lib
-			else
-				s = s..' '..systemlibPrefix..lib
-			end
-		end
-		return s
-	end
-end
 local icc_link = newtool {
 	toolName = 'link',
 	binaryName = 'icpc',
@@ -103,13 +88,14 @@ local icc_link = newtool {
 		libdirs 		= '-L',
 		output 			= '-o',
 		rpath			= '-Wl,-rpath=',
+		linkoptions		= '',
 	},
 	suffixes = {
 		input 			= ' -Wl,--end-group',
 	},
 	decorateFn = {
-		linkAsStatic	= function(list) return decorateLibList(list, '-Wl,-Bstatic', '-l'); end,
-		linkAsShared	= function(list) return decorateLibList(list, '-Wl,-Bdynamic', '-l'); end,
+		linkAsStatic	= function(list) return atool.decorateLibList(list, '-Wl,-Bstatic', '-l'); end,
+		linkAsShared	= function(list) return atool.decorateLibList(list, '-Wl,-Bdynamic', '-l'); end,
 	},
 	
 	getsysflags = function(self, cfg)

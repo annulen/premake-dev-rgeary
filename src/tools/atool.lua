@@ -129,12 +129,8 @@ function tool:decorateInputs(cfg, outputVar, inputVar)
 		rv.buildoptions = self:decorateInput('buildoptions', cfg.buildoptions, true)
 	end
 	if self.isLinker then
-		cfg.linkoptions = cfg.linkoptions or {}
-		cfg.libdirs = cfg.libdirs or {}
-		
-		table.sort(cfg.linkoptions)
-		rv.linkoptions = self:decorateInput('linkoptions', cfg.linkoptions, true)
-		rv.libdirs = self:decorateInput('libdirs', cfg.linkoptions, true)
+		rv.ldflags = self:decorateInput('linkoptions', cfg.ldflags or {}, true)
+		rv.libdirs = self:decorateInput('libdirs', cfg.libdirs or {}, true)
 	end
 
 	local output = self:decorateInput('output', outputVar, true)
@@ -349,4 +345,20 @@ function premake.tools.newtool(toolDef)
 	end  
 	
 	return t
+end
+
+function tool.decorateLibList(list, startPrefix, systemlibPrefix, returnIfEmpty)
+	if not list or #list == 0 then
+		return (returnIfEmpty or '')
+	else
+		local s = startPrefix
+		for _,lib in ipairs(list) do
+			if path.containsSlash(lib) then
+				s = s..' '..lib
+			else
+				s = s..' '..systemlibPrefix..lib
+			end
+		end
+		return s
+	end
 end
