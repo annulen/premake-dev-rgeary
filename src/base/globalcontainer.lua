@@ -18,6 +18,13 @@
 --
 	function globalContainer.bakeall()
 	
+		local cfgNameList = Seq:new(solution.list):select('configurations'):flatten():unique()
+		if cfgNameList:count() == 1 then
+			print("Building configuration "..cfgNameList:first().." ...")
+		else
+			print("Building configurations : "..cfgNameList:mkstring(', ').." ...")
+		end
+		
 		-- Bake all real projects
 		local result = {}
 		for i,prj in ipairs(globalContainer.allReal) do

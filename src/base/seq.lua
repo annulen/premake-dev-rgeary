@@ -9,7 +9,9 @@ local SeqMT = {
 }
 local nextUID = 1000		-- debugging
 
+--
 -- Sequence for iterating over a table, or just cloning another sequence
+--
 function Seq:new(t, optValue)
 	local s = {}
 	if t == nil then
@@ -58,12 +60,15 @@ function Seq:new(t, optValue)
 	return setmetatable( s, SeqMT )
 end
 
+--
 -- seq equivalent of ipairs. Iterates over the numerical keyed arguments in a table
+--
 function Seq:ipairs(t)
 	local s = Seq:new(nil)
 	if (not t) or (#t==0) then
 		return s
 	end
+	if type(t) ~= 'table' then error('Expected table') end
 	s.iterate = function()
 		local i = 0
 		return function()
@@ -99,9 +104,10 @@ end
 
 function Seq:mkstring(delimiter)
 	rv = nil
+	delimiter = delimiter or ' '
 	for _,v in self:each() do
 		if rv then
-			rv = rv .. ' ' .. v
+			rv = rv .. delimiter .. v
 		else
 			rv = v
 		end
@@ -109,7 +115,9 @@ function Seq:mkstring(delimiter)
 	return rv or ''
 end
 
+--
 -- note : Condition is on the value, not (key,value)
+--
 function Seq:where(cond)
 	local s = Seq:new(self)
 	s.iterate = function()
@@ -128,7 +136,9 @@ function Seq:where(cond)
 	return s
 end
 
+--
 -- Condition is on (key,value)
+--
 function Seq:whereK(cond)
 	local s = Seq:new(self)
 	s.iterate = function()
@@ -146,22 +156,70 @@ function Seq:whereK(cond)
 	end
 	return s
 end
+
+--
+-- Select on each value
+--
 function Seq:select(selector)
 	local s = Seq:new(self)
+	
+	local selectorFn
+	if type(selector) == 'function' then
+		selectorFn = selector
+	else
+		selectorFn = function(v) 
+			if type(v) == 'table' then 
+				return v[selector] 
+			end
+		end
+	end
+	
 	s.iterate = function()
 		-- setup
 		local iter = self.iterate()
 		-- moveNext
 		return function()
 			for i,v in iter do
-				return i, selector(v)
+				return i, selectorFn(v)
 			end
 		end
 	end
 	return s
 end
 
+--
+-- Select on each key
+--
+function Seq:selectKey(selector)
+	local s = Seq:new(self)
+	
+	local selectorFn
+	if type(selector) == 'function' then
+		selectorFn = selector
+	else
+		selectorFn = function(v) 
+			if type(v) == 'table' then 
+				return v[selector] 
+			end
+		end
+	end
+	
+	s.iterate = function()
+		-- setup
+		local iter = self.iterate()
+		-- moveNext
+		return function()
+			for k,v in iter do
+				return k, selectorFn(k)
+			end
+		end
+	end
+	return s
+end
+
+--
 -- Skips the next n values
+--
 function Seq:skip(n)
 	local s = Seq:new(self)
 	s.iterate = function()
@@ -183,7 +241,9 @@ function Seq:skip(n)
 	return s
 end
 
+--
 -- Returns the first n values
+--
 function Seq:take(n)
 	local s = Seq:new(self)
 	s.iterate = function()
@@ -203,14 +263,18 @@ function Seq:take(n)
 	return s
 end
 
+--
 -- Returns the first value
+--
 function Seq:first()
 	local iter = self.iterate()
 	local k,v = iter()
 	return v
 end
 
+--
 -- Remove any element in the string/sequence/set vs
+--
 function Seq:except(exceptValues)
 	if exceptValues == nil then
 		return self:where(function(v) return v ~= nil; end)
@@ -220,17 +284,23 @@ function Seq:except(exceptValues)
 	end
 end
 
+--
 -- Prepend a string to each element
+--
 function Seq:prependEach(prepend)
 	return self:select(function(v) return prepend .. v; end)
 end
 
+--
 -- Append a string to each element
+--
 function Seq:appendEach(append)
 	return self:select(function(v) return v .. append; end)
 end
 
+--
 -- Iterate over the keys in a sequence
+--
 function Seq:getKeys()
 	local s = Seq:new(self)
 	s.iterate = function()
@@ -246,7 +316,9 @@ function Seq:getKeys()
 	return s
 end
 
+--
 -- concatenate sequence
+--
 function Seq:concat(seq2)
 	seq2 = Seq.toSeq(seq2)
 	
@@ -279,18 +351,25 @@ function Seq:concat(seq2)
 	return s
 end
 
+--
 -- concatenate index sequence
+--
 function Seq:iconcat(seq2)
 	return self:concat(Seq:ipairs(seq2))
 end
 
 
+--
 -- prepend a sequence, opposite of concat
+--
 function Seq:prepend(seq2, optValue)
 	seq2 = Seq.toSeq(seq2, optValue)
 	return seq2:concat(self)
 end
 
+--
+-- Convert a sequence to a table
+--
 function Seq:toTable()
 	local t = {}
 	for k,v in self:each() do
@@ -299,7 +378,20 @@ function Seq:toTable()
 	return t
 end
 
--- Returns boolean
+--
+-- Convert a sequence to a set
+--
+function Seq:toSet()
+	local t = {}
+	for k,v in self:each() do
+		t[v] = v
+	end
+	return t
+end
+
+--
+-- Returns true if the sequence contains a value
+--
 function Seq:contains(value)
 	for k,v in self:each() do
 		if k == value or v == value then
@@ -309,8 +401,10 @@ function Seq:contains(value)
 	return false
 end
 
+--
 -- orderBy will put key/values in ascending order as defined by orderFn
 -- orderFn takes (key, value) parameters, and returns an integer
+--
 function Seq:orderBy(orderFn)
 	--untested
 	local function compFn(a,b) return orderFn(a.key,a.value) < orderFn(b.key, b.value); end 	
@@ -333,7 +427,90 @@ function Seq:orderBy(orderFn)
 	return Seq:new(tSorted)
 end
 
+--
+-- Flatten { { a }, { b, c } } in to { a, b, c }. Similar to C# SelectMany
+--
+function Seq:flatten()
+	local s = Seq:new(self)
+	s.iterate = function()
+		-- setup
+		local iter = self.iterate()
+		local iter2
+		-- moveNext
+		return function()
+			k,v = iter()
+			local loop = true
+			while loop do
+				loop = false
+				if not k then
+					if iter2 then
+						-- step out
+						iter = iter2
+						iter2 = nil
+						k,v = iter()
+					else
+						return nil
+					end
+				end
+				
+				if not iter2 then 
+					if v and type(v) == 'table' then
+						-- step in
+						if Seq.isSeq(v) then
+							iter2 = iter
+							iter = v.iterate()
+							k,v = iter()
+						else
+							iter2 = iter
+							iter = Seq:new(v).iterate()
+							k,v = iter()
+						end
+						loop = true
+					end
+				end
+			end
+
+			return k, v
+		end
+	end
+	return s
+end
+
+--
+-- Return sequence of unique values
+--
+function Seq:unique()
+	local tSet = {}
+	local t = {}
+	for k,v in self:each() do
+		if not tSet[v] then
+			tSet[v] = 1
+			table.insert(t, v)		-- preserve ordering
+		end
+	end
+
+	local s = Seq:new(t)
+	return s
+end
+
+--
+-- Return the number of elements in the sequence
+--
+function Seq:count()
+	if self.__count then
+		return self.__count
+	end
+	local c = 0
+	for k,v in self.iterate() do
+		c = c + 1
+	end
+	self.__count = c
+	return c	
+end
+
+--
 -- Return the maximum value in a sequence, assume #value for non number types
+--
 function Seq:max()
 	local hasValues = false 
 	local maxValue = -9e99

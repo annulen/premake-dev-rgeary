@@ -214,9 +214,9 @@
 		-- next-gen actions; this code will go away when everything has been
 		-- ported to the new API
 		if not action.ishelp then
-			print("Building configurations...")
 			timer.start('Bake configurations')
 			if not action.isnextgen then
+				print("Building configurations...")
 				premake.bake.buildconfigs()		
 				ok, err = premake.checkprojects()
 				if (not ok) then error("Error: " .. err, 0) end
