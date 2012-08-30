@@ -447,8 +447,9 @@ local tmr = timer.start('ninja.writeToolsets')
 		local toolsetName = cfg.toolset
 		
 		if not toolsetName or toolsetName == '' then
-			printDebug('Toolset not specified for project ' .. cfg.project.name .. ' configuration ' .. cfg.shortname..'. Using default')
-			toolsetName = 'icc'
+			cfg.toolset = 'gcc'
+			printDebug('Toolset not specified for project ' .. cfg.project.name .. ' configuration ' .. cfg.shortname..'. Using '..cfg.toolset)
+			toolsetName = cfg.toolset
 		end 
 		
         local toolset = premake.tools[toolsetName]
@@ -487,6 +488,12 @@ local tmr = timer.start('ninja.writeToolsets')
 			toolBin = string.replace(toolBin, toolDir, ninja.escVarName(toolDirN))
 		    
 		    local toolVars = {}
+			
+			for _,v in ipairs(toolInputs) do
+		    	-- For numbered parameters, put it directly on to the start of the command line
+	    		table.insert( toolVars, v )
+		    end
+
 		    for k,v in pairs(toolInputs) do
 		    	
 		    	-- Extract variables with names as build variables
@@ -511,11 +518,6 @@ local tmr = timer.start('ninja.writeToolsets')
 			    	end
 			    end
 			end
-			
-			for _,v in ipairs(toolInputs) do
-		    	-- For numbered parameters, put it directly on to the end of the command line
-	    		table.insert( toolVars, v )
-		    end
 		    
 			_pt('rule ' .. toolName)
 				local cmdLine = tool:getCommandLine(toolBin, toolVars)

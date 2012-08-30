@@ -70,7 +70,9 @@
 		-- Store the filter terms in the configuration (i.e. buildcfg, platform)
 		cfg.terms = casedTerms
 		for key, value in pairs(filterTerms) do
-			cfg[key] = value
+			if type(key) ~= 'number' then
+				cfg[key] = value
+			end
 		end
 		
 		return cfg

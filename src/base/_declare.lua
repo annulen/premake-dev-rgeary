@@ -23,5 +23,6 @@
 	premake5.project = { }
 	premake5.oven = { }
 	premake.solution = { }
+	premake.keyedblocks = { }
 	
 	premake.cache = {}
