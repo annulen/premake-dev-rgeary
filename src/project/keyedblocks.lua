@@ -235,10 +235,7 @@ function keyedblocks.getfield(obj, keywords, fieldName, dest)
 			
 			if kb.__uses then
 				for useProjName,useProj in pairs(kb.__uses) do
-					if useProj.hasBakedUsage then
-						error('Usage '.._useProj.name..' is unbaked')
-					end
-					--globalContainer.bakeUsageProject(useProj)
+					globalContainer.bakeUsageProject(useProj)
 					findValues(useProj.keyedblocks)
 				end
 			end
