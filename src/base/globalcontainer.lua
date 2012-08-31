@@ -182,9 +182,9 @@
 -- The path is built from these choices, in order:
 --
 --   [1] -> the objects directory as set in the config
---   [2] -> [1] + the platform name
+--   [2] -> [1] + the project name
 --   [3] -> [2] + the build configuration name
---   [4] -> [3] + the project name
+--   [4] -> [3] + the platform name
 --
 
 	function globalContainer.bakeobjdirs(allProjects)
@@ -194,17 +194,17 @@
 			
 			local dir = path.getabsolute(path.join(project.getlocation(cfg.project), cfg.objdir or "obj"))
 			table.insert(dirs, dir)
+
+			dir = path.join(dir, cfg.project.name)
+			table.insert(dirs, dir)
+			
+			dir = path.join(dir, cfg.buildcfg)
+			table.insert(dirs, dir)
 			
 			if cfg.platform and cfg.platform ~= '' then
 				dir = path.join(dir, cfg.platform)
 				table.insert(dirs, dir)
 			end
-			
-			dir = path.join(dir, cfg.buildcfg)
-			table.insert(dirs, dir)
-
-			dir = path.join(dir, cfg.project.name)
-			table.insert(dirs, dir)
 			
 			return dirs
 		end
