@@ -26,10 +26,10 @@ function enabled.start(name)
 	if not enabled.order[name] then
 		table.insert(enabled.order, name)
 		enabled.order[name] = 1
+		enabled.totals[name] = { 0.0, 0.0, 0 }
 	end
-	enabled.totals[name] = enabled.totals[name] or { 0.0, 0.0, 0 }
 	local t = os.clock()
-	timer.startTime[name] = t
+	table.insert( timer.startTime, t )
 	return name
 end
 
@@ -45,11 +45,11 @@ function enabled.stop(name_)
 	if name_ and name ~= name_ then
 		error('Mismatched timer.stop. Expected '..name..' got '.. (name_ or '(nil)'))
 	end
-	local startTime = enabled.startTime[name]
+	local startTime = table.remove( enabled.startTime )
 	local childTime = table.remove( enabled.stackChildTime )
 
 	local diff = endTime - startTime
-	local totals = enabled.totals[name] or { 0.0, 0.0, 0 }
+	local totals = enabled.totals[name]
 	enabled.totals[name] = { totals[1] + diff, totals[2] + childTime, totals[3] + 1 }
 	if #enabled.stackChildTime > 0 then
 		-- add the time to the parent's child time
