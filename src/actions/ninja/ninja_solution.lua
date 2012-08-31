@@ -525,11 +525,7 @@ local tmr = timer.start('ninja.writeToolsets')
 				if depfileName then
 				_pt('  depfile = ' .. depfileName )
 				end
-				if tool.toolName == 'cc' or tool.toolName == 'cxx' then
-					_pt('  description = ' .. tool.toolName.. ' $in')
-				else
-					_pt('  description = ' .. tool.toolName.. ' $out')
-				end
+				_pt('  description = ' ..tool.toolName.. ' $out')
 			_pt('')
 		end
 	end

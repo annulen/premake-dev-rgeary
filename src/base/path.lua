@@ -331,6 +331,7 @@ timer.stop(tmr)
 --
 
 	function path.join(...)
+local tmr = timer.start('path.join')
 		local numargs = select("#", ...)
 		if numargs == 0 then
 			return "";
@@ -351,7 +352,8 @@ timer.stop(tmr)
 				end
 			end
 		end
-		
+
+timer.stop(tmr)		
 		return table.concat(allparts, "/")
 	end
 

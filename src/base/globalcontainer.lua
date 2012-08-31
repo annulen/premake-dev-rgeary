@@ -43,14 +43,12 @@
 		end		
 				
 		-- expand all tokens (must come after baking objdirs)
-		local tmr=timer.start('expandTokens')
 		for i,prj in ipairs(globalContainer.allReal) do
 			oven.expandtokens(prj, "project")
 			for cfg in project.eachconfig(prj) do
 				oven.expandtokens(cfg, "config")
 			end
 		end
-		timer.stop(tmr)
 		
 		-- Bake all solutions
 		solution.bakeall()
@@ -160,6 +158,7 @@
 				globalContainer.bakeUsageProject(useProj)
 			
 				-- Merge in the usage requirements from the usage project
+				--  .getfield may recurse in to globalContainer.bakeUsageProject if the usage project has unbaked "uses"
 				keyedblocks.getfield(useProj, cfgFilterTerms, nil, cfg)
 			end -- each use
 			
