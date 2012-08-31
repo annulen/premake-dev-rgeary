@@ -24,9 +24,9 @@
 
 		if cfg.project and cfg.kind and cfg.kind ~= 'None' then
 			cfg.buildtarget = config.gettargetinfo(cfg)
-			oven.expandtokens(cfg, nil, nil, "buildtarget")
+			oven.expandtokens(cfg, nil, nil, "buildtarget", true)
 			cfg.linktarget = config.getlinkinfo(cfg)
-			oven.expandtokens(cfg, nil, nil, "linktarget")
+			oven.expandtokens(cfg, nil, nil, "linktarget", true)
 		end
 		
 	end

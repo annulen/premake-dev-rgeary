@@ -133,43 +133,65 @@
 --    Optional; if set, only this field will be expanded.
 --
 
-	function oven.expandtokens(cfg, scope, filecfg, fieldname)
+	function oven.expandtokens(cfg, scope, filecfg, fieldname, delayedExpand)
+local tmr=timer.start('oven.expandTokens')
+
 		-- File this under "too clever by half": I want path tokens (targetdir, etc.)
 		-- to expand to relative paths, but it is easier to work with absolute paths 
 		-- everywhere else. So create a proxy object with an attached metatable that
 		-- will translate any path fields from absolute to relative on the fly.
 		local _cfg = cfg
-		local cfgproxy = {}
-		setmetatable(cfgproxy, {
-			__index = function(cfg, key)
-				-- pass through access to non-Premake fields
-				local field = premake.fields[key]
-				if field and field.kind == "path" then
-					return premake5.project.getrelative(_cfg.project, _cfg[key])
-				end				
-				return _cfg[key]
-			end	
-		})
-			
-		-- build a context for the tokens to use
-		local context = {
-			sln = cfg.solution,
-			prj = cfg.project,
-			cfg = cfgproxy,
-			file = filecfg
-		}
+		local context = _cfg._expandTokensContext
 		
-		function expand(target, field)
+		if not context then 
+			local cfgproxy = {}
+			setmetatable(cfgproxy, {
+				__index = function(cfg, key)
+					-- pass through access to non-Premake fields
+					local field = premake.fields[key]
+					if field and field.kind == "path" then
+						return premake5.project.getrelative(_cfg.project, _cfg[key])
+					end				
+					return _cfg[key]
+				end	
+			})
+				
+			-- build a context for the tokens to use
+			context = {
+				sln = cfg.solution,
+				prj = cfg.project,
+				cfg = cfgproxy,
+				file = filecfg,
+				cache = {},
+			}
+			_cfg._expandTokensContext = context
+		end
+		
+		local function expand(target, field)
 			local value = target[field]
 			if type(value) == "string" then
 				target[field] = oven.expandvalue(value, context)
 			else
-				for key in pairs(value) do
-					expand(value, key)
+				-- delayed expand, only expand if you need it. 
+				-- Makes a small perf increase, remove if it causes problems, eg. because you're unable to call ipairs(t)
+				if delayedExpand then
+					local proxyTable = {}
+					local mt = {}
+					mt.__index = function(self, key)
+						expand(value, key)
+						self[key] = value[key]
+						return value[key]
+					end
+					setmetatable(proxyTable, mt)
+					target[field] = proxyTable
+				else
+					for key in pairs(value) do
+						expand(value, key)
+					end
 				end
 			end
 		end
-
+				
 		local target = filecfg or cfg
 		if fieldname then
 			if target[fieldname] then
@@ -185,14 +207,23 @@
 				end
 			end
 		end
+timer.stop(tmr)		
 	end
 
 
 	function oven.expandvalue(value, context)
-		local location = (context.sln.name or '') ..'/'..(context.prj.name or '')..'/'..(context.cfg.shortname or '')
-		
+		-- early out makes the function 40% faster
+		if not value:find('%{',1,true) then
+			return value
+		end
+	
+local tmr=timer.start('oven.expandvalue')
 		-- function to do the work of replacing a single token
 		local expander = function(token)
+			if context.cache[token] then
+				return context.cache[token]
+			end
+			
 			-- convert the token into a function to execute
 			local func, err = loadstring("return " .. token)
 			if not func then
@@ -208,20 +239,24 @@
 			if not err or not result then
 				return nil, "Invalid token '" .. token .. "'"
 			end
+			context.cache[token] = result
+
 			return result
 		end
-
+		
 		-- keep expanding tokens until they are all handled
 		repeat
 			value, count = string.gsub(value, "%%{(.-)}", function(token)			
 				local result, err = expander(token)
 				if not result then
+					local location = (context.sln.name or '') ..'/'..(context.prj.name or '')..'/'..(context.cfg.shortname or '')
 					error(err .. ' in ' .. value..' at '..location, 0)
 				end
 				return result
 			end)
 		until count == 0
 
+timer.stop(tmr)
 		return value
 	end
 
