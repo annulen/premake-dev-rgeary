@@ -291,7 +291,7 @@ function tool:getCompileOutput(cfg, fileName, uniqueSet)
 	local outputFilename
 	local fileExt = path.getextension(fileName):lower()
 	
-	if (self.extensionsForCompiling and self.extensionsForCompiling[fileExt]) or cfg.language == self.language then
+	if (self.extensionsForCompiling and self.extensionsForCompiling[fileExt]) then
 	
 		local baseName = path.getbasename(fileName)
 		local objName = baseName .. self.objectFileExtension

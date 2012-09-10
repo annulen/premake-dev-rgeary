@@ -304,17 +304,13 @@ function ninja.writeProjectTargets(prj, scope)
 				-- See if it's worth creating extra build vars
 				makeShorterBuildVars(scope, extraTargets, numFilesToCompile)
 				
-				-- Check if we need to overridde the compile tool
-				local fileCompileTool = compileTool
-				local fileCompileOverrides = compileOverrides
+				-- Check if we need to override the compile tool based on the extension
 				local fileExt = fileCfg.extension
+				local fileCompileTool = toolset:getCompileTool(cfg, fileExt)
+				local fileCompileOverrides = compileOverrides
 				
-				if compileTool then
-					if compileTool.extensionsForCompiling 
-						and not cfg.language 
-						and not compileTool.extensionsForCompiling[fileExt] then
-						fileCompileTool, fileCompileOverrides = ninja.getCompileTool(cfg, fileExt, scope)
-					end
+				if compileTool ~= fileCompileTool then
+					fileCompileTool, fileCompileOverrides = ninja.getCompileTool(cfg, fileExt, scope)
 					
 					-- Check if we can compile the file, and get the object file name
 					outputFile = fileCompileTool:getCompileOutput(cfg, fileName, uniqueObjNameSet)

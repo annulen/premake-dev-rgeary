@@ -16,7 +16,7 @@ local gcc_cc = newtool {
 	language = "C",
 
 	-- possible inputs in to the compiler
-	extensionsForCompiling = { ".cc", ".cpp", ".cxx", ".c", },
+	extensionsForCompiling = { ".c", },
 	
 	flagMap = {
 		AddPhonyHeaderDependency = "-MP",	 -- used by makefiles
@@ -83,6 +83,7 @@ local gcc_cxx = newtool {
 	language = "C++",
 	binaryName = 'g++',
 	fixedFlags = '-c -xc++',
+	extensionsForCompiling = { ".cc", ".cpp", ".cxx", ".c" },
 	flagMap = table.merge(gcc_cc.flagMap, {
 		NoExceptions   = "-fno-exceptions",
 		NoRTTI         = "-fno-rtti",

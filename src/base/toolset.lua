@@ -49,16 +49,16 @@ end
 --  for different tool names for different configurations
 --	
 function toolset:getCompileTool(cfg, fileExt)
-	if fileExt then
-		if self.toolsByExt[fileExt] then
-			return self.toolsByExt[fileExt]
-		end
-	end
-	
     if cfg.project.language == "C" then
 	    return self.tools['cc']
 	else
-		return self.tools['cxx']
+		if fileExt then
+			if self.toolsByExt[fileExt] then
+				return self.toolsByExt[fileExt]
+			end
+		end
+
+		return nil
 	end	    	
 end
 
@@ -122,6 +122,10 @@ function premake.tools.newtoolset(toolsetDef)
 					t.toolsByExt[k] = tool
 				end
 			end
+		end
+		-- Special case, make sure it's the default
+		if t.tools['cc'] and t.tools['cc'].extensionsForCompiling['.c'] then
+			t.toolsByExt['.c'] = t.tools['cc']
 		end
 	end 
 	

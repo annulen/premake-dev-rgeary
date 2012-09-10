@@ -81,7 +81,7 @@ local icc_cxx = newtool {
 	language = "C++",
 
 	-- possible inputs in to the compiler
-	extensionsForCompiling = { ".cc", ".cpp", ".cxx", },
+	extensionsForCompiling = { ".cc", ".cpp", ".cxx", ".c" },
 	
 	flagMap = table.merge(icc_cc.flagMap, {
 		NoExceptions   = "-fno-exceptions",

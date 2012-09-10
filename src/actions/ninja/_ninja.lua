@@ -42,7 +42,7 @@
 			if slnList:count() > 1 then
 				printDebug('Building solutions : '..slnList:select('name'):mkstring(', '))
 			else 
-				printDebug('Building solution : '..slnList:first())
+				printDebug('Building solution : '..slnList:first().name)
 			end
 		end,
 		
