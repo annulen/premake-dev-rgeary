@@ -65,8 +65,14 @@ function enabled.print()
 	for _,name in ipairs(enabled.order) do
 		local timeT = enabled.totals[name]
 		local selfTime = timeT[1]-timeT[2]
-		printf(sName.." : %.4f    (self %.4f  child %.4f   calls %d)", name, timeT[1], selfTime, timeT[2], timeT[3])
 		totalTime = totalTime + selfTime
+	end	
+	for _,name in ipairs(enabled.order) do
+		local timeT = enabled.totals[name]
+		local selfTime = timeT[1]-timeT[2]
+		local selfPct = selfTime/totalTime * 100.0 
+		local totalPct = timeT[1]/totalTime * 100.0
+		printf(sName.." : %.4f (%2.f%%)   self %.4f (%2.f%%)  child %.4f   calls %d", name, timeT[1], totalPct, selfTime, selfPct, timeT[2], timeT[3])
 	end
 	printf(sName.." : %.4f", 'Total', totalTime)
 end
