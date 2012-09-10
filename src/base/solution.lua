@@ -116,9 +116,26 @@
 		-- build a master list of solution-level configuration/platform pairs
 		result.configs = solution.bakeconfigs(result)
 		
+		-- flatten includesolution
+		if sln.includesolution then
+			local includeList = {}
+			for _,child in ipairs(sln.includesolution) do
+				if child == '*' then
+					for _,s in ipairs(solution.list) do
+						if s.name ~= sln.name then
+							table.insert( includeList, s.name )
+						end
+					end
+				else
+					table.insert( includeList, child )
+				end
+			end
+			result.includesolution = includeList
+		end
+		
 		return result
 	end
-
+	
 --
 -- Create a list of solution-level build configuration/platform pairs.
 --
@@ -141,8 +158,9 @@
 		-- fill in any calculated values
 		for _, cfg in ipairs(configs) do
 			premake5.config.bake(cfg)
-			ptypeSet( cfg, 'configsln' )
+			ptypeSet( cfg, 'configs' )
 		end
+		oven.expandtokens(sln, "solution", nil, "ninjaBuildDir", false)
 		
 		return configs
 	end
@@ -163,7 +181,6 @@
 			end
 		end
 	end
-
 
 --
 -- Iterate over the configurations of a solution.
@@ -353,24 +370,5 @@
 			sln = solution.bake(sln)
 		end
 		return sln.projects[idx]
-	end
-	
---
--- Return a list of all solution includes (recurse through tree)
--- 
-	function solution.getAllSolutionIncludes(slnName, result)
-		local sln = solution.list[slnName]
-		if not sln then
-			error('Unknown solution include : '..slnName)
-		end
-		result = result or {}
-		result[slnName] = 1
-		
-		if sln.includesolution then
-			for _,cSln in ipairs(sln.includesolution) do
-				solution.getAllSolutionIncludes(cSln.name, result)
-			end
-		end
-		return result
 	end
 	

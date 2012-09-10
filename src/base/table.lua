@@ -230,6 +230,19 @@
 		return result
 	end
 
+--
+-- Returns a copy of table t without the keys in list removeKeys
+-- 
+	function table.except(t, removeKeys)
+		local rv = {}
+		removeKeys = toSet(removeKeys)
+		for k,v in pairs(t) do
+			if not removeKeys[k] then
+				rv[k] = v
+			end
+		end
+		return rv
+	end
 
 
 --
@@ -269,5 +282,29 @@
 		end
 		return result
 	end
-	
+
+--
+-- Translates the values contained in a keyed table. Used for flags
+--
+	function table.translateV2(t, translation)
+		local result = { }
+		if( translation ~= nil ) then
+			for k,v in pairs(t) do
+				local tvalue
+				if type(translation) == "function" then
+					tvalue = translation(value)
+				elseif translation[k] then
+					if type(translation[k]) == 'string' then
+						tvalue = translation[k]
+					else
+						tvalue = translation[k][v]
+					end
+				end
+				if (tvalue) then
+					table.insert(result, tvalue)
+				end
+			end
+		end
+		return result
+	end	
 		

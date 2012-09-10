@@ -12,20 +12,18 @@
 	local project = premake5.project
 	local clean = premake.actions.clean
 	local config = premake5.config
-	ninja.buildFileHandle = nil
+	ninja.buildFileHandle = {}
 	local slnDone = {}
 	local globalScope = {}
 	
-	ninjaRoot = ninjaRoot or repoRoot
-	
 --
--- The Ninja build action
+-- The Ninja build action. Currently only tested with C++
 --
 	newaction {
 		trigger         = "ninja",
 		shortname       = "Ninja Build",
-		description     = "Generate ninja files for Ninja Build.", -- Currently only tested with C++",
-
+		description     = { "Generate ninja files for Ninja Build. Default action will place ninja files in the targetdir", }, 
+							--"'ninja local' will place ninja files in the source tree"},
 		-- temporary
 		isnextgen = true,
 		
@@ -40,17 +38,20 @@
 		buildFileHandle = nil,
 		
 		onStart = function()
-			ninjaRoot = ninjaRoot or path.getabsolute(_WORKING_DIR)
-			ninja.openFile(path.join(ninjaRoot, 'build.ninja'))
-			globalScope = ninja.newScope('build.ninja')
+			local slnList = Seq:ipairs(solution.list)
+			if slnList:count() > 1 then
+				printDebug('Building solutions : '..slnList:select('name'):mkstring(', '))
+			else 
+				printDebug('Building solution : '..slnList:first())
+			end
 		end,
 		
 		onSolution = function(sln)
 			ninja.onSolution(sln.name)
 		end,
 		
-		onSolutionEnd = function()
-			ninja.onSolutionEnd()
+		onEnd = function()
+			ninja.onEnd()
 		end,
 		
 		execute = function()
@@ -59,60 +60,98 @@
 		
 		oncleansolution = function(sln)
 			clean.file(sln, ninja.getSolutionBuildFilename(sln))
-			clean.file(sln, ninja.getDefaultBuildFilename(sln))
+			clean.file(sln, path.join(sln.basedir, 'build.ninja'))
+			clean.file(sln, path.join(repoRoot, 'build.ninja'))
 		end,
 	}
 	
 	function ninja.onSolution(slnName)
 		local sln = solution.list[slnName]
-		-- Build included solutions first
+		if not sln then
+			print('Could not find solution '..slnName)
+			return
+		end
 		
+		-- Build included solutions first
 		if not slnDone[slnName] then
 			if sln.includesolution then
 				for _,v in ipairs(sln.includesolution) do
 					ninja.onSolution(v)
 				end
 			end
-							
+
+			-- builddir is where the build log & main ninja file is placed 
+			repoRoot = repoRoot or path.getabsolute(_WORKING_DIR)
+			if (not ninja.builddir) then
+				ninja.builddir = iif( sln.ninjaBuildDir, sln.ninjaBuildDir, repoRoot)
+				ninja.builddir = ninja.builddir:replace('$root',repoRoot)
+				ninja.checkIgnoreFiles(ninja.builddir)
+			end
+			
+			ninja.openFile(path.join(ninja.builddir, 'build.ninja'))
 			ninja.generateSolution(sln, globalScope)
-			--premake.generate(sln, ninja.getSolutionBuildFilename(sln), ninja.generateSolution)
-			--premake.generate(sln, ninja.getDefaultBuildFilename(sln), ninja.generateDefaultBuild) 
+
+			-- Must come after the main build.ninja as we need to write out the default build statements
+			if sln.basedir ~= ninja.builddir then
+				ninja.checkIgnoreFiles(sln.basedir)
+				ninja.generateDefaultBuild(sln, sln.basedir, globalScope)
+			end 
+
 			slnDone[slnName] = true
 		end
 	end
 	
-	function ninja.onSolutionEnd()
+	-- After the last solution
+	function ninja.onEnd()
+		local f = ninja.openFile(path.join(ninja.builddir, 'build.ninja'))
 		ninja.writeFooter(globalScope)
-		ninja.closeFile()
+		ninja.closeFile(f)
+
+		-- Write a default build for the repoRoot		
+		if repoRoot ~= ninja.builddir and (not ninja.scope[repoRoot]) then
+			ninja.checkIgnoreFiles(repoRoot)
+			--ninja.generateDefaultBuild(nil, repoRoot, globalScope)
+		end 
+		
 		slnDone = {}
 	end
 	
 	function ninja.openFile(filename)
-		if ninja.buildFileName ~= filename then
-			ninja.closeFile()
-		end
-		if not ninja.buildFileHandle then
+		if not ninja.buildFileHandle[filename] then
 			ninja.buildFileName = filename
-			ninja.buildFileHandle = premake.generateStart(filename)
-			return true
+			ninja.buildFileHandle[filename] = premake.generateStart(filename, true)
+			globalScope = ninja.newScope(filename)
+		else
+			io.output(ninja.buildFileHandle[filename])
+			globalScope = ninja.scope[filename]
 		end
-		return false
+		return filename
 	end
 	
-	function ninja.closeFile()
-		if ninja.buildFileHandle then
-			premake.generateEnd(ninja.buildFileHandle)
+	function ninja.closeFile(filename)
+		if filename ~= ninja.buildFileName then
+			error('Close files in order. Expected '..ninja.buildFileName)
 		end
-		ninja.buildFileHandle = nil
+		if filename and ninja.buildFileHandle[filename] then
+			local h = ninja.buildFileHandle[filename]
+			
+			if _OPTIONS['debug'] and type(h) == 'userdata' then
+				local fileLen = h:seek('end', 0)
+				local cwd = os.getcwd()
+				
+				if fileLen then
+					printf('Generated %s : %.0f kb', path.getrelative(cwd, filename), fileLen/1024.0)
+				end
+			end
+			
+			premake.generateEnd(h, filename)
+			ninja.buildFileHandle[filename] = nil
+		end
 		ninja.buildFileName = nil
 	end
 
 	function ninja.getSolutionBuildFilename(sln)
 		return path.join(sln.basedir, 'build_'..sln.name..'.ninja')
-	end
-	
-	function ninja.getDefaultBuildFilename(sln)
-		return path.join(sln.basedir, 'build.ninja')
 	end
 	
 	function ninja.onExecute()
@@ -129,6 +168,50 @@
 		elseif args:contains('print') then
 			local printAction = premake.action.get('print')
 			premake.action.call(printAction.trigger)
+		end
+	end
+	
+	function ninja.checkIgnoreFiles(dir)
+		local sourceControls = {
+			{ dir = '.git', ignore = '.gitignore' },
+			{ dir = '.hg',  ignore = '.hgignore'  },
+		}
+		local foundFile = {}
+		
+		if _OPTIONS['automated'] then
+			return
+		end
+		
+		for _,sc in ipairs(sourceControls) do
+			if os.isdir(path.join(dir, sc.dir)) then  
+				
+				local ignoreFile = path.join(dir, sc.ignore)
+				local foundIgnore = false
+				if os.isfile(ignoreFile) then
+					local f = io.open(ignoreFile, "r")
+					for line in f:lines() do
+						if line:find('.ninja',1,true) then
+							foundIgnore = true
+						end
+					end
+					io.close(f)
+				end
+	
+				if not foundIgnore then
+					-- Not found
+					print('Did not find *.ninja in the '..sc.ignore..' file ('..dir..'). Do you want to add it? [Recommended] (Y/n)')
+					local key = io.input():read(1)
+					if key:lower() == 'y' then
+						if os.isfile(ignoreFile) then
+							f = io.open(ignoreFile, "a")
+						else
+							f = io.open(ignoreFile, "w")
+						end
+						f:write('*.ninja\n')
+					end
+					io.close(f)				
+				end
+			end
 		end
 	end
 
@@ -157,11 +240,14 @@ local tmr = timer.start('ninja.getInputFiles')
 				local custom = false
 				
 				for cfg in project.eachconfig(prj) do
-					local filecfg = config.getfileconfig(cfg, filename)
+					local filecfg = config.getfileconfig(cfg, filename) or {}
 					local buildaction = filecfg.buildaction or defaultAction
 					
-					filesPerConfig[cfg][buildaction] = filesPerConfig[cfg][buildaction] or {}
-					table.insert( filesPerConfig[cfg][buildaction], filename)  
+					local t = filesPerConfig[cfg][buildaction] or {}
+					filesPerConfig[cfg][buildaction] = t
+					--table.insert( filesPerConfig[cfg][buildaction], filename)  
+					t[filename] = filecfg
+					table.insert( t, filename )
 					--custom = (filecfg.buildrule ~= nil)
 				end
 				
@@ -221,7 +307,9 @@ timer.stop(tmr)
 		
 		ninja.scope[scopeName] = s
 		
-		s:set('root', ninjaRoot)
+		s:set('builddir', ninja.builddir)
+		s:set('root', repoRoot)
+		s:set('tmp', '')
 		
 		return s
 	end
@@ -247,6 +335,7 @@ timer.stop(tmr)
 		end		
 	end
 	
+	-- returns varName, alreadyExists
 	function ninjaVar:set(varName, value, alternateVarNames)
 		local varNameM = varName
 		local i = 1
@@ -288,6 +377,7 @@ timer.stop(tmr)
 		return self.nameToValue[name]
 	end
 
+	-- returns varName, alreadyExists
 	function ninjaVar:getName(value, setNameIfNew)
 		local var = self.valueToName[value]
 		if (not var) and setNameIfNew then
@@ -298,10 +388,12 @@ timer.stop(tmr)
 	
 	-- Substitutes variables in to v, to make the string the smallest size  
 	function ninjaVar:getBest(v)
+		if v == '' then return '' end
+		
 		local tmr = timer.start('ninja.getBest')
 		-- try $root first
-		v = string.replace(v, ninjaRoot, '$root')
-		local bestV = self.valueToName[v] or v
+		v = string.replace(v, repoRoot, '$root')
+		local bestV = self.valueToName[v]
 		--[[
 		local bestV = v
 		
@@ -319,8 +411,11 @@ timer.stop(tmr)
 			end
 		end
 		]]
+		if bestV then
+			v = ninja.escVarName(bestV)
+		end
 		timer.stop(tmr)
-		return bestV
+		return v
 	end
 	
 	function ninjaVar:include(otherScopeName)	
@@ -332,4 +427,21 @@ timer.stop(tmr)
 			self.nameToValue[k] = v
 			self.valueToName[v] = k 
 		end
+	end
+
+	function ninjaVar:getBuildVars(inputs, weight)
+		local rv = {}
+		local createNewVars = iif( weight > 5, 'tmp', nil)
+		for k,v in pairs(inputs or {}) do
+			if not v:startswith('$') then
+				local varName, alreadyExists = self:getName(v, createNewVars)
+				if varName then
+					inputs[k] = ninja.escVarName(varName)
+				end
+				if not alreadyExists then
+					rv[varName] = v
+				end
+			end
+		end
+		return rv
 	end

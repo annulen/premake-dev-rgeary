@@ -53,15 +53,8 @@ function keyedblocks.expandTerms(terms)
 end
 
 -- Generate the keyedblocks from the blocks. obj can be sln, prj or cfg
-function keyedblocks.create(obj, isUsage, usesIncluded)
+function keyedblocks.create(obj, parent)
 	local kbBase = {}
-	
-	-- Prevent infinite recursion
-	usesIncluded = usesIncluded or {}
-	if usesIncluded[obj] then
-		return obj
-	end
-	usesIncluded[obj] = obj
 	
 	-- No need to bake twice
 	if obj.keyedblocks then
@@ -106,25 +99,23 @@ timer.start('keyedblocks.create')
 						error('Unknown field "'..k..'"')
 					end
 					local fieldKind = field.kind
-					if (not isUsage) or (field.usagefield) then
+					
+					-- Recurse on nested 'uses' statements
+					if k == 'uses' then
+						kb.__uses = kb.__uses or {}
 						
-						-- Recurse on nested 'uses' statements
-						if k == 'uses' then
-							kb.__uses = kb.__uses or {}
-							
-							for _,useProjName in ipairs(v) do
-								local usageProj = project.getUsageProject(useProjName)
-								if not usageProj then
-									error('Could not find usage project '..tostring(useProjName))
-								end
-								kb.__uses[useProjName] = usageProj
+						for _,useProjName in ipairs(v) do
+							local usageProj = keyedblocks.getUsage(useProjName)
+							if not usageProj then
+								error('Could not find usage project '..tostring(useProjName))
 							end
-														
-						else
-							-- Include the key/value
-							kb.values = kb.values or {}
-							oven.mergevalue(kb.values, k, fieldKind, v)
+							kb.__uses[useProjName] = usageProj
 						end
+													
+					else
+						-- Include the key/value
+						kb.__values = kb.__values or {}
+						oven.mergefield(kb.__values, k, v)
 					end
 				end
 			end -- each block
@@ -132,8 +123,8 @@ timer.start('keyedblocks.create')
 			if block.removes then
 				for k,v in pairs(block.removes) do
 					if (not ignoreField[k]) and v and (not table.isempty(v)) then
-						kb.removes = kb.removes or {}
-						oven.mergefield(kb.removes, k, v)
+						kb.__removes = kb.__removes or {}
+						oven.mergefield(kb.__removes, k, v)
 					end
 				end
 			end -- block.removes
@@ -141,6 +132,12 @@ timer.start('keyedblocks.create')
 		end -- expTerms
 		
 	end
+	
+	if parent then
+		kbBase.__parent = parent
+	end
+	kbBase.__name = obj.name
+	
 	obj.keyedblocks = kbBase
 	
 timer.stop(tmr)
@@ -148,18 +145,36 @@ timer.stop(tmr)
 	return obj
 end
 
+function keyedblocks.getUsage(name)
+	local usage = project.getUsageProject(name)
+	if not usage then
+		if name:startswith('__solution_') then
+			usage = solution.get(name:sub(12))
+		end
+	end
+	return usage
+end
+
+function keyedblocks.bake(usage)
+	if ptype(usage) == 'project' then
+		globalContainer.bakeUsageProject(usage)
+	else
+		keyedblocks.create(usage)
+	end
+end
+
 function keyedblocks.merge(dest, src)
 	if not src then
 		return
 	end
-	if src.values then
-		for k,v in ipairs(src.values) do
-			oven.mergefield(dest.values, k, v)
+	if src.__values then
+		for k,v in ipairs(src.__values) do
+			oven.mergefield(dest.__values, k, v)
 		end
 	end
 	
 	for k,v in pairs(src) do
-		if k ~= 'values' and k ~= 'uses' then
+		if k ~= '__values' and k ~= 'uses' then
 			dest[k] = dest[k] or {} 
 			keyedblocks.merge(dest[k], v)
 		end
@@ -184,35 +199,49 @@ function keyedblocks.getfield(obj, keywords, fieldName, dest)
 	local terms = {}
 	function getKeywordSet(ws)
 		for _,v in ipairs(ws) do
-			v = v:lower()
-			if v:find('not ') then
-				error("keyword 'not' not supported as a filter")
+			if true or v and type(v) == 'string' and v ~= '' then
+				v = v:lower()
+				if v:find('not ') then
+					error("keyword 'not' not supported as a filter")
+				end
+				if v:find(' or ') then
+					error("keyword 'or' not supported as a filter")
+				end
+				terms[v] = 1
 			end
-			if v:find(' or ') then
-				error("keyword 'or' not supported as a filter")
-			end
-			terms[v] = 1
 		end
 	end
 	getKeywordSet(keywords)
 	
-	-- set of .values structures which apply to 'keywords'
+	-- set of .__values structures which apply to 'keywords'
 	local foundValues = {}
 	-- set of .removes structures which apply to 'keywords'
 	local foundRemoves = {}
 	
-	-- Find the .values & .removes structures which apply to 'keywords'
-	local recurse = {}
+	-- Find the .__values & .removes structures which apply to 'keywords'
+	local accessedBlocks = {}
 	local function findValues(kb)
-		if not kb or recurse[kb] then 
+		if not kb or accessedBlocks[kb] then 
 			return 
 		end
-		recurse[kb] = kb
-		if kb.values then
-			foundValues[kb.values] = kb.values
+		accessedBlocks[kb] = kb
+		
+		-- Apply parent before block
+		if kb.__parent then
+			keyedblocks.bake(kb.__parent)
+			findValues(kb.__parent.keyedblocks)
+		end		
+		
+		if kb.__values then
+			table.insert( foundValues, kb.__values )
+			if kb.__values.usesconfig then
+				for k,v in ipairs(kb.__values.usesconfig) do
+					terms[v] = 1
+				end
+			end 
 		end
-		if kb.removes then
-			foundRemoves[kb.removes] = kb.removes
+		if kb.__removes then
+			table.insert( foundRemoves, kb.__removes )
 		end
 		
 		for term,_ in pairs(terms) do
@@ -232,22 +261,25 @@ function keyedblocks.getfield(obj, keywords, fieldName, dest)
 			if kb[term] then
 				findValues(kb[term])
 			end
+		end
 			
-			if kb.__uses then
-				for useProjName,useProj in pairs(kb.__uses) do
-					globalContainer.bakeUsageProject(useProj)
-					findValues(useProj.keyedblocks)
-				end
+		-- Apply usages after block
+		if kb.__uses then
+			for useProjName,useProj in pairs(kb.__uses) do
+				keyedblocks.bake(useProj)
+				findValues(useProj.keyedblocks)
 			end
 		end
+		
 	end -- findValues
 	
 	findValues(kbBase)
 	
 	-- Filter values structures
 	local rv = dest or {}
-	for _,values in pairs(foundValues) do
-		
+	local isEmpty = true
+	for _,values in ipairs(foundValues) do
+		isEmpty = false
 		if not fieldName then
 		
 			for k,v in pairs(values) do
@@ -260,18 +292,25 @@ function keyedblocks.getfield(obj, keywords, fieldName, dest)
 	end
 	
 	-- Remove values
-	for _,values in pairs(foundRemoves) do
+	for _,values in ipairs(foundRemoves) do
 		if not fieldName then
 			for k,v in pairs(values) do
-				oven.remove(rv, k, v)
+				oven.removefromfield(rv[k], v)
 			end
 		elseif values[fieldName] then
 			oven.remove(rv, fieldName, values[fieldName])
 		end
 	end
 	
-	timer.stop(tmr)	
-	return iif(#foundValues == 0, nil, rv)
+	timer.stop(tmr)
+	
+	if isEmpty then
+		return nil, accessedBlocks
+	elseif fieldName then
+		return rv[fieldName], accessedBlocks
+	else
+		return rv, accessedBlocks
+	end
 end
 
 -- return or create the nested keyedblock for the given term

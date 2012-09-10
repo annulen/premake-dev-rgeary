@@ -149,7 +149,7 @@ local tmr=timer.start('oven.expandTokens')
 				__index = function(cfg, key)
 					-- pass through access to non-Premake fields
 					local field = premake.fields[key]
-					if field and field.kind == "path" then
+					if field and field.kind:contains("path") then
 						return premake5.project.getrelative(_cfg.project, _cfg[key])
 					end				
 					return _cfg[key]
@@ -238,6 +238,9 @@ local tmr=timer.start('oven.expandvalue')
 			local err, result = pcall(func)
 			if not err or not result then
 				return nil, "Invalid token '" .. token .. "'"
+			end
+			if type(result) == 'table' then
+				result = table.concat(result, ' ')
 			end
 			context.cache[token] = result
 
@@ -492,11 +495,23 @@ timer.stop(tmr)
 		-- list values get merged, others overwrite; note that if the 
 		-- values contain tokens they will be modified in the token 
 		-- expansion phase, so important to make copies of objects
-		if fieldkind:endswith("list") then
+		if fieldkind == 'flaglist' then
+			target[fieldname] = oven.mergeflags(target[fieldname] or {}, value)
+		elseif fieldkind:endswith("list") then
 			target[fieldname] = oven.mergetables(target[fieldname] or {}, value)
 		else
 			target[fieldname] = table.deepcopy(value)
 		end
+	end
+	
+--
+-- Merge keyed tables
+--
+	function oven.mergeflags(t, additions)
+		for k,v in pairs(additions) do
+			t[k] = v
+		end			
+		return t
 	end
 
 
@@ -552,6 +567,7 @@ timer.stop(tmr)
 	end
 
 	function oven.removefromfield(field, removes)
+		local tmr = timer.start('oven.removefromfield')
 		if field and removes then
 			for key, pattern in ipairs(removes) do
 				pattern = path.wildcards(pattern):lower()
@@ -569,4 +585,5 @@ timer.stop(tmr)
 				
 			end
 		end
+		timer.stop(tmr)
 	end

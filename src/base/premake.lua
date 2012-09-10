@@ -4,6 +4,14 @@
 -- Copyright (c) 2002-2012 Jason Perkins and the Premake project
 --
 
+-- Global Premake functions
+--  Define these as variables pointing to the functions to allow the user to override them (eg. to specify default behaviour)
+
+	local api = premake.api
+	global = api.global
+	solution = api.solution
+	project = api.project
+	configuration = api.configuration
 
 --
 -- Define some commonly used symbols, for future-proofing.
@@ -89,12 +97,14 @@
 		filename = premake.project.getfilename(obj, filename)
 		local f = premake.generateStart(filename)
 		callback(obj, filename)
-		premake.generateEnd(f)
+		premake.generateEnd(f, filename)
 	end
 
 -- Returns file handle
-	function premake.generateStart(filename)
-		printf("Generating %s...", filename)
+	function premake.generateStart(filename, hideMessage)
+		if not hideMessage then
+			printf("Generating %s...", filename)
+		end
 
 		local f, err = io.open(filename, "wb")
 		if (not f) then
@@ -107,14 +117,7 @@
 		return f	
 	end
 	
-	function premake.generateEnd(fileHandle)
-		if _OPTIONS['debug'] and type(fileHandle) == 'userdata' then
-			local fileLen = fileHandle:seek('end', 0)
-			if fileLen then
-				printf('  %.0f kb'
-				, fileLen/1024.0)
-			end
-		end
+	function premake.generateEnd(fileHandle, filename)
 		io.close(fileHandle)
 	end
 	

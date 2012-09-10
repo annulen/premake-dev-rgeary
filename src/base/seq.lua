@@ -123,11 +123,17 @@ function Seq:where(cond)
 	s.iterate = function()
 		-- setup
 		local iter = self.iterate()
+		local i = 0
 		-- moveNext
 		return function(s)
-			for i,v in iter do 
+			for k,v in iter do 
 				if cond(v) then
-					return i,v
+					-- Keep numbers in sequence
+					if type(k) == 'number' then
+						i = i + 1
+						k = i
+					end
+					return k,v
 				end
 			end
 			return nil
@@ -144,10 +150,16 @@ function Seq:whereK(cond)
 	s.iterate = function()
 		-- setup
 		local iter = self.iterate()
+		local i = 0
 		-- moveNext
 		return function(s)
 			for k,v in iter do 
 				if cond(k,v) then
+					-- Keep numbers in sequence
+					if type(k) == 'number' then
+						i = i + 1
+						k = i
+					end
 					return k,v
 				end
 			end
@@ -207,10 +219,12 @@ function Seq:selectKey(selector)
 	s.iterate = function()
 		-- setup
 		local iter = self.iterate()
+		local i = 0
 		-- moveNext
 		return function()
 			for k,v in iter do
-				return k, selectorFn(k)
+				i = i + 1
+				return i, selectorFn(k)
 			end
 		end
 	end
@@ -436,6 +450,7 @@ function Seq:flatten()
 		-- setup
 		local iter = self.iterate()
 		local iter2
+		local i = 0
 		-- moveNext
 		return function()
 			k,v = iter()
@@ -468,6 +483,12 @@ function Seq:flatten()
 						loop = true
 					end
 				end
+			end
+
+			-- Keep numbers in sequence
+			if type(k) == 'number' then
+				i = i + 1
+				k = i
 			end
 
 			return k, v

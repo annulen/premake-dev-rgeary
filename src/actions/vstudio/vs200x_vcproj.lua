@@ -1030,7 +1030,7 @@
 		end
 
 		-- else setup all warning blocks as needed.
-		_p(4,'WarningLevel="%d"', iif(cfg.flags.ExtraWarnings, 4, 3))
+		_p(4,'WarningLevel="%d"', iif(cfg.flags.Warnings and cfg.flags.Warnings=='Extra', 4, 3))
 
 		if cfg.flags.FatalWarnings then
 			_p(4,'WarnAsError="%s"', bool(true))

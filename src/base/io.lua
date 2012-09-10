@@ -90,6 +90,7 @@
 
 	function io.close(fileHandle)
 		if fileHandle and not _OPTIONS['dryrun'] then
+			fileHandle:flush()
 			fileHandle:close()
 		end			
 	end

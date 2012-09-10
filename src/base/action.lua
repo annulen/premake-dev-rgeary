@@ -72,8 +72,8 @@
 						if a.onproject then a.onproject(prj) end
 					end
 				end
-				if a.onSolutionEnd then
-					a.onSolutionEnd()
+				if a.onEnd then
+					a.onEnd()
 				end
 			else
 				for sln in premake.solution.each() do

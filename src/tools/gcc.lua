@@ -12,7 +12,12 @@ local atool = premake.abstract.buildtool
 local gcc_cc = newtool {
 	toolName = 'cc',
 	binaryName = 'gcc',
-	fixedFlags = '-c',
+	fixedFlags = '-c -x c',
+	language = "C",
+
+	-- possible inputs in to the compiler
+	extensionsForCompiling = { ".cc", ".cpp", ".cxx", ".c", },
+	
 	flagMap = {
 		AddPhonyHeaderDependency = "-MP",	 -- used by makefiles
 		CreateDependencyFile = "-MMD",
@@ -45,7 +50,7 @@ local gcc_cc = newtool {
 	suffixes = {
 		depfileOutput   = '.d',
 	},
-	
+
 	-- System specific flags
 	getsysflags = function(self, cfg)
 		local cmdflags = {}
@@ -73,19 +78,33 @@ local gcc_cc = newtool {
 	end
 }
 local gcc_cxx = newtool {
-	inheritFrom = gcc_cc,
+	inheritFrom = gcc_cc,	
 	toolName = 'cxx',
+	language = "C++",
 	binaryName = 'g++',
-	fixedFlags = '-c',
-	flagMap = table.merge(gcc_cc, {
+	fixedFlags = '-c -xc++',
+	flagMap = table.merge(gcc_cc.flagMap, {
 		NoExceptions   = "-fno-exceptions",
 		NoRTTI         = "-fno-rtti",
 	})
+}
+local gcc_asm = newtool {
+	inheritFrom = gcc_cxx,
+	toolName = 'asm',
+	language = "assembler",
+	fixedFlags = '-c -x assembler-with-cpp',
+	extensionsForCompiling = { '.s' },
+	
+	-- Bug in icc, only writes Makefile style depfiles. Just disable it.
+	prefixes = table.except(gcc_cxx.prefixes, { 'depfileOutput' }),
+	suffixes = table.except(gcc_cxx.suffixes, { 'depfileOutput' }),
+	flagMap = table.except(gcc_cxx.flagMap, { 'CreateDependencyFile', 'CreateDependencyFileIncludeSystem', }),
 }
 local gcc_ar = newtool {
 	toolName = 'ar',
 	binaryName = 'ar',
 	fixedFlags = 'rc',
+	extensionsForLinking = { '.o', '.a', },		-- possible inputs in to the linker
 	redirectStderr = true,
 	targetNamePrefix = 'lib',
 }
@@ -93,6 +112,7 @@ local gcc_link = newtool {
 	toolName = 'link',
 	binaryName = 'g++',
 	fixedFlags = '-Wl,--start-group',
+	extensionsForLinking = { '.o', '.a', '.so' },		-- possible inputs in to the linker
 	flagMap = {
 		StdlibShared	= '-shared-libgcc',
 		StdlibStatic	= '-static-libgcc -static-libstdc++',		-- Might not work, test final binary with ldd. See http://www.trilithium.com/johan/2005/06/static-libstdc/
@@ -108,8 +128,9 @@ local gcc_link = newtool {
 	},
 	decorateFn = {
 		linkAsStatic	= function(list) return atool.decorateLibList(list, '-Wl,-Bstatic', '-l'); end,
-		linkAsShared	= function(list) return atool.decorateLibList(list, '-Wl,-Bdynamic', '-l', '-Wl,-Bdynamic'); end,
+		linkAsShared	= function(list) return atool.decorateLibList(list, '-Wl,-Bdynamic', '-l'); end,
 	},
+	endFlags = '-Wl,-Bdynamic',	-- always put this at the end
 	
 	getsysflags = function(self, cfg)
 		if cfg == nil then
@@ -222,10 +243,12 @@ gcc.cflags = {
 	FloatFast      = "-ffast-math",
 	FloatStrict    = "-ffloat-store",
 	NoFramePointer = "-fomit-frame-pointer",
+	NoWarnings     = "-w0",
 	Optimize       = "-O2",
 	OptimizeSize   = "-Os",
 	OptimizeSpeed  = "-O3",
 	OptimizeOff    = "-O0",
+	Profiling      = "-pg",
 	Symbols        = "-g",
 	ThreadingMulti = "-pthread",
 }

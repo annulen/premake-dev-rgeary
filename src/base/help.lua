@@ -39,7 +39,15 @@
 		-- display all actions
 		printf("ACTIONS")
 		for action in premake.action.each() do
-			printf(" %-17s %s", action.trigger, action.description)
+			if type(action.description) == 'string' then
+				printf(" %-17s %s", action.trigger, action.description)
+			else
+				local first = action.description[1]
+				printf(" %-17s %s", action.trigger, first)
+				for i=2,#action.description do
+				printf(" %-17s  %s", ' ', action.description[i])
+				end
+			end
 		end
 		printf("")
 

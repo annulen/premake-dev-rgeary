@@ -8,6 +8,7 @@
 	local project = premake5.project
 	local config = premake5.config
 	local oven = premake5.oven
+	local keyedblocks = premake.keyedblocks
 
 
 --
@@ -147,6 +148,8 @@
 			
 			-- expand inline tokens
 			oven.expandtokens(cfg, "config", filecfg)
+			
+			filecfg.extension = path.getextension(filename):lower()
 			
 			-- and cache the result
 			cfg.files[filename] = filecfg

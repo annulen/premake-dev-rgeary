@@ -8,7 +8,6 @@
 	premake.api = {}
 	local api = premake.api
 
-
 --
 -- Here I define all of the getter/setter functions as metadata. The actual
 -- functions are built programmatically below.
@@ -33,15 +32,7 @@
 --  overwrite		Multiple instances will overwrite. Used on string-list.
 --  uniqueValues	The final list will contain only unique elements 
 	
-	premake.fields = 
-	{
-		["uses"] =
-		{
-			kind  = "list",
-			scope = "config",
-			namealiases = { "using" },
-		},
-	}
+	premake.fields = {}
 	premake.defaultfields = nil
 
 
@@ -86,6 +77,49 @@
 					return api.remove(field, value)
 				end
 			end
+		end
+		
+		-- Pre-process the allowed list in to a lower-case set
+		if field.allowed then 
+			if type(field.allowed) ~= 'function' then
+			
+				local allowedSet = {}
+				if type(field.allowed) == 'string' then
+					local v = field.allowed
+					allowedSet[v:lower()] = v
+				else
+					for k,v in pairs(field.allowed) do
+						if type(k) == 'number' then
+							allowedSet[v:lower()] = v
+						else
+							if type(v) == 'table' then
+								-- specific options
+								for _,v2 in ipairs(v) do
+									allowedSet[k:lower() ..'='.. v2:lower()] = k ..'='.. v2
+								end
+							else
+								-- no options specified
+								allowedSet[k:lower() ..'='.. v:lower()] = k ..'='.. v
+							end
+						end
+					end
+				end
+				
+				field.allowedList = field.allowed
+				field.allowed = allowedSet
+			end
+		end
+
+		-- Pre-process aliases
+		if field.aliases then
+			local aliases = {}
+			for k,v in pairs(field.aliases) do
+				-- case insensitive
+				k = k:lower()
+				v = v:lower()
+				aliases[k] = v				
+			end
+			field.aliases = aliases
 		end
 
 		-- make sure there is a handler available for this kind of value
@@ -164,6 +198,11 @@
 		
 		local target = api.gettarget(field.scope)
 		
+		-- fields with this property will allow users to customise using "configuration <value>"
+		if field.isConfigurationFilter then
+			api.callback(premake.fields['usesconfig'], value)
+		end
+		
 		-- A keyed value is a table containing key-value pairs, where the
 		-- type of the value is defined by the field. 
 		if api.iskeyedfield(field) then
@@ -203,7 +242,7 @@
 		-- the script. Can be removed when I rewrite the internals to
 		-- be truly declarative
 		if field.scope == "config" then
-			configuration(api.scope.configuration.terms)
+			api.configuration(api.scope.configuration.terms)
 		end
 		
 		local target = api.gettarget(field.scope)
@@ -243,32 +282,37 @@
 --
 
 	function api.checkvalue(value, allowed, aliases)
+		local valueL = value:lower()
+		
 		if aliases then
-			for k,v in pairs(aliases) do
-				if value:lower() == k:lower() then
-					value = v
-					break
-				end
+			if aliases[valueL] then
+				valueL = aliases[valueL]:lower()
 			end
 		end 
 			
 		-- If allowed it set to nil, allow everything. 
-		-- But if allowed is a function returning nil, it's a failure
+		-- But if allowed is a function and it returns nil, it's a failure
 		if allowed then
-			local allowedValues = allowed
 			if type(allowed) == "function" then
-				allowedValues = allowed(value)
-			end
-			if type(allowedValues) == "string" then
-				allowedValues = { allowedValues }
-			end
-			if type(allowedValues) == "table" then
-				for _,v in ipairs(allowedValues) do
-					if value:lower() == v:lower() then
-						return v
+				local allowedValues = allowed(valueL)
+				if not allowedValues then return nil end
+				
+				allowedValues = toSet(allowedValues, true)
+				if allowedValues[valueL] then
+					return allowedValues[valueL]
+				else
+					for _,v in ipairs(allowedValues) do
+						if valueL == v:lower() then
+							return v
+						end
 					end
 				end
+			else
+				if allowed[valueL] then
+					return allowed[valueL]
+				end
 			end
+			
 			local errMsg = "invalid value '" .. value .. "'."
 			if allowedValues and type(allowedValues)=='table' then
 				errMsg = errMsg..' Allowed values are {'..table.concat(allowedValues, ' ')..'}'
@@ -339,6 +383,14 @@
 				api.setfile(target, name, field, value)
 				name = name + 1
 			end
+		-- Check if we need to split the string
+		elseif (not os.isfile(value)) and value:contains(' ') then
+			for _,v in ipairs(value:split(' ')) do
+				api.setfile(target, name, field, v)
+			end
+		elseif field.expandtokens and value:startswith('%') then
+			-- expand to absolute later, as we don't know now if we have an absolute path or not 
+			target[name] = value
 		else
 			target[name] = path.getabsolute(value)
 		end
@@ -404,7 +456,7 @@
 		-- find the contained data type
 		local kind = api.getbasekind(field)
 		local setter = api["set" .. kind]
-
+		
 		-- function to add values
 		local function addvalue(value, depth)
 			-- recurse into tables
@@ -414,6 +466,9 @@
 				end
 			
 			-- insert simple values
+			elseif field.splitOnSpace and type(value) == 'string' and value:contains(' ') then
+				local v = value:split(' ')
+				addvalue(v, depth + 1)
 			else
 				if field.uniqueValues then
 					if target[value] then
@@ -438,6 +493,19 @@
 	end
 	
 	function api.setobjectlist(target, name, field, value)
+		if name == 'buildrule' then
+			-- aliases
+			value.commands = value.commands or value.command or value.cmd
+			value.outputs = value.outputs or value.output
+			local outputStr = Seq:new(value.outputs):select(function(p) return path.getabsolute(p) end):mkstring()
+			value.absOutput = outputStr
+			for k,v in ipairs(value.dependencies or {}) do
+				value.dependencies[k] = path.getabsolute(v)
+			end
+			for k,v in ipairs(value.commands) do
+				value.commands[k] = v:replace('$in','%{cfg.files}'):replace('$out',outputStr)
+			end
+		end
 		target[name] = target[name] or {}
 		table.insert( target[name], value )
 	end
@@ -469,7 +537,35 @@
 		target[name] = value
 	end
 
+--
+-- Flags can contain an = in the string
+--
+	function api.setflaglist(target, name, field, value)
+		if type(value) == 'table' then
+			for k,v in ipairs(value) do
+				if type(k) == 'string' then v = k..'='..v end
+				api.setflaglist(target, name, field, v)
+			end
+			return
+		end
+	
+		value, err = api.checkvalue(value, field.allowed, field.aliases)
+		
+		if err then
+			error(err, 3)
+		end
 
+		-- Split in to key=value
+		local key, v2 = value:match('([^=]*)=([^ ]*)')
+		target[name] = target[name] or {}
+		target = target[name]
+		
+		if key and v2 then
+			target[key] = v2
+		else
+			target[value] = value
+		end		
+	end
 --
 -- Register the core API functions.
 --
@@ -490,6 +586,15 @@
 		scope = "project",
 		kind = "path"
 	}
+	
+	-- Wrap the compile tool with this command. The original compile command & flags will be
+	-- appended, or substituted in place of "$CMD" 
+	api.register {
+		name = "compilerwrapper",
+		scope = "config",
+		kind = "string",
+		expandtokens = true,
+	}
 
 	api.register {
 		name = "buildaction",
@@ -509,17 +614,35 @@
 		scope = "config",
 		kind = "string-list",
 		expandtokens = true,
-		namealiases = { "buildflags" },
+		namealiases = { "buildflags", "cflags" },
 		-- 'usagefield = true' means that the field can be a "usage requirement". It will copy this field's values
 		--   from the usage secton in to the destination project 
 		usagefield = true,							
 	}
 
+	-- buildrule takes a table parameter with the keys :  
+	--	command[s] 		Command or commands to execute
+	--  description		Short description of the command, displayed during ninja build
+	--  outputs			(optional) Output files
+	--  language		(optional) Specify a shell language to execute the command in. eg. bash, python, etc.
+	--  stage			(default) 'postbuild' runs on the project target, 'link' runs on the compile output, 'compile' runs on the compile inputs
+	--  dependencies	(optional) additional files which the tool depends on, but does not take as an input
+	   
+	--   Use tokens to specify the input filename, eg. %{file.relpath}/%{file.name}
+	--	  also "$in" is equivalent to "%{cfg.files}", $out => %{cfg.targetdir.abspath}
 	api.register {
 		name = "buildrule",
 		scope = "config",
 		kind = "object-list",
 		expandtokens = true,
+	}
+	
+	-- The compile depends on the specified project
+	api.register {
+		name = "compiledepends",
+		scope = "config",
+		kind = "string-list",
+		usagefield = true,
 	}
 
 	api.register {
@@ -533,6 +656,14 @@
 		scope = "project",
 		kind = "string-list",
 		overwrite = true,			-- don't merge multiple configurations sections
+	}
+	
+	-- Flags only passed to the C++ compiler
+	api.register {
+		name = "cxxflags",
+		kind = "string-list",
+		scope = "config",
+		usagefield = true,
 	}
 	
 	api.register {
@@ -612,10 +743,8 @@
 	api.register {
 		name = "flags",
 		scope = "config",
-		kind  = "string-list",
+		kind  = "flaglist",
 		usagefield = true,
-		getDefaultValue = function() return {} end,
-		uniqueValues = true,
 		allowed = {
 			"AddPhonyHeaderDependency",		 -- for Makefiles, requires CreateDependencyFile
 			"CreateDependencyFile",
@@ -628,13 +757,9 @@
 			"EnableSSE41",
 			"EnableSSE42",
 			"EnableAVX",
-			"ExtraWarnings",
 			"FatalWarnings",
-			"FloatFast",
-			"FloatStrict",
-			"InlineDisabled",
-			"InlineExplicitOnly",
-			"InlineAnything",
+			Float = { "Fast", "Strict", },
+			Inline = { "Disabled", "ExplicitOnly", "Anything", },
 			"Managed",
 			"MFC",
 			"ThreadingMulti",		-- Multithreaded system libs. Propagated to usage.
@@ -650,11 +775,8 @@
 			"NoNativeWChar",
 			"NoPCH",
 			"NoRTTI",
-			"NoWarnings",
-			"Optimize",
-			"OptimizeSize",
-			"OptimizeSpeed",
-			"OptimizeOff",
+			Optimize = { 'On', 'Off', 'Size', 'Speed' },
+			"Profiling",			-- Enable profiling compiler flag
 			"SEH",
 			"StaticRuntime",
 			"StdlibShared",			-- Use shared standard libraries. Propagated to usage.
@@ -662,13 +784,20 @@
 			"Symbols",
 			"Unicode",
 			"Unsafe",
+			Warnings = { 'On', 'Off', 'Extra' },
 			"WinMain",
 		},
 		aliases = {
-			Optimise = 'Optimize',
-			OptimiseSize = 'OptimizeSize',
-			OptimiseSpeed = 'OptimizeSpeed',
-			OptimiseOff = 'OptimizeOff',
+			Optimize = 'Optimize=On',
+			OptimizeSize = 'Optimize=Size',
+			OptimizeSpeed = 'Optimize=Speed',
+			OptimizeOff = 'Optimize=Off',
+			Optimise = 'Optimize=On',
+			OptimiseSize = 'Optimize=Size',
+			OptimiseSpeed = 'Optimize=Speed',
+			OptimiseOff = 'Optimize=Off',
+			NoWarnings = 'Warnings=Off', 
+			ExtraWarnings = 'Warnings=Extra',
 		},
 	}
 
@@ -745,32 +874,25 @@
 		namealiases = { "includedir" },
 	}
 	
+	-- includes a solution in the current solution. Use "*" to include all solutions
 	api.register {
 		name = "includesolution",
 		scope = "solution",
 		kind = "string-list",
-	}
-	
-	-- Add a new keyword to the configuration filter
-	--  for any project we use which defines a configuration with this keyword will have that section applied
-	-- eg. declare the debug build of the boost libs with configuration "boostdebug"
-	--      and add usekeyword "boostdebug" to your project
-	api.register {
-		name = "usekeywords",
-		scope = "config",
-		kind = "string-list",
-		namealiases = { "usekeyword" },
+		uniqueValues = true,
 	}
 
 	api.register {
 		name = "kind",
 		scope = "config",
 		kind = "string",
+		isConfigurationKeyword = true,		-- use this as a keyword for configurations
 		allowed = {
 			"ConsoleApp",
 			"WindowedApp",
 			"StaticLib",
 			"SharedLib",
+			"Header",					-- Ouput is a header file, ie. a compile dependency for another project
 		},
 		aliases = {
 			Executable = 'ConsoleApp',
@@ -786,6 +908,7 @@
 			"C",
 			"C++",
 			"C#",
+			"assembler",
 		},
 	}
 
@@ -862,6 +985,15 @@
 		scope = "config",
 		kind = "string-list",
 		expandtokens = true,
+	}
+	
+	-- Path to put the ninja build log
+	api.register {
+		name = "ninjaBuildDir",
+		scope = "solution",
+		kind = "string",
+		expandtokens = true,
+		nameAliases = { 'ninjabuilddir' }
 	}
 
 	api.register {
@@ -1009,8 +1141,29 @@
 		name = "toolset",
 		scope = "config",
 		kind = "string",
+		isConfigurationKeyword = true,		-- use this as a keyword for configurations
 		-- set allowed to a function so it will be evaluated later when all the toolsets have been loaded
 		allowed = function() return getSubTableNames(premake.tools); end 
+	}
+	
+	api.register {
+		name = "uses",
+		scope = "config",
+		kind = "string-list",
+		namealiases = { "using" },
+		splitOnSpace = true,			-- "apple banana carrot" is equivalent to { "apple", "banana", "carrot" }
+	}
+	
+	-- Add a new keyword to the configuration filter
+	--  for any project we use which defines a configuration with this keyword will have that section applied
+	-- eg. declare the debug build of the boost libs with configuration "boostdebug"
+	--      and add usesconfig "boostdebug" to your project
+	--		This keeps the boost configuration name separate from your solution's configuration names
+	api.register {
+		name = "usesconfig",
+		scope = "config",
+		kind = "string-list",
+		namealiases = { "useconfig" },
 	}
 
 	api.register {
@@ -1315,7 +1468,7 @@
 		end
 		
 		if field.scope == "config" then
-			configuration(api.scope.configuration.terms)
+			api.configuration(api.scope.configuration.terms)
 		end
 		
 		local cfg = premake.getobject(field.scope)
@@ -1369,8 +1522,8 @@
 --
 -- Project object constructors.
 --
-
-	function configuration(terms)
+	 
+	function api.configuration(terms)
 		if not terms then
 			return premake.CurrentConfiguration
 		end
@@ -1415,7 +1568,7 @@
 		
 		return cfg
 	end
-	
+
 	function usage(name)
 		if (not name) then
 			--Only return usage projects.
@@ -1424,6 +1577,8 @@
 			return premake.CurrentContainer
 		elseif type(name) ~= 'string' then
 			error('Invalid parameter for usage, must be a string')
+		elseif name == '_GLOBAL_CONTAINER' then
+			return api.solution(name)
 		end
 		
 		-- identify the parent solution
@@ -1454,7 +1609,7 @@
   		return premake.CurrentContainer
   	end
   
-  	function project(name)
+  	function api.project(name)
   		if (not name) then
   			--Only return non-usage projects
   			if(ptype(premake.CurrentContainer) ~= "project") then return nil end
@@ -1495,12 +1650,12 @@
 --
 --  Global container for configurations, applied to all solutions
 --
-	function global()
-		local c = solution('_GLOBAL_CONTAINER')
+	function api.global()
+		local c = api.solution('_GLOBAL_CONTAINER')
 		premake5.globalContainer.solution = c
 	end
 
-	function solution(name)
+	function api.solution(name)
 		if not name then
 			if ptype(premake.CurrentContainer) == "project" then
 				return premake.CurrentContainer.solution
@@ -1536,7 +1691,7 @@
 
 	function external(name)
 		-- define it like a regular project
-		local prj = project(name)
+		local prj = api.project(name)
 		
 		-- then mark it as external
 		prj.external = true;

@@ -6,29 +6,43 @@ local atool = premake.abstract.buildtool
 local icc_cc = newtool {
 	toolName = 'cc',
 	binaryName = 'icpc',
-	fixedFlags = '-xc -c',
+	fixedFlags = '-c -xc',
+	language = "C",
+	
+	-- possible inputs in to the compiler
+	extensionsForCompiling = { ".c", },
+	
 	flagMap = {
 		AddPhonyHeaderDependency = "-MP",	 -- used by makefiles
 		CreateDependencyFile = "-MMD",
 		CreateDependencyFileIncludeSystem = "-MD",
-		InlineDisabled = "-inline-level=0",
-		InlineExplicitOnly = "-inline-level=1",
-		InlineAnything = "-inline-level=2",
-		EnableSSE2     = "-msse2",
-		EnableSSE3     = "-msse3",
-		EnableSSE41    = "-msse4.1",
-		EnableSSE42    = "-msse4.2",
-		EnableAVX      = "-mavx",
-		ExtraWarnings  = "-Wall",
-		FatalWarnings  = "-Werror",
-		FloatFast      = "-fp-model fast=2",
-		FloatStrict    = "-fp-model strict",
-		OptimizeOff	   = "-O0",
-		Optimize       = "-O2",
-		OptimizeSize   = "-Os",
-		OptimizeSpeed  = "-O3",
-		OptimizeOff    = "-O0",
-		Symbols        = "-g",
+		Inline = {
+			Disabled 	= "-inline-level=0",
+			ExplicitOnly = "-inline-level=1",
+			Anything 	= "-inline-level=2",
+		},
+		EnableSSE2     		= "-msse2",
+		EnableSSE3     		= "-msse3",
+		EnableSSE41    		= "-msse4.1",
+		EnableSSE42    		= "-msse4.2",
+		EnableAVX      		= "-mavx",
+		Warnings = {
+			Off				= "-w0",
+			Extra			= "-Wall",
+		},
+		FatalWarnings  		= "-Werror",
+		Float = {
+			Fast		  	= "-fp-model fast=2",
+			Strict			= "-fp-model strict",
+		},
+		Optimize = {
+			Off				= "-O0",
+			On				= "-O2",
+			Size			= "-Os",
+			Speed			= "-O3 -ip",
+		},
+		Profiling      		= "-pg",
+		Symbols        		= "-g",
 	},
 	prefixes = {
 		defines 		= '-D',
@@ -63,23 +77,52 @@ local icc_cc = newtool {
 local icc_cxx = newtool {
 	inheritFrom = icc_cc,
 	toolName = 'cxx',
-	fixedFlags = '-xc++ -c',
-	flagMap = table.merge(icc_cc, {
+	fixedFlags = '-c -xc++',
+	language = "C++",
+
+	-- possible inputs in to the compiler
+	extensionsForCompiling = { ".cc", ".cpp", ".cxx", },
+	
+	flagMap = table.merge(icc_cc.flagMap, {
 		NoExceptions   = "-fno-exceptions",
 		NoRTTI         = "-fno-rtti",
 	})
+}
+local icc_asm = newtool {
+	inheritFrom = icc_cxx,
+	toolName = 'asm',
+	language = "assembler",
+	fixedFlags = '-c -x assembler-with-cpp',
+	extensionsForCompiling = { '.s' },
+	
+	-- Filter out unhelpful messages when compiling .s files
+	redirectStderr = true,
+	filterStderr = {
+		'<built-in>: warning: this is the location of the previous definition',
+		'<command-line>: warning: "__GNUC_MINOR__" redefined',
+		'<command-line>: warning: "__GNUC_PATCHLEVEL__" redefined',
+	},
+	
+	-- Bug in icc, only writes Makefile style depfiles. Just disable it.
+	prefixes = table.except(icc_cxx.prefixes, { 'depfileOutput' }),
+	suffixes = table.except(icc_cxx.suffixes, { 'depfileOutput' }),
+	flagMap = table.except(icc_cxx.flagMap, { 'CreateDependencyFile', 'CreateDependencyFileIncludeSystem', }),
 }
 local icc_ar = newtool {
 	toolName = 'ar',
 	binaryName = 'xiar',
 	fixedFlags = 'rc',
+	extensionsForLinking = { '.o', '.a', '.so' },		-- possible inputs in to the linker
+	
 	redirectStderr = true,
+--	filterStderr = { "xiar: executing " },
 	targetNamePrefix = 'lib',
 }
 local icc_link = newtool {
 	toolName = 'link',
 	binaryName = 'icpc',
 	fixedFlags = '-Wl,--start-group',
+	extensionsForLinking = { '.o', '.a', '.so' },		-- possible inputs in to the linker
 	flagMap = {
 		StdlibShared	= '-shared-libgcc -shared-intel',
 		StdlibStatic	= '-static-libgcc -static-intel',		-- Might not work, test final binary with ldd. See http://www.trilithium.com/johan/2005/06/static-libstdc/
@@ -137,7 +180,7 @@ local icc_link = newtool {
 }
 newtoolset {
 	toolsetName = 'icc', 
-	tools = { icc_cc, icc_cxx, icc_ar, icc_link },
+	tools = { icc_cc, icc_cxx, icc_asm, icc_ar, icc_link },
 }
 newtoolset {
 	toolsetName = 'icc12', 
@@ -148,6 +191,10 @@ newtoolset {
 		},
 		newtool {
 			inheritfrom = icc_cxx,
+			binaryName = 'icpc12',
+		},
+		newtool {
+			inheritfrom = icc_asm,
 			binaryName = 'icpc12',
 		},
 		newtool {
@@ -169,6 +216,10 @@ newtoolset {
 		},
 		newtool {
 			inheritfrom = icc_cxx,
+			binaryName = 'icpc11.1',
+		},
+		newtool {
+			inheritfrom = icc_asm,
 			binaryName = 'icpc11.1',
 		},
 		newtool {

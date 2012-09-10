@@ -20,7 +20,8 @@
 		prj = prj.project or prj
 		local sln = prj.solution
 		
-		keyedblocks.create(prj)
+		keyedblocks.create(sln)
+		keyedblocks.create(prj, sln)
 		
 		if prj.isbaked then
 			return prj
@@ -86,10 +87,20 @@ local tmr1 = timer.start('bakeconfig1')
 		end
 
 		-- figure out the target operating environment for this configuration
-		local newFilter = true
-		local filter
+		local filter, cfg
 		
-		if newFilter then
+		if true then
+			system = system or premake.action.current().os or os.get()
+			filter = { buildcfg, _ACTION, system }
+			if platform then table.insert(filter, platform) end
+			cfg = keyedblocks.getfield(prj, filter)
+			cfg.filter = filter
+			system = cfg.system or system
+			if architecture == nil and os.is64bit() then
+				architecture = 'x86_64'
+			end
+		
+		elseif true then
 			filter = { buildcfg, _ACTION }
 			if platform then table.insert(filter, platform) end
 
@@ -108,6 +119,16 @@ local tmr1 = timer.start('bakeconfig1')
 			if cfgKind then
 				table.insert(filter, cfgKind)
 			end
+
+			-- Find any other configs we should be using
+			local usesconfigs = keyedblocks.getfield(prj, filter, "usesconfig")
+			if usesconfigs then
+				for _,v in ipairs(usesconfigs) do
+					table.insert(filter, v)
+				end
+			end
+
+			cfg = oven.bake(prj, prj.solution, filter)
 		
 		else
 			filter = {
@@ -118,7 +139,7 @@ local tmr1 = timer.start('bakeconfig1')
 			
 			-- look to see if this configuration specifies a target system and, if so,
 			-- use that to further filter the results
-			local cfg = oven.bake(prj, prj.solution, filter, "system")
+			cfg = oven.bake(prj, prj.solution, filter, "system")
 			system = cfg.system or system or premake.action.current().os or os.get()
 			system = system or cfg.system
 			if architecture == nil and os.is64bit() then
@@ -129,9 +150,11 @@ local tmr1 = timer.start('bakeconfig1')
 			-- Look to see what kind of project this is, and use that to filter for further configurations
 			local cfgKind = oven.bake(prj, prj.solution, filter, "kind")
 			filter.kind = cfgKind.kind
+			
+			cfg = oven.bake(prj, prj.solution, filter)
 		end
 		
-		cfg = oven.bake(prj, prj.solution, filter)
+		--local cfgold = oven.bake(prj, prj.solution, filter); cfg = cfgold
 		cfg.buildcfg = buildcfg
 		cfg.platform = platform
 		cfg.action = _ACTION
@@ -148,13 +171,13 @@ local tmr1 = timer.start('bakeconfig1')
 		end
 		
 		-- for usage filters
-		cfg.usekeywords = cfg.usekeywords or {}
-		cfg.usekeywords.buildcfg = cfg.buildcfg
-		cfg.usekeywords.platform = cfg.platform
-		cfg.usekeywords.system = cfg.system
-		cfg.usekeywords.architecture = cfg.architecture
-		cfg.usekeywords.kind = cfg.kind
-		cfg.usekeywords.toolset = cfg.toolset
+		cfg.usesconfig = cfg.usesconfig or {}
+		cfg.usesconfig.buildcfg = cfg.buildcfg
+		cfg.usesconfig.platform = cfg.platform
+		cfg.usesconfig.system = cfg.system
+		cfg.usesconfig.architecture = cfg.architecture
+		cfg.usesconfig.kind = cfg.kind
+		cfg.usesconfig.toolset = cfg.toolset
 		
 		ptypeSet( cfg, 'configprj' )
 timer.stop(tmr1)
@@ -560,6 +583,9 @@ timer.stop(tmr3)
 		local files = {}
 		for cfg in project.eachconfig(prj) do
 			for _, file in ipairs(cfg.files or {}) do
+				if not path.isabsolute(file) then
+					file = path.join( prj.basedir, file )
+				end
 				files[file] = file
 			end
 		end

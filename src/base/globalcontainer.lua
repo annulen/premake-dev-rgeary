@@ -19,10 +19,12 @@
 	function globalContainer.bakeall()
 	
 		local cfgNameList = Seq:new(solution.list):select('configurations'):flatten():unique()
-		if cfgNameList:count() == 1 then
-			print("Building configuration "..cfgNameList:first().." ...")
+		if cfgNameList:count() == 0 then
+			error("No configurations to build")
+		elseif cfgNameList:count() == 1 then
+			print("Generating configuration '"..cfgNameList:first().."' ...")
 		else
-			print("Building configurations : "..cfgNameList:mkstring(', ').." ...")
+			print("Generating configurations : "..cfgNameList:mkstring(', ').." ...")
 		end
 		
 		-- Bake all real projects, but don't resolve usages		
@@ -63,7 +65,11 @@
 		end
 		usageProj.hasBakedUsage = true
 		
-		keyedblocks.create(usageProj)
+		local parent
+		if ptype(usageProj) == 'project' and usageProj.solution then
+			parent = project.getUsageProject( usageProj.solution.name )
+		end
+		keyedblocks.create(usageProj, parent)
 
 		local realProj = project.getRealProject(usageProj.name)
 		if realProj then
@@ -80,42 +86,51 @@
 				local realCfg = project.getconfig(realProj, buildcfg, platform)
 
 				local usageKB = keyedblocks.createblock(usageProj.keyedblocks, { buildcfg, platform })
-				usageKB.values = usageKB.values or {}
+				usageKB.__values = usageKB.__values or {}
 
 				-- Copy in default build target from the real proj
 				if realCfg.buildtarget and realCfg.buildtarget.abspath then
 					local realTargetPath = realCfg.buildtarget.abspath
 					if realCfg.kind == 'SharedLib' then
 						-- link to the target as a shared library
-						oven.mergefield(usageKB.values, "linkAsShared", { realTargetPath })
+						oven.mergefield(usageKB.__values, "linkAsShared", { realTargetPath })
 					elseif realCfg.kind == 'StaticLib' then
 						-- link to the target as a static library
-						oven.mergefield(usageKB.values, "linkAsStatic", { realTargetPath })
+						oven.mergefield(usageKB.__values, "linkAsStatic", { realTargetPath })
 					elseif not realCfg.kind then
 						error("Can't use target, missing cfg.kind")
 					end
+				end
+				
+				if realCfg.kind == 'Header' then
+					local outputs = {}
+					for _,b in ipairs(realCfg.buildrule) do
+						if b.absOutput then
+							table.insert( outputs, b.absOutput )
+						end
+					end
+					oven.mergefield(usageKB.__values, "compiledepends", outputs )
 				end
 							
 				-- Copy across some flags
 				local function mergeflag(destFlags, srcFlags, flagName)
 					if srcFlags and srcFlags[flagName] and (not destFlags[flagName]) then
 						destFlags[flagName] = flagName
-						table.insert(destFlags, flagName)
 					end
 				end
-				usageKB.values.flags = usageKB.values.flags or {}
-				mergeflag(usageKB.values.flags, realCfg.flags, 'ThreadingMulti')
-				mergeflag(usageKB.values.flags, realCfg.flags, 'StdlibShared')
-				mergeflag(usageKB.values.flags, realCfg.flags, 'StdlibStatic')
+				usageKB.__values.flags = usageKB.__values.flags or {}
+				mergeflag(usageKB.__values.flags, realCfg.flags, 'ThreadingMulti')
+				mergeflag(usageKB.__values.flags, realCfg.flags, 'StdlibShared')
+				mergeflag(usageKB.__values.flags, realCfg.flags, 'StdlibStatic')
 			
 				-- Resolve the links in to linkAsStatic, linkAsShared
 				if realCfg.kind == 'SharedLib' then
 					-- If you link to a shared library, you also need to link to any shared libraries that it uses
-					oven.mergefield(usageKB.values, "linkAsShared", realCfg.linkAsShared )
+					oven.mergefield(usageKB.__values, "linkAsShared", realCfg.linkAsShared )
 				elseif realCfg.kind == 'StaticLib' then
 					-- If you link to a static library, you also need to link to any libraries that it uses
-					oven.mergefield(usageKB.values, "linkAsStatic", realCfg.linkAsStatic )
-					oven.mergefield(usageKB.values, "linkAsShared", realCfg.linkAsShared )
+					oven.mergefield(usageKB.__values, "linkAsStatic", realCfg.linkAsStatic )
+					oven.mergefield(usageKB.__values, "linkAsShared", realCfg.linkAsShared )
 				end
 						
 			end
@@ -139,7 +154,7 @@
 
 			for _,useProjName in ipairs(cfg.uses or {}) do
 				local useProj = project.getUsageProject( useProjName )
-				local cfgFilterTerms = getValues(cfg.usekeywords)
+				local cfgFilterTerms = getValues(cfg.usesconfig)
 				
 				if not useProj then
 					-- can't find the project, perhaps we've specified configuration filters also

@@ -32,13 +32,17 @@ tool.binaryDir = nil
 -- Name of the binary to execute
 tool.binaryName = nil
 
+-- Cached result of getBinary
 tool.binaryFullpath = nil
 
 -- Fixed flags which always appear first in the command line. Two ways to override this.
 tool.fixedFlags = ''
 function tool:getFixedFlags()
 	return self.fixedFlags
-end 
+end
+
+-- Order of arguments in the command line. Arguments not specified in this list are appended (optional)
+tool.argumentOrder = { 'fixedFlags', 'output', 'sysflags', 'cfgflags' }
 
 -- Mapping from Premake 'flags' to compiler flags
 tool.flagMap = {}
@@ -56,8 +60,7 @@ tool.decorateFn = {
 }
 
 -- Default is for C++ source, override this for other tool types
-tool.extensionsForCompiling = { ".cc", ".cpp", ".cxx", ".c", ".s", ".m", ".mm" }	-- possible inputs in to the compiler
-tool.extensionsForLinking = { '.o', '.a', '.so' }		-- possible inputs in to the linker
+--tool.extensionsForLinking = { '.o', '.a', '.so' }		-- possible inputs in to the linker
 tool.objectFileExtension = '.o'		-- output file extension for the compiler
 
 -- Extra cmdflags depending on the config & system
@@ -76,7 +79,6 @@ function tool:getCommandLine(toolCmd, cmdArgs)
 	if #cmdArgs == 0 then
 		error('#toolInputs == 0, did you forget to flatten it?')
 	end
-	cmdArgs = toList(cmdArgs)
 	
 	-- Allow the tool to silence stderr. eg. The Intel ar tool outputs unwanted status information   
 	local redirectStderr = "" 
@@ -87,17 +89,26 @@ function tool:getCommandLine(toolCmd, cmdArgs)
       else
         redirectStderr = '2> /dev/null'
       end
-	  table.insert(cmdArgs, redirectStderr)    	
+	  table.insert(cmdArgs, redirectStderr)
+    
+    --[[elseif self.filterStderr then
+    	if not os.is("windows") then
+    		local grepFilter = "2>&1 | grep -v -e "
+    		for _,v in ipairs(self.filterStderr) do
+    			grepFilter = grepFilter .. "\'"..v.."\' "
+    		end
+    		table.insert(cmdArgs, grepFilter)
+    	end]]
     end
 	
-	local cmdParts = table.join(toolCmd, fixedFlags, cmdArgs)
+	local cmdParts = table.join(toolCmd, fixedFlags, cmdArgs, self.endFlags)
 
 	local cmd = table.concat(cmdParts, ' ')
 	return cmd
 end
 
 ----------------------------------------------
--- Functions which you don't need to override
+-- Functions which you shouldn't need to override
 ----------------------------------------------
 
 --
@@ -105,20 +116,33 @@ end
 -- Returns a table containing a sequence of command line arguments, and a hashtable of variable definitions 
 --
 --  outputVar and inputVar are what you want to appear on the command line in the build file, eg. $out and $in
+--	(optional) previousResult is the results of a previous run. If specified, only the changed inputs will be decorated & returned. 
 --
-function tool:decorateInputs(cfg, outputVar, inputVar)
+function tool:decorateInputs(cfg, outputVar, inputVar, previousResult)
 	local rv = {}
+	local tmr = timer.start('tool:decorateInputs')
 	
 	-- Construct the argument list from the inputs
-	for category,inputList in pairs(cfg) do
-		local d = self:decorateInput(category, inputList)
-		if d ~= nil then
+	for _,category in ipairs(self.decorateArgs) do
+		local inputList
+		if category == 'output' then inputList = outputVar
+		elseif category == 'input' then inputList = inputVar 
+		elseif category == 'sysflags' then inputList = self:getsysflags(cfg)
+		elseif category == 'cfgflags' then inputList = table.translateV2(cfg.flags, self.flagMap)
+		elseif category == 'depfileOutput' then
+			if config.hasDependencyFileOutput(cfg) then
+				inputList = outputVar
+			end
+		else 
+			inputList = cfg[category]
+		end
+		if inputList then
+			local d = self:decorateInput(category, inputList, true)
 			rv[category] = d
-		end		
+		end
 	end
 	
-	--rv.flags = self:decorateInput('fixedFlags', self:getFixedFlags(), true)
-	rv.sysflags = self:decorateInput('sysflags', self:getsysflags(cfg), true)
+	--[[rv.sysflags = self:decorateInput('sysflags', self:getsysflags(cfg), true)
 	
 	-- Some options should always be outputted
 	if self.isCompiler then
@@ -129,14 +153,19 @@ function tool:decorateInputs(cfg, outputVar, inputVar)
 		rv.buildoptions = self:decorateInput('buildoptions', cfg.buildoptions, true)
 	end
 	if self.isLinker then
-		rv.ldflags = self:decorateInput('linkoptions', cfg.ldflags or {}, true)
-		rv.libdirs = self:decorateInput('libdirs', cfg.libdirs or {}, true)
+		rv.ldflags = self:decorateInput('ldflags', cfg.ldflags or {}, true)
 	end
-
+	
+	if self.toolName == 'cxx' then
+		cfg.cxxflags = cfg.cxxflags or {}
+		table.sort(cfg.cxxflags)
+		rv.cxxflags = self:decorateInput('cxxflags', cfg.cxxflags, true)
+	end
+	
 	local output = self:decorateInput('output', outputVar, true)
 	local input = self:decorateInput('input', inputVar, true)
 
-	local cfgflags = table.translate(cfg.flags, self.flagMap)
+	local cfgflags = table.translateV2(cfg.flags, self.flagMap)
 	if #cfgflags > 0 then
 		rv.cfgflags = table.concat(cfgflags, ' ')
 	end
@@ -148,10 +177,12 @@ function tool:decorateInputs(cfg, outputVar, inputVar)
 	if config.hasDependencyFileOutput(cfg) then
 		local depfileOutput = self:decorateInput('depfileOutput', outputVar)
 		if depfileOutput then
-			table.insert(rv, depfileOutput)
+			rv['depfileOutput'] = depfileOutput
 		end
 	end
+	]]
 	
+	timer.stop(tmr)
 	return rv
 end
 
@@ -160,9 +191,16 @@ function tool:hasDependencyFileOutput(cfg)
 	return config.hasDependencyFileOutput(cfg) and (self.flagMap['CreateDependencyFile'])
 end
 
-function tool:decorateInput(category, inputList, alwaysReturnString)
+function tool:decorateInput(category, input, alwaysReturnString)
 	local str = ''
-	inputList = toList(inputList)
+	local inputList = toList(input)
+
+	--[[if self.cache[input] then
+		timer.start('cache.hit')
+		timer.stop('cache.hit')
+		return self.cache[input]
+	end]]
+	--timer.start('decorateInput')
 	
 	-- consistent sort order to prevent ninja rebuilding needlessly
 	table.sort(inputList)
@@ -191,11 +229,15 @@ function tool:decorateInput(category, inputList, alwaysReturnString)
 	else
 		str = nil
 	end
+	
+	--self.cache[input] = str
+	--timer.stop('decorateInput')
+	
 	return str
 end
 
 -- Return the full path of the binary
-function tool:getBinary()
+function tool:getBinary(cfg)
 	if self.binaryFullpath then
 		return self.binaryFullpath
 	end
@@ -217,6 +259,24 @@ function tool:getBinary()
 		fullpath = fullpath .. self.binaryName
 	end
 	self.binaryDir = path
+	
+	-- Wrap the command in another command. Original command will be appended, or inserted if binaryLauncher contains $CMD
+	if self.isCompiler and cfg.compilerwrapper then
+		-- Insert or append original command
+		local compilerwrapper = cfg.compilerwrapper
+		
+		if not compilerwrapper:contains('$CMD') then
+			compilerwrapper = compilerwrapper..' $CMD'
+		end
+		
+		-- Find the launcher
+		local launcherPath = os.findbin(compilerwrapper, self.binaryDir)
+		if launcherPath then
+			compilerwrapper = path.join( launcherPath, compilerwrapper )
+		end
+		
+		fullpath = compilerwrapper:replace('$CMD', fullpath)
+	end
 	self.binaryFullpath = fullpath
 	
 	return fullpath
@@ -229,9 +289,10 @@ end
 --
 function tool:getCompileOutput(cfg, fileName, uniqueSet)
 	local outputFilename
-	local fileExt = path.getextension(fileName)
+	local fileExt = path.getextension(fileName):lower()
 	
-	if self.extensionsForCompiling[fileExt] then
+	if (self.extensionsForCompiling and self.extensionsForCompiling[fileExt]) or cfg.language == self.language then
+	
 		local baseName = path.getbasename(fileName)
 		local objName = baseName .. self.objectFileExtension
 		
@@ -245,6 +306,7 @@ function tool:getCompileOutput(cfg, fileName, uniqueSet)
 			end
 			uniqueSet[objName] = 1
 		end
+		
 		return objName
 	else
 		return nil		-- don't process
@@ -255,7 +317,7 @@ end
 -- Returns true if this is an object file for the toolset
 --
 function tool:isLinkInput(cfg, fileName)
-	return (self.extensionsForLinking[path.getextension(fileName)] ~= nil)
+	return (not self.extensionsForLinking) or (self.extensionsForLinking[path.getextension(fileName)] ~= nil)
 end
 
 -- Get library includes
@@ -321,17 +383,17 @@ function premake.tools.newtool(toolDef)
 	-- Apply inherited tool
 	if toolDef.inheritFrom then
 		for k,v in pairs(toolDef.inheritFrom) do
-			t[k] = v
+			if type(v) == 'table' then
+				t[k] = table.deepcopy(v)
+			else
+				t[k] = v
+			end
 		end
 	end
 	
 	-- Apply specified values/functions
 	for k,v in pairs(toolDef) do
-		if type(t[k]) == 'table' and type(v) == 'table' then
-			t[k] = table.merge(t[k], v) 
-		else 
-			t[k] = v
-		end
+		t[k] = v
 	end
 	
 	if (not t.toolName) or #t.toolName < 1 then
@@ -345,14 +407,47 @@ function premake.tools.newtool(toolDef)
 		else
 			t.isLinker = true
 		end
-	end  
+	end
+	
+	-- Set up a list of arguments to decorate
+	t.decorateArgs = {}
+	-- extraArgs are arguments we always insert
+	local extraArgs = { 'fixedFlags', 'cfgflags', 'sysflags', 'input', 'output' }
+	if t.isCompiler then
+		table.insert( extraArgs, 'buildoptions' )
+	end
+	if t.isLinker then
+		table.insert( extraArgs, 'ldflags' )
+	end
+	
+	local args = Seq:new(t.prefixes):concat(t.suffixes):concat(t.decorateFn):getKeys():concat(extraArgs):toSet()
+	-- First add any arguments specified in the argumentOrder variable
+	for _,argName in ipairs(t.argumentOrder or {}) do
+		if args[argName] then
+			if not t.decorateArgs[argName] then
+				t.decorateArgs[argName] = argName
+				table.insert(t.decorateArgs, argName)
+			end
+		else
+			printf("Warning : Could not find a decorator for argument '%s' listed in argumentOrder", argName)
+		end  
+	end
+	-- Then add any others
+	for category,_ in pairs(args) do
+		if not t.decorateArgs[category] then
+			t.decorateArgs[category] = category
+			table.insert(t.decorateArgs, category)
+		end
+	end
+	
+	t.cache = {}  
 	
 	return t
 end
 
-function tool.decorateLibList(list, startPrefix, systemlibPrefix, returnIfEmpty)
+function tool.decorateLibList(list, startPrefix, systemlibPrefix)
 	if not list or #list == 0 then
-		return (returnIfEmpty or '')
+		return ''
 	else
 		local s = startPrefix
 		for _,lib in ipairs(list) do

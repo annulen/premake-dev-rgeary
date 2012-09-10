@@ -28,7 +28,7 @@
 ** model but changing `fputs' to put the strings at a proper place
 ** (a console window or a log file, for instance).
 */
-static int luaB_print (lua_State *L) {
+static int printToStdout (lua_State *L, const char * newLine) {
   int n = lua_gettop(L);  /* number of arguments */
   int i;
   lua_getglobal(L, "tostring");
@@ -45,10 +45,18 @@ static int luaB_print (lua_State *L) {
     fputs(s, stdout);
     lua_pop(L, 1);  /* pop result */
   }
-  fputs("\n", stdout);
+  if( newLine )
+	  fputs(newLine, stdout);
   return 0;
 }
 
+static int luaB_print (lua_State *L) {
+	return printToStdout(L, "\n");
+}
+
+static int luaB_printnr (lua_State *L) {
+	return printToStdout(L, NULL);
+}
 
 static int luaB_tonumber (lua_State *L) {
   int base = luaL_optint(L, 2, 10);
@@ -458,6 +466,7 @@ static const luaL_Reg base_funcs[] = {
   {"next", luaB_next},
   {"pcall", luaB_pcall},
   {"print", luaB_print},
+  {"printnr", luaB_printnr},
   {"rawequal", luaB_rawequal},
   {"rawget", luaB_rawget},
   {"rawset", luaB_rawset},

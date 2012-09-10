@@ -75,3 +75,10 @@
 		description	= "If the action is also building the project, use this number of threads",
 		aliases		= { 'j' },
 	}
+	
+	newoption
+	{
+		trigger		= "automated",
+		description = "Automated mode, no interaction available.",
+		aliases 	= { 'a' },
+	}

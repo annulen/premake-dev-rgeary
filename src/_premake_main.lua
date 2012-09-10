@@ -115,7 +115,17 @@
 		
 		-- Expose flags as root level objects, so you can write "flags { Symbols }"
 		local field = premake.fields["flags"]
-		for _,v in pairs(field.allowed) do
+		for k,v in pairs(field.allowedList) do
+			if type(k) == 'number' then
+				_G[v] = v
+			else
+				_G[k] = k
+				for _,v2 in ipairs(v) do
+					_G[v2] = v2
+				end
+			end
+		end
+		for _,v in pairs(field.aliases) do
 			_G[v] = v
 		end
 		
@@ -145,7 +155,14 @@
 		-- If there is a project script available, run it to get the
 		-- project information, available options and actions, etc.
 		
-		local fname = _OPTIONS["file"] or scriptfile
+		local fname = _OPTIONS["file"]
+		if not fname then
+			local premakeFiles = os.matchfiles('premake*.lua')
+			if #premakeFiles == 1 then
+				fname = premakeFiles[1]
+			end
+		end
+		
 		if (os.isfile(fname)) then
 			timer.start('Load build script')
 			dofile(fname)

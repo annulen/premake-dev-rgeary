@@ -20,9 +20,8 @@ premake.abstract.toolset = {}
 local toolset = premake.abstract.toolset
 premake.tools[''] = toolset		-- default
 
--- Default is for C++ source, override this for other toolset types
-toolset.sourceFileExtensions = { ".cc", ".cpp", ".cxx", ".c", ".s", ".m", ".mm" }
-toolset.objectFileExtension = '.o'
+-- Default toolset by file extension
+toolset.toolsByExt = {}
 
 --
 -- Select a default toolset for the appropriate platform / source type
@@ -49,7 +48,13 @@ end
 -- Toolset only provides "compile" and "link" features, but this allows 
 --  for different tool names for different configurations
 --	
-function toolset:getCompileTool(cfg)
+function toolset:getCompileTool(cfg, fileExt)
+	if fileExt then
+		if self.toolsByExt[fileExt] then
+			return self.toolsByExt[fileExt]
+		end
+	end
+	
     if cfg.project.language == "C" then
 	    return self.tools['cc']
 	else
@@ -59,7 +64,7 @@ end
 
 function toolset:getLinkTool(cfg)
     if cfg.kind == premake.STATICLIB then
-    	return self.tools['ar']
+    	return self.tools['ar'] or self.tools['link']
     else
     	return self.tools['link']
     end
@@ -85,9 +90,15 @@ function premake.tools.newtoolset(toolsetDef)
 	ptypeSet(t, 'toolset')
 	
 	if t.tools == nil then
-		print('Warning : No tools defined for toolset ' .. t.toolsetName)
+		if t.toolsetName ~= 'command' then
+			print('Warning : No tools defined for toolset "' .. t.toolsetName .. '"')
+		end
+		t.tools = {}
+		t.toolsByExt = {}
 	else
 		-- Construct tool lookup
+		t.toolsByExt = {}
+		
 		for _,tool in ipairs(t.tools) do
 			t.tools[tool.toolName] = tool
 			
@@ -95,12 +106,33 @@ function premake.tools.newtoolset(toolsetDef)
 				tool.binaryDir = tool.binaryDir or toolsetDef.binaryDir
 			end
 			
+			-- Create unique rule name
+			tool.ruleName = toolsetDef.toolsetName .. '_' .. tool.toolName
+			
 			-- Construct lookup sets for extensions
-			tool.extensionsForCompiling = toSet(tool.extensionsForCompiling)
-			tool.extensionsForLinking = toSet(tool.extensionsForLinking)
+			if tool.extensionsForCompiling then
+				tool.extensionsForCompiling = toSet(tool.extensionsForCompiling)
+				for k,v in pairs(tool.extensionsForCompiling) do 
+					t.toolsByExt[k] = tool
+				end
+			end
+			if tool.extensionsForLinking then
+				tool.extensionsForLinking = toSet(tool.extensionsForLinking)
+				for k,v in pairs(tool.extensionsForLinking) do 
+					t.toolsByExt[k] = tool
+				end
+			end
 		end
 	end 
 	
 	premake.tools[t.toolsetName] = t
 end
 	
+--
+--  The simplest tool. This just executes a specified command on the input files
+--   When running actions which don't support arbitrary execution (eg. VS), this will be executed by Premake 
+--
+
+newtoolset {
+	toolsetName = 'command',
+}

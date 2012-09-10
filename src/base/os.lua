@@ -100,7 +100,7 @@
 		end
 		
 		if( hintPath ) then
-			table.insert(path, 1, hintPath)
+			path = hintPath..os.getPathDelimiter()..path
 		end
 				
 		local firstArg = string.find(binname, ' ')
@@ -128,6 +128,16 @@
 		end
 	end
 
+--
+-- Platform specific path delimiter
+--
+	function os.getPathDelimiter()
+		if _OS == "windows" then 
+			return ';'
+		else 
+			return ':' 
+		end
+	end
 
 --
 -- Retrieve the current operating system ID string.

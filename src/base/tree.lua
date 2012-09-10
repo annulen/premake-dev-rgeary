@@ -40,7 +40,7 @@
 
 	function tree.add(tr, p, onaddfunc)
 		-- Special case "." refers to the current node
-		if p == "." then
+		if p == "." or p == "/" then
 			return tr
 		end
 		

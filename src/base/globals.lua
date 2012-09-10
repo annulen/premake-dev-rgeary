@@ -408,17 +408,20 @@
 		return rv
 	end
 	
-	function toSet(vs)
+	function toSet(vs, toLower)
+		if not vs then return {} end
 		if type(vs) == 'string' then
 			-- Convert string to hashset
 			local t = {}
-			t[vs] = 1
+			if toLower then vs = vs:lower() end
+			t[vs] = vs
 			return t
 		elseif type(vs) == 'function' then
 			-- assume it's an iterator function
 			kvs = {}
 			for k,v in vs do
-				kvs[v] = 1
+				if toLower then v = v:lower() end
+				kvs[v] = v
 			end
 			return kvs
 		end
@@ -426,11 +429,24 @@
 			-- Convert sequence to hashset
 			kvs = {}
 			for _,v in ipairs(vs) do
-				kvs[v] = 1
+				if toLower then v = v:lower() end
+				kvs[v] = v
 			end
 			return kvs
 		else
-			return vs
+			local t = {}
+			if toLower then
+				for k,v in pairs(vs) do
+					if type(k) == 'string' then
+						t[k:lower()] = v:lower()
+					else
+						t[k] = v:lower()
+					end
+				end
+				return t
+			else
+				return vs
+			end
 		end
 	end
 	
