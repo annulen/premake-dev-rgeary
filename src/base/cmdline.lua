@@ -82,3 +82,15 @@
 		description = "Automated mode, no interaction available.",
 		aliases 	= { 'a' },
 	}
+	
+	newoption
+	{
+		trigger     = "relativepaths",
+		description = "Always generate relative build paths",
+	}
+	
+	newoption
+	{
+		trigger     = "systemScript",
+		description = "Run a system script before the build script. Default filename is premake-system.lua. Overridden by $PREMAKE_PATH.",
+	}

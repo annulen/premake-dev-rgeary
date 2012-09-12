@@ -27,6 +27,9 @@
 --
 	local builtin_isfile = os.isfile
 	function os.isfile(s)
+		if not s then 
+			return false 
+		end
 		if repoRoot then
 			s = s:replace('$root', repoRoot)
 		end

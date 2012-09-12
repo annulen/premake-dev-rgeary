@@ -18,6 +18,7 @@
 		kind        "ConsoleApp"
 		flags       { "No64BitChecks", "ExtraWarnings", "StaticRuntime" }	
 		includedirs { "src/host/lua-5.1.4/src" }
+		ninjaBuildDir "."
 
 		files 
 		{

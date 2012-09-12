@@ -61,7 +61,7 @@
 		oncleansolution = function(sln)
 			clean.file(sln, ninja.getSolutionBuildFilename(sln))
 			clean.file(sln, path.join(sln.basedir, 'build.ninja'))
-			clean.file(sln, path.join(repoRoot, 'build.ninja'))
+			clean.file(sln, path.join(repoRoot, 'buildedges.ninja'))
 		end,
 	}
 	
@@ -87,15 +87,14 @@
 				ninja.builddir = ninja.builddir:replace('$root',repoRoot)
 				ninja.checkIgnoreFiles(ninja.builddir)
 			end
+			ninja.builddir = path.getabsolute(ninja.builddir)
 			
-			ninja.openFile(path.join(ninja.builddir, 'build.ninja'))
+			ninja.openFile(path.join(ninja.builddir, 'buildedges.ninja'))
 			ninja.generateSolution(sln, globalScope)
 
-			-- Must come after the main build.ninja as we need to write out the default build statements
-			if sln.basedir ~= ninja.builddir then
-				ninja.checkIgnoreFiles(sln.basedir)
-				ninja.generateDefaultBuild(sln, sln.basedir, globalScope)
-			end 
+			-- Must come after the main buildedges.ninja as we need to write out the default build statements
+			ninja.checkIgnoreFiles(sln.basedir)
+			ninja.generateDefaultBuild(sln, sln.basedir, globalScope)
 
 			slnDone[slnName] = true
 		end
@@ -103,7 +102,7 @@
 	
 	-- After the last solution
 	function ninja.onEnd()
-		local f = ninja.openFile(path.join(ninja.builddir, 'build.ninja'))
+		local f = ninja.openFile(path.join(ninja.builddir, 'buildedges.ninja'))
 		ninja.writeFooter(globalScope)
 		ninja.closeFile(f)
 
@@ -158,13 +157,36 @@
 		local args = Seq:new(_ARGS) 
 		
 		if not args:contains('nobuild') then
-			print('Running ninja...')
 			local cmd = 'ninja'
 			if _OPTIONS['threads'] then
 				cmd = cmd .. ' -j'..tostring(_OPTIONS['threads'])
 			end
-			return os.executef(cmd)
-		
+			
+			if os.isfile('build.ninja') then
+				print('Running ninja...')
+				return os.executef(cmd)
+			else
+
+				local dir = os.getcwd()
+				while dir ~= '/' do
+					if os.isfile(path.join(dir,'build.ninja')) then
+						break
+					end
+					dir = path.getdirectory(dir)
+				end
+				if dir == '/' then
+					print('Unknown build, no solution found in current directory or its parents')
+					return
+				end
+				
+				local ninjadir = path.getrelative(os.getcwd(), dir)
+				if ninjadir:startswith('..') then ninjadir = dir end					
+				print('Running ninja on '..ninjadir)
+				
+				cmd = cmd .. ' -q -C ' .. dir
+				
+				return os.executef(cmd)
+			end
 		elseif args:contains('print') then
 			local printAction = premake.action.get('print')
 			premake.action.call(printAction.trigger)

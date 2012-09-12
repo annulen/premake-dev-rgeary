@@ -39,7 +39,7 @@ function ninja.generateSolution(sln, scope)
 	--_p('#  This file is not designed to be invoked directly, the build.ninja header file specifies the dependencies')
 	--_p('')
 	if not scope:get('__header') then 
-		ninja.writeHeader()
+		ninja.writeHeader(true, ninja.builddir)
 		scope:set('__header', true)
 	end
 
@@ -311,7 +311,9 @@ function ninja.writeProjectTargets(prj, scope)
 				
 				if compileTool ~= fileCompileTool then
 					fileCompileTool, fileCompileOverrides = ninja.getCompileTool(cfg, fileExt, scope)
-					
+				end
+				
+				if fileCompileTool then
 					-- Check if we can compile the file, and get the object file name
 					outputFile = fileCompileTool:getCompileOutput(cfg, fileName, uniqueObjNameSet)
 				end
@@ -611,15 +613,24 @@ function ninja.writeEnvironment(sln)
 
 end
 
-function ninja.writeHeader()
+function ninja.writeHeader(writeExecRule, buildFileDir)
 	--printDebug('builddir = "'..ninja.builddir..'"') 
 	--printDebug('repoRoot = "'..repoRoot..'"') 
-	_p('root=' .. repoRoot)
-	_p('builddir=' .. ninja.builddir)
-	_p('rule exec')
-	_p(' command=$cmd')
-	_p(' description=$description')
+	if _OPTIONS.relativepaths then
+		_p('root=' .. path.getrelative(buildFileDir, repoRoot))
+		_p('builddir=' .. path.getrelative(buildFileDir, ninja.builddir))
+	else
+		_p('root=' .. repoRoot)
+		_p('builddir=' .. ninja.builddir)
+	end
 	_p('')
+	
+	if writeExecRule then
+		_p('rule exec')
+		_p(' command=$cmd')
+		_p(' description=$description')
+		_p('')
+	end
 	
 	--_p('build clean: exec')
 	--_p(' cmd=ninja -t clean')
@@ -749,12 +760,16 @@ function ninja.generateDefaultBuild(sln, buildFileDir, scope)
 	_p('# Ninja build is available to download at http://martine.github.com/ninja/')
 	_p('# Type "ninja help" for usage help')
 	_p('')
-	_p('root=' .. repoRoot)
-	_p('builddir=' .. ninja.builddir)
-	_p('')
 	
+	ninja.writeHeader(false, buildFileDir)
+		
 	_p('# Main Build')
-	_p('subninja '..path.join(ninja.builddir,'build.ninja'))
+	local mainBuildNinjaFile = path.join(ninja.builddir,'buildedges.ninja')
+	if _OPTIONS.relativepaths then
+		_p('subninja '..path.getrelative(buildFileDir, mainBuildNinjaFile) )
+	else
+		_p('subninja '..mainBuildNinjaFile)
+	end
 	_p('')
 	
 	if sln and scope.slntargets then

@@ -91,7 +91,7 @@
 		out:write("const char* builtin_scripts[] = {\n")
 		
 		for i,fn in ipairs(scripts) do
-			print(fn)
+			--print(fn)
 			local s = stripfile("src/" .. fn)
 			writefile(out, fn, s)
 		end
