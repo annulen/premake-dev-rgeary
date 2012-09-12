@@ -18,15 +18,18 @@
 --
 	function globalContainer.bakeall()
 	
-		local cfgNameList = Seq:new(solution.list):select('configurations'):flatten():unique()
-		if cfgNameList:count() == 0 then
-			error("No configurations to build")
-		elseif cfgNameList:count() == 1 then
-			print("Generating configuration '"..cfgNameList:first().."' ...")
-		else
-			print("Generating configurations : "..cfgNameList:mkstring(', ').." ...")
+		-- Message
+		if _ACTION ~= 'clean' then
+			local cfgNameList = Seq:new(solution.list):select('configurations'):flatten():unique()
+			if cfgNameList:count() == 0 then
+				error("No configurations to build")
+			elseif cfgNameList:count() == 1 then
+				print("Generating configuration '"..cfgNameList:first().."' ...")
+			else
+				print("Generating configurations : "..cfgNameList:mkstring(', ').." ...")
+			end
 		end
-		
+				
 		-- Bake all real projects, but don't resolve usages		
 		local tmr = timer.start('Bake projects')
 		for i,prj in ipairs(globalContainer.allReal) do

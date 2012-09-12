@@ -61,7 +61,9 @@
 		oncleansolution = function(sln)
 			clean.file(sln, ninja.getSolutionBuildFilename(sln))
 			clean.file(sln, path.join(sln.basedir, 'build.ninja'))
-			clean.file(sln, path.join(repoRoot, 'buildedges.ninja'))
+			ninja.setNinjaBuildDir(sln)
+			clean.file(sln, path.join(ninja.builddir, 'buildedges.ninja'))
+			clean.file(sln, path.join(ninja.builddir, '.ninja_log'))
 		end,
 	}
 	
@@ -80,14 +82,7 @@
 				end
 			end
 
-			-- builddir is where the build log & main ninja file is placed 
-			repoRoot = repoRoot or path.getabsolute(_WORKING_DIR)
-			if (not ninja.builddir) then
-				ninja.builddir = iif( sln.ninjaBuildDir, sln.ninjaBuildDir, repoRoot)
-				ninja.builddir = ninja.builddir:replace('$root',repoRoot)
-				ninja.checkIgnoreFiles(ninja.builddir)
-			end
-			ninja.builddir = path.getabsolute(ninja.builddir)
+			ninja.setNinjaBuildDir(sln)
 			
 			ninja.openFile(path.join(ninja.builddir, 'buildedges.ninja'))
 			ninja.generateSolution(sln, globalScope)
@@ -151,6 +146,17 @@
 
 	function ninja.getSolutionBuildFilename(sln)
 		return path.join(sln.basedir, 'build_'..sln.name..'.ninja')
+	end
+
+	function ninja.setNinjaBuildDir(sln)
+		-- builddir is where the build log & main ninja file is placed 
+		repoRoot = repoRoot or path.getabsolute(_WORKING_DIR)
+		if (not ninja.builddir) then
+			ninja.builddir = iif( sln.ninjaBuildDir, sln.ninjaBuildDir, repoRoot)
+			ninja.builddir = ninja.builddir:replace('$root',repoRoot)
+			ninja.checkIgnoreFiles(ninja.builddir)
+		end
+		ninja.builddir = path.getabsolute(ninja.builddir)
 	end
 	
 	function ninja.onExecute()
