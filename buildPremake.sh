@@ -44,7 +44,7 @@ fi
 # Test if premake exists
 if [[ ! -f "$premakeDir/bin/release/premake4" || ! -f "$premakeDir/bin/debug/premake4" ]]; then
 	# Assume that ninja files in the depot are valid
-	ninja -q -C $premakeDir $threads
+	ninja $threads
 	result=$?
 	if [[ $result != 0 ]]; then
 		echo "Error building Premake : ninja bootstrap of premake failed"
@@ -54,7 +54,7 @@ fi
 	
 # Now rebuild to make sure it's the latest
 $premake --file=$premakeDir/premake4.lua embed nobuild "$@"
-$premake --file=$premakeDir/premake4.lua $systemScript --toolset=icc12 --relativepaths ninja $debug $threads "$@"
+$premake --file=$premakeDir/premake4.lua $systemScript --relativepaths ninja $debug $threads "$@"
 result=$?
 
 if [[ $result != 0 ]]; then
