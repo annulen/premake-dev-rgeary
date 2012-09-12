@@ -97,6 +97,9 @@ function ninja.writeFooter(scope)
 		for _,line in ipairs(ninja.helpMsg) do
 			_p(line..echoNewLine)
 		end
+		local slnList = mkstring(getKeys(scope.slntargets))
+		_p(echoNewLine)
+		_p(' Solutions : '.. slnList..echoNewLine)
 		_p('"')
 		_p('build help: exec\n cmd=echo -e $ninjaHelpMsg\n description=\t')
 		_p('')		

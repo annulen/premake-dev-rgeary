@@ -115,18 +115,26 @@
 		
 		-- Expose flags as root level objects, so you can write "flags { Symbols }"
 		local field = premake.fields["flags"]
+		local insertList = {}
 		for k,v in pairs(field.allowedList) do
 			if type(k) == 'number' then
-				_G[v] = v
+				table.insert( insertList, v )
 			else
-				_G[k] = k
+				table.insert( insertList, k )
 				for _,v2 in ipairs(v) do
-					_G[v2] = v2
+					table.insert( insertList, v2 )
 				end
 			end
 		end
 		for _,v in pairs(field.aliases) do
-			_G[v] = v
+			table.insert( insertList, v )
+		end
+		for _,v in ipairs(insertList) do
+			if _G[v] and _G[v] ~= v then
+				print('Warning : '..v..' is already set to '.._G[v]..', can\'t reassign _G["'..v..'"]=\"'..v..'"')
+			else
+				_G[v] = v
+			end 
 		end
 		
 		-- Set up global container

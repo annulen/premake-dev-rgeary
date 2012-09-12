@@ -170,7 +170,6 @@
 			
 			if os.isfile('build.ninja') then
 				print('Running ninja...')
-				return os.executef(cmd)
 			else
 
 				local dir = os.getcwd()
@@ -190,8 +189,11 @@
 				print('Running ninja on '..ninjadir)
 				
 				cmd = cmd .. ' -q -C ' .. dir
-				
-				return os.executef(cmd)
+			end
+			
+			local rv = os.executef(cmd)
+			if rv ~= 0 then
+				os.exit(1)
 			end
 		elseif args:contains('print') then
 			local printAction = premake.action.get('print')

@@ -107,7 +107,7 @@ timer.start('keyedblocks.create')
 						for _,useProjName in ipairs(v) do
 							local usageProj = keyedblocks.getUsage(useProjName)
 							if not usageProj then
-								error('Could not find usage project '..tostring(useProjName))
+								error('Could not find usage '..tostring(useProjName)..' in project '..tostring(obj.name))
 							end
 							kb.__uses[useProjName] = usageProj
 						end
