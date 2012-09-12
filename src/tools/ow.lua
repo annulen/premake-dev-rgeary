@@ -7,7 +7,6 @@
 	premake.ow = { }
 	premake.ow.namestyle = "windows"
 	
-	
 --
 -- Set default tools
 --

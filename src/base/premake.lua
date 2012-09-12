@@ -4,6 +4,14 @@
 -- Copyright (c) 2002-2012 Jason Perkins and the Premake project
 --
 
+-- Global Premake functions
+--  Define these as variables pointing to the functions to allow the user to override them (eg. to specify default behaviour)
+
+	local api = premake.api
+	global = api.global
+	solution = api.solution
+	project = api.project
+	configuration = api.configuration
 
 --
 -- Define some commonly used symbols, for future-proofing.
@@ -18,6 +26,8 @@
 	premake.MACOSX      = "macosx"
 	premake.POSIX       = "posix"
 	premake.PS3         = "ps3"
+	premake.LINUX       = "linux"
+	premake.SOLARIS     = "solaris"
 	premake.SHAREDLIB   = "SharedLib"
 	premake.STATICLIB   = "StaticLib"
 	premake.UNIVERSAL   = "universal"
@@ -85,14 +95,29 @@
 
 	function premake.generate(obj, filename, callback)
 		filename = premake.project.getfilename(obj, filename)
-		printf("Generating %s...", filename)
+		local f = premake.generateStart(filename)
+		callback(obj, filename)
+		premake.generateEnd(f, filename)
+	end
+
+-- Returns file handle
+	function premake.generateStart(filename, hideMessage)
+		if not hideMessage then
+			printf("Generating %s...", filename)
+		end
 
 		local f, err = io.open(filename, "wb")
 		if (not f) then
 			error(err, 0)
 		end
 
-		io.output(f)
-		callback(obj)
-		f:close()
+		if not _OPTIONS['dryrun'] then
+			io.output(f)
+		end
+		return f	
 	end
+	
+	function premake.generateEnd(fileHandle, filename)
+		io.close(fileHandle)
+	end
+	

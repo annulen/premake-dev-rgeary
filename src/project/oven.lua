@@ -4,7 +4,7 @@
 -- Copyright (c) 2011-2012 Jason Perkins and the Premake project
 --
 
-	premake5.oven = { }
+	premake5.oven = premake5.oven or { }
 	local oven = premake5.oven
 
 
@@ -60,6 +60,7 @@
 
 		-- Walk the blocks available in this container, and merge their values
 		-- into my configuration-in-progress, if they pass the keyword filter
+		container.blocks = container.blocks or {}
 		for _, block in ipairs(container.blocks) do
 			if oven.filter(block, casedTerms) then
 				oven.merge(cfg, block, filterField)
@@ -69,7 +70,9 @@
 		-- Store the filter terms in the configuration (i.e. buildcfg, platform)
 		cfg.terms = casedTerms
 		for key, value in pairs(filterTerms) do
-			cfg[key] = value
+			if type(key) ~= 'number' then
+				cfg[key] = value
+			end
 		end
 		
 		return cfg
@@ -94,7 +97,7 @@
 			solution = cfg.solution,
 			project = cfg.project,
 			buildcfg = cfg.buildcfg,
-			platform = cfg.platform
+			platform = iif(cfg.platform ~= '', cfg.platform, nil), 
 		}
 		
 		filename = { filename:lower() }
@@ -130,43 +133,65 @@
 --    Optional; if set, only this field will be expanded.
 --
 
-	function oven.expandtokens(cfg, scope, filecfg, fieldname)
+	function oven.expandtokens(cfg, scope, filecfg, fieldname, delayedExpand)
+local tmr=timer.start('oven.expandTokens')
+
 		-- File this under "too clever by half": I want path tokens (targetdir, etc.)
 		-- to expand to relative paths, but it is easier to work with absolute paths 
 		-- everywhere else. So create a proxy object with an attached metatable that
 		-- will translate any path fields from absolute to relative on the fly.
 		local _cfg = cfg
-		local cfgproxy = {}
-		setmetatable(cfgproxy, {
-			__index = function(cfg, key)
-				-- pass through access to non-Premake fields
-				local field = premake.fields[key]
-				if field and field.kind == "path" then
-					return premake5.project.getrelative(_cfg.project, _cfg[key])
-				end				
-				return _cfg[key]
-			end	
-		})
-			
-		-- build a context for the tokens to use
-		local context = {
-			sln = cfg.solution,
-			prj = cfg.project,
-			cfg = cfgproxy,
-			file = filecfg
-		}
+		local context = _cfg._expandTokensContext
 		
-		function expand(target, field)
+		if not context then 
+			local cfgproxy = {}
+			setmetatable(cfgproxy, {
+				__index = function(cfg, key)
+					-- pass through access to non-Premake fields
+					local field = premake.fields[key]
+					if field and field.kind:contains("path") then
+						return premake5.project.getrelative(_cfg.project, _cfg[key])
+					end				
+					return _cfg[key]
+				end	
+			})
+				
+			-- build a context for the tokens to use
+			context = {
+				sln = cfg.solution,
+				prj = cfg.project,
+				cfg = cfgproxy,
+				file = filecfg,
+				cache = {},
+			}
+			_cfg._expandTokensContext = context
+		end
+		
+		local function expand(target, field)
 			local value = target[field]
 			if type(value) == "string" then
 				target[field] = oven.expandvalue(value, context)
 			else
-				for key in pairs(value) do
-					expand(value, key)
+				-- delayed expand, only expand if you need it. 
+				-- Makes a small perf increase, remove if it causes problems, eg. because you're unable to call ipairs(t)
+				if delayedExpand then
+					local proxyTable = {}
+					local mt = {}
+					mt.__index = function(self, key)
+						expand(value, key)
+						self[key] = value[key]
+						return value[key]
+					end
+					setmetatable(proxyTable, mt)
+					target[field] = proxyTable
+				else
+					for key in pairs(value) do
+						expand(value, key)
+					end
 				end
 			end
 		end
-
+				
 		local target = filecfg or cfg
 		if fieldname then
 			if target[fieldname] then
@@ -177,17 +202,28 @@
 				-- to avoid unexpected errors or recursions, I only process
 				-- Premake's own API fields, and only those marked for it
 				local field = premake.fields[key]
-				if field ~= nil and field.tokens and field.scope == scope then
+				if field ~= nil and field.expandtokens and field.scope == scope then
 					expand(target, key)
 				end
 			end
 		end
+timer.stop(tmr)		
 	end
 
 
 	function oven.expandvalue(value, context)
+		-- early out makes the function 40% faster
+		if not value:find('%{',1,true) then
+			return value
+		end
+	
+local tmr=timer.start('oven.expandvalue')
 		-- function to do the work of replacing a single token
 		local expander = function(token)
+			if context.cache[token] then
+				return context.cache[token]
+			end
+			
 			-- convert the token into a function to execute
 			local func, err = loadstring("return " .. token)
 			if not func then
@@ -199,24 +235,31 @@
 			setmetatable(context, {__index = _G})
 
 			-- run it and return the result
-			local result = func()
-			if not result then
+			local err, result = pcall(func)
+			if not err or not result then
 				return nil, "Invalid token '" .. token .. "'"
 			end
+			if type(result) == 'table' then
+				result = table.concat(result, ' ')
+			end
+			context.cache[token] = result
+
 			return result
 		end
-
+		
 		-- keep expanding tokens until they are all handled
 		repeat
 			value, count = string.gsub(value, "%%{(.-)}", function(token)			
 				local result, err = expander(token)
 				if not result then
-					error(err, 0)
+					local location = (context.sln.name or '') ..'/'..(context.prj.name or '')..'/'..(context.cfg.shortname or '')
+					error(err .. ' in ' .. value..' at '..location, 0)
 				end
 				return result
 			end)
 		until count == 0
 
+timer.stop(tmr)
 		return value
 	end
 
@@ -335,15 +378,18 @@
 				oven.mergefield(cfg, filterField, block[filterField])
 			end
 		else
+			local tmr = timer.start('oven.merge')
+			
 			for key, value in pairs(block) do
 				if not nomerge[key] then
 					oven.mergefield(cfg, key, value)
 				end
 			end
+			
+			-- remember the container object (solution, project, etc.)
+			ptypeSet(cfg, ptype(block))
+			timer.stop(tmr)
 		end
-		
-		-- remember the container object (solution, project, etc.)
-		cfg[type(block)] = block
 		
 		return cfg
 	end
@@ -388,6 +434,10 @@
 
 	function oven.mergefield(cfg, name, value)
 		local field = premake.fields[name]
+		
+		if not value then
+			return
+		end
 
 		-- if this isn't a Premake field, then just copy
 		if not field then
@@ -445,11 +495,23 @@
 		-- list values get merged, others overwrite; note that if the 
 		-- values contain tokens they will be modified in the token 
 		-- expansion phase, so important to make copies of objects
-		if fieldkind:endswith("list") then
+		if fieldkind == 'flaglist' then
+			target[fieldname] = oven.mergeflags(target[fieldname] or {}, value)
+		elseif fieldkind:endswith("list") then
 			target[fieldname] = oven.mergetables(target[fieldname] or {}, value)
 		else
 			target[fieldname] = table.deepcopy(value)
 		end
+	end
+	
+--
+-- Merge keyed tables
+--
+	function oven.mergeflags(t, additions)
+		for k,v in pairs(additions) do
+			t[k] = v
+		end			
+		return t
 	end
 
 
@@ -505,6 +567,7 @@
 	end
 
 	function oven.removefromfield(field, removes)
+		local tmr = timer.start('oven.removefromfield')
 		if field and removes then
 			for key, pattern in ipairs(removes) do
 				pattern = path.wildcards(pattern):lower()
@@ -522,4 +585,5 @@
 				
 			end
 		end
+		timer.stop(tmr)
 	end

@@ -5,6 +5,7 @@
 --
 
 	premake.xcode = { }
+	local clean = premake.actions.clean
 	
 	newaction 
 	{
@@ -42,7 +43,7 @@
 		end,
 		
 		oncleanproject = function(prj)
-			premake.clean.directory(prj, "%%.xcodeproj")
+			clean.directory(prj, "%%.xcodeproj")
 		end,
 		
 		oncheckproject = function(prj)
@@ -92,8 +93,8 @@
 		end,
 		
 		oncleanproject = function(prj)
-			premake.clean.directory(prj, "%%.xcodeproj")
-			premake.clean.directory(prj, "%%.xcworkspace")
+			clean.directory(prj, "%%.xcodeproj")
+			clean.directory(prj, "%%.xcworkspace")
 		end,
 		
 		oncheckproject = function(prj)

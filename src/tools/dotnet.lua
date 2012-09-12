@@ -7,7 +7,6 @@
 	
 	premake.dotnet = { }
 	premake.dotnet.namestyle = "windows"
-	
 
 --
 -- Translation of Premake flags into CSC flags

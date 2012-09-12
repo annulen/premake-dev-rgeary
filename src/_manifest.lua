@@ -10,6 +10,10 @@
 	return
 	{
 		-- core files
+		"base/_declare.lua",
+		"base/timer.lua",
+		"base/cache.lua",
+		"base/seq.lua",
 		"base/os.lua",
 		"base/path.lua",
 		"base/string.lua",
@@ -23,23 +27,31 @@
 		"base/config.lua",
 		"base/bake.lua",
 		"base/api.lua",
+		"base/toolset.lua",
 		"base/cmdline.lua",
 		"base/validate.lua",
 		"base/help.lua",
 		"base/premake.lua",
 		
 		-- project APIs
+		"project/keyedblocks.lua",
+		"base/globalcontainer.lua",
 		"project/oven.lua",
 		"project/project.lua",
 		"project/config.lua",
 		"base/solution.lua",
 
 		-- tool APIs
+		"tools/atool.lua",
 		"tools/dotnet.lua",
 		"tools/gcc.lua",
 		"tools/msc.lua",
 		"tools/ow.lua",
 		"tools/snc.lua",
+		"tools/icc.lua",
+
+		-- Clean action
+		"actions/clean/_clean.lua",
 
 		-- CodeBlocks action
 		"actions/codeblocks/_codeblocks.lua",
@@ -79,7 +91,11 @@
 		
 		-- Xcode4 action
 		"actions/xcode/xcode4_workspace.lua",
-		
-		-- Clean action
-		"actions/clean/_clean.lua",
+				
+		-- Print action
+		"actions/print/_print.lua",
+
+		-- Ninja build action
+		"actions/ninja/_ninja.lua",
+		"actions/ninja/ninja_solution.lua",
 	}

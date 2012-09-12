@@ -36,12 +36,24 @@
 -- Get the absolute file path from a relative path. The requested
 -- file path doesn't actually need to exist.
 --
-	
+local absPathCache = {}
+
 	function path.getabsolute(p)
+		local result
+
+		if absPathCache[p] then 
+			return absPathCache[p] 
+		end
+
+		local isabsolute = path.isabsolute(p)
+		
 		if type(p) == "table" then
 			local result = {}
 			for _, value in ipairs(p) do
 				table.insert(result, path.getabsolute(value))
+			end
+			if isabsolute then
+				absPathCache[p] = result
 			end
 			return result
 		end
@@ -50,29 +62,37 @@
 		p = path.translate(p, "/")
 		if (p == "") then p = "." end
 		
-		-- if the directory is already absolute I don't need to do anything
-		local result = iif (path.isabsolute(p), nil, os.getcwd())
-
-		-- split up the supplied relative path and tackle it bit by bit
-		for n, part in ipairs(p:explode("/", true)) do
-			if (part == "" and n == 1) then
-				result = "/"
-			elseif (part == "..") then
-				result = path.getdirectory(result)
-			elseif (part ~= ".") then
-				-- Environment variables embedded in the path need to be treated
-				-- as relative paths; path.join() makes them absolute
-				if (part:startswith("$") and n > 1) then
-					result = result .. "/" .. part
-				else
-					result = path.join(result, part)
+		local result
+		
+		if (not isabsolute) or (p:find('/.',1,true) or p:find('$',1,true)) then
+local tmr=timer.start('path.getabsolute')
+			result = iif (isabsolute, nil, os.getcwd())
+			
+			-- split up the supplied relative path and tackle it bit by bit
+			for n, part in ipairs(p:explode("/", true)) do
+				if (part == "..") then
+					result = path.getdirectory(result)
+				elseif (part ~= ".") then
+					-- Environment variables embedded in the path need to be treated
+					-- as relative paths; path.join() makes them absolute
+					if result then
+						result = result .. '/' .. part
+					else
+						result = part
+					end
 				end
 			end
+timer.stop(tmr)
+		else
+			result = p
 		end
 		
 		-- if I end up with a trailing slash remove it
 		result = iif(result:endswith("/"), result:sub(1, -2), result)
 		
+		if isabsolute then
+			absPathCache[p] = result
+		end
 		return result
 	end
 	
@@ -135,6 +155,17 @@
 		end
 	end
 	
+--
+-- Remove the file extension
+--
+	function path.stripextension(p)
+		local i = p:findlast(".", true)
+		if (i) then
+			return p:sub(1,i)
+		else
+			return p
+		end
+	end
 	
 	
 --
@@ -257,6 +288,9 @@
 		return path.hasextension(fname, { ".h", ".hh", ".hpp", ".hxx" })
 	end
 
+	function path.containsSlash(fname)
+		return string.find(fname, '[/\\]')
+	end
 
 
 --
@@ -297,6 +331,7 @@
 --
 
 	function path.join(...)
+local tmr = timer.start('path.join')
 		local numargs = select("#", ...)
 		if numargs == 0 then
 			return "";
@@ -317,7 +352,8 @@
 				end
 			end
 		end
-		
+
+timer.stop(tmr)		
 		return table.concat(allparts, "/")
 	end
 
@@ -366,8 +402,9 @@
 -- @returns
 --    The corresponding Lua pattern.
 --
-
+	--local patternCache = cache.new()
 	function path.wildcards(pattern)
+local tmr = timer.start('path.wildcards')
 		-- Escape characters that have special meanings in Lua patterns
 		pattern = pattern:gsub("([%+%.%-%^%$%(%)%%])", "%%%1")
 
@@ -379,6 +416,6 @@
 		-- Replace the placeholders with their Lua patterns
 		pattern = pattern:gsub("\001", ".*")
 		pattern = pattern:gsub("\002", "[^/]*")
-		
+timer.stop(tmr)		
 		return pattern
 	end

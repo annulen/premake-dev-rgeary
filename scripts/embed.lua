@@ -17,7 +17,9 @@
 		s = s:gsub("[\r]", "")
 				
 		-- strip out block comments
-		s = s:gsub("%-%-%[%[.-%-%-%]%]", "")
+		s = s:gsub("%-%-%[%[.-%]%]", "")
+		s = s:gsub("%-%-%[=%[.-%]=%]", "")
+		s = s:gsub("%-%-%[==%[.-%]==%]", "")
 
 		-- strip out inline comments
 		s = s:gsub("\n%-%-[^\n]*", "")
@@ -89,7 +91,7 @@
 		out:write("const char* builtin_scripts[] = {\n")
 		
 		for i,fn in ipairs(scripts) do
-			print(fn)
+			--print(fn)
 			local s = stripfile("src/" .. fn)
 			writefile(out, fn, s)
 		end

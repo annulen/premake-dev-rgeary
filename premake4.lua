@@ -18,6 +18,7 @@
 		kind        "ConsoleApp"
 		flags       { "No64BitChecks", "ExtraWarnings", "StaticRuntime" }	
 		includedirs { "src/host/lua-5.1.4/src" }
+		ninjaBuildDir "."
 
 		files 
 		{
@@ -37,13 +38,15 @@
 			
 		configuration "Debug"
 			targetdir   "bin/debug"
+			objdir			"obj/debug"
 			defines     "_DEBUG"
 			flags       { "Symbols" }
 			
 		configuration "Release"
 			targetdir   "bin/release"
+			objdir			"obj/release"
 			defines     "NDEBUG"
-			flags       { "OptimizeSize" }
+			flags       { "OptimizeSpeed" }
 
 		configuration "vs*"
 			defines     { "_CRT_SECURE_NO_WARNINGS" }
@@ -113,6 +116,7 @@
 	
 	newaction {
 		trigger     = "embed",
+		isnextgen		= true,
 		description = "Embed scripts in scripts.c; required before release builds",
 		execute     = doembed
 	}

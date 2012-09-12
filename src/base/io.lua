@@ -34,6 +34,14 @@
 
 	local builtin_open = io.open
 	function io.open(fname, mode)
+		if _OPTIONS['dryrun'] then
+			if mode and mode:find('w') then
+				printf('write : ' .. fname .. '\n')
+			else 
+				printf('read : ' .. fname .. '\n')
+			end
+			return 'nullfile'
+		end
 		if (mode) then
 			if (mode:find("w")) then
 				local dir = path.getdirectory(fname)
@@ -53,6 +61,10 @@
 --
 
 	function io.printf(msg, ...)
+		if _OPTIONS['dryrun'] then
+			return
+		end
+		
 		if not io.eol then
 			io.eol = "\n"
 		end
@@ -76,6 +88,12 @@
 		end
 	end
 
+	function io.close(fileHandle)
+		if fileHandle and not _OPTIONS['dryrun'] then
+			fileHandle:flush()
+			fileHandle:close()
+		end			
+	end
 
 --
 -- Because I use io.printf() so often in the generators, create a terse shortcut

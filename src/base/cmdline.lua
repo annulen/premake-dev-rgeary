@@ -9,29 +9,6 @@
 -- Built-in command line options
 --
 
-	newoption 
-	{
-		trigger     = "cc",
-		value       = "VALUE",
-		description = "Choose a C/C++ compiler set",
-		allowed = {
-			{ "gcc", "GNU GCC (gcc/g++)" },
-			{ "ow",  "OpenWatcom"        },
-		}
-	}
-
-	newoption
-	{
-		trigger     = "dotnet",
-		value       = "VALUE",
-		description = "Choose a .NET compiler set",
-		allowed = {
-			{ "msnet",   "Microsoft .NET (csc)" },
-			{ "mono",    "Novell Mono (mcs)"    },
-			{ "pnet",    "Portable.NET (cscc)"  },
-		}
-	}
-
 	newoption
 	{
 		trigger     = "file",
@@ -47,37 +24,6 @@
 		
 	newoption
 	{
-		trigger     = "os",
-		value       = "VALUE",
-		description = "Generate files for a different operating system",
-		allowed = {
-			{ "bsd",      "OpenBSD, NetBSD, or FreeBSD" },
-			{ "haiku",    "Haiku" },
-			{ "linux",    "Linux" },
-			{ "macosx",   "Apple Mac OS X" },
-			{ "solaris",  "Solaris" },
-			{ "windows",  "Microsoft Windows" },
-		}
-	}
-
-	newoption
-	{
-		trigger     = "platform",
-		value       = "VALUE",
-		description = "Add target architecture (if supported by action)",
-		allowed = {
-			{ "x32",         "32-bit" },
-			{ "x64",         "64-bit" },
-			{ "universal",   "Mac OS X Universal, 32- and 64-bit" },
-			{ "universal32", "Mac OS X Universal, 32-bit only" },
-			{ "universal64", "Mac OS X Universal, 64-bit only" },
-			{ "ps3",         "Playstation 3 (experimental)" },
-			{ "xbox360",     "Xbox 360 (experimental)" },
-		}
-	}
-	
-	newoption
-	{
 		trigger     = "scripts",
 		value       = "path",
 		description = "Search for additional scripts on the given path"
@@ -89,3 +35,62 @@
 		description = "Display version information"
 	}
 	
+	newoption
+	{
+		trigger		= "debug",
+		description = "Display full stack trace for errors"
+	}
+	
+	newoption
+	{
+		trigger		= "attach",
+		value		= "[ip]",
+		description = "Attach to the Eclipse Koneki DBGp debugger. IP address optional."
+	}
+
+	newoption
+	{
+		trigger		= "attachNoWait",
+		value		= "[ip]",
+		description = "Try attaching to the debugger, but don't wait. IP address optional."
+	}
+	
+	newoption
+	{
+		trigger		= "dryrun",
+		description	= "Print the files which would be modified, but do not execute commands or make any changes to the file system",
+		aliases		= { 'n' },
+	}
+	
+	newoption
+	{
+		trigger		= "profile",
+		description	= "Run premake with timing enabled",
+	}
+	
+	newoption
+	{
+		trigger		= "threads",
+		value		= "#",
+		description	= "If the action is also building the project, use this number of threads",
+		aliases		= { 'j' },
+	}
+	
+	newoption
+	{
+		trigger		= "automated",
+		description = "Automated mode, no interaction available.",
+		aliases 	= { 'a' },
+	}
+	
+	newoption
+	{
+		trigger     = "relativepaths",
+		description = "Always generate relative build paths",
+	}
+	
+	newoption
+	{
+		trigger     = "systemScript",
+		description = "Run a system script before the build script. Default filename is premake-system.lua. Overridden by $PREMAKE_PATH.",
+	}

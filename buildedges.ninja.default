@@ -1,0 +1,266 @@
+root=.
+builddir=.
+
+rule exec
+ command=$cmd
+ description=$description
+
+# Tool gcc_cc
+tooldir_gcc=/usr/bin
+gcc_cc_defines=-DLUA_USE_DLOPEN -DLUA_USE_POSIX -DNDEBUG 
+gcc_cc_cfgflags=-MMD -O2
+gcc_cc_includedirs=-I$root/src/host/lua-5.1.4/src 
+rule gcc_cc
+  command=${tooldir_gcc}/gcc -c -x c ${gcc_cc_fixedFlags} -o$out  ${gcc_cc_sysflags} ${gcc_cc_cfgflags} -MF$out.d  ${gcc_cc_defines} $in ${gcc_cc_buildoptions} ${gcc_cc_includedirs}
+  depfile=$out.d
+  description=cc $out
+
+# Tool gcc_cxx
+gcc_cxx_defines=-DLUA_USE_DLOPEN -DLUA_USE_POSIX -DNDEBUG 
+gcc_cxx_cfgflags=-MMD -O2
+gcc_cxx_includedirs=-I$root/src/host/lua-5.1.4/src 
+rule gcc_cxx
+  command=${tooldir_gcc}/g++ -c -xc++ ${gcc_cxx_fixedFlags} -o$out  ${gcc_cxx_sysflags} ${gcc_cxx_cfgflags} -MF$out.d  ${gcc_cxx_defines} $in ${gcc_cxx_buildoptions} ${gcc_cxx_includedirs}
+  depfile=$out.d
+  description=cxx $out
+
+# Tool gcc_ar
+tooldir_gcc2=/apps/infra/environ/20110323/opteron_rhel14/bin
+rule gcc_ar
+  command=${tooldir_gcc2}/ar rc ${gcc_ar_fixedFlags} $out ${gcc_ar_sysflags} ${gcc_ar_cfgflags} ${gcc_ar_ldflags} $in 2> /dev/null
+  description=ar $out
+
+# Tool gcc_link
+gcc_link_linkoptions=-rdynamic 
+gcc_link_linkAsShared=-Wl,-Bdynamic -ldl -lm
+rule gcc_link
+  command=${tooldir_gcc}/g++ -Wl,--start-group ${gcc_link_fixedFlags} -o$out  ${gcc_link_sysflags} ${gcc_link_cfgflags} ${gcc_link_linkoptions} ${gcc_link_rpath} ${gcc_link_ldflags} ${gcc_link_linkAsStatic} $in -Wl,--end-group  ${gcc_link_libdirs} ${gcc_link_linkAsShared} -Wl,-Bdynamic
+  description=link $out
+
+#############################################
+# Solution Premake4
+#############################################
+
+# Project Premake4
+##############################
+
+# Compile Premake4 [release]
+#------------------------------------
+
+objdir=$root/obj/release
+targetdir_release=$root/bin/release
+srcdir=$root
+
+build ${objdir}/lvm.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/lvm.c
+build ${objdir}/ldo.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/ldo.c
+build ${objdir}/ldump.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/ldump.c
+build ${objdir}/os_isfile.o: gcc_cc ${srcdir}/src/host/os_isfile.c
+build ${objdir}/ltable.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/ltable.c
+build ${objdir}/premake.o: gcc_cc ${srcdir}/src/host/premake.c
+build ${objdir}/lstrlib.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/lstrlib.c
+build ${objdir}/os_uuid.o: gcc_cc ${srcdir}/src/host/os_uuid.c
+build ${objdir}/os_pathsearch.o: gcc_cc ${srcdir}/src/host/os_pathsearch.c
+build ${objdir}/loslib.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/loslib.c
+build ${objdir}/os_getcwd.o: gcc_cc ${srcdir}/src/host/os_getcwd.c
+build ${objdir}/ldebug.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/ldebug.c
+build ${objdir}/liolib.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/liolib.c
+build ${objdir}/ltm.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/ltm.c
+build ${objdir}/string_endswith.o: gcc_cc ${srcdir}/src/host/string_endswith.c
+build ${objdir}/lstring.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/lstring.c
+build ${objdir}/ldblib.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/ldblib.c
+build ${objdir}/os_getversion.o: gcc_cc ${srcdir}/src/host/os_getversion.c
+build ${objdir}/lbaselib.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/lbaselib.c
+build ${objdir}/lundump.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/lundump.c
+build ${objdir}/lcode.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/lcode.c
+build ${objdir}/scripts.o: gcc_cc ${srcdir}/src/host/scripts.c
+build ${objdir}/path_isabsolute.o: gcc_cc ${srcdir}/src/host/path_isabsolute.c
+build ${objdir}/os_is64bit.o: gcc_cc ${srcdir}/src/host/os_is64bit.c
+build ${objdir}/os_mkdir.o: gcc_cc ${srcdir}/src/host/os_mkdir.c
+build ${objdir}/lmathlib.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/lmathlib.c
+build ${objdir}/os_isdir.o: gcc_cc ${srcdir}/src/host/os_isdir.c
+build ${objdir}/lzio.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/lzio.c
+build ${objdir}/os_copyfile.o: gcc_cc ${srcdir}/src/host/os_copyfile.c
+build ${objdir}/lauxlib.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/lauxlib.c
+build ${objdir}/lopcodes.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/lopcodes.c
+build ${objdir}/lobject.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/lobject.c
+build ${objdir}/os_match.o: gcc_cc ${srcdir}/src/host/os_match.c
+build ${objdir}/lstate.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/lstate.c
+build ${objdir}/lapi.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/lapi.c
+build ${objdir}/linit.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/linit.c
+build ${objdir}/os_stat.o: gcc_cc ${srcdir}/src/host/os_stat.c
+build ${objdir}/lparser.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/lparser.c
+build ${objdir}/lfunc.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/lfunc.c
+build ${objdir}/loadlib.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/loadlib.c
+build ${objdir}/os_rmdir.o: gcc_cc ${srcdir}/src/host/os_rmdir.c
+build ${objdir}/os_chdir.o: gcc_cc ${srcdir}/src/host/os_chdir.c
+build ${objdir}/lgc.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/lgc.c
+build ${objdir}/ltablib.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/ltablib.c
+build ${objdir}/lmem.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/lmem.c
+build ${objdir}/llex.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/llex.c
+
+# Link Premake4 [release]
+#++++++++++++++++++++++++++++++++
+build ${targetdir_release}/premake4: gcc_link ${objdir}/lvm.o ${objdir}/ldo.o ${objdir}/ldump.o ${objdir}/os_isfile.o ${objdir}/ltable.o ${objdir}/premake.o ${objdir}/lstrlib.o ${objdir}/os_uuid.o ${objdir}/os_pathsearch.o ${objdir}/loslib.o ${objdir}/os_getcwd.o ${objdir}/ldebug.o ${objdir}/liolib.o ${objdir}/ltm.o ${objdir}/string_endswith.o ${objdir}/lstring.o ${objdir}/ldblib.o ${objdir}/os_getversion.o ${objdir}/lbaselib.o ${objdir}/lundump.o ${objdir}/lcode.o ${objdir}/scripts.o ${objdir}/path_isabsolute.o ${objdir}/os_is64bit.o ${objdir}/os_mkdir.o ${objdir}/lmathlib.o ${objdir}/os_isdir.o ${objdir}/lzio.o ${objdir}/os_copyfile.o ${objdir}/lauxlib.o ${objdir}/lopcodes.o ${objdir}/lobject.o ${objdir}/os_match.o ${objdir}/lstate.o ${objdir}/lapi.o ${objdir}/linit.o ${objdir}/os_stat.o ${objdir}/lparser.o ${objdir}/lfunc.o ${objdir}/loadlib.o ${objdir}/os_rmdir.o ${objdir}/os_chdir.o ${objdir}/lgc.o ${objdir}/ltablib.o ${objdir}/lmem.o ${objdir}/llex.o
+
+build Premake4.release: phony ${targetdir_release}/premake4
+
+# Compile Premake4 [debug]
+#------------------------------------
+
+objdir2=$root/obj/debug
+targetdir_debug=$root/bin/debug
+
+tmp2=-DLUA_USE_DLOPEN -DLUA_USE_POSIX -D_DEBUG 
+tmp3=-MMD -g
+build ${objdir2}/lvm.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/lvm.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/ldo.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/ldo.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/ldump.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/ldump.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/os_isfile.o: gcc_cc ${srcdir}/src/host/os_isfile.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/ltable.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/ltable.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/premake.o: gcc_cc ${srcdir}/src/host/premake.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/lstrlib.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/lstrlib.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/os_uuid.o: gcc_cc ${srcdir}/src/host/os_uuid.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/os_pathsearch.o: gcc_cc ${srcdir}/src/host/os_pathsearch.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/loslib.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/loslib.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/os_getcwd.o: gcc_cc ${srcdir}/src/host/os_getcwd.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/ldebug.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/ldebug.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/liolib.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/liolib.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/ltm.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/ltm.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/string_endswith.o: gcc_cc ${srcdir}/src/host/string_endswith.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/lstring.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/lstring.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/ldblib.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/ldblib.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/os_getversion.o: gcc_cc ${srcdir}/src/host/os_getversion.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/lbaselib.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/lbaselib.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/lundump.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/lundump.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/lcode.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/lcode.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/scripts.o: gcc_cc ${srcdir}/src/host/scripts.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/path_isabsolute.o: gcc_cc ${srcdir}/src/host/path_isabsolute.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/os_is64bit.o: gcc_cc ${srcdir}/src/host/os_is64bit.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/os_mkdir.o: gcc_cc ${srcdir}/src/host/os_mkdir.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/lmathlib.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/lmathlib.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/os_isdir.o: gcc_cc ${srcdir}/src/host/os_isdir.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/lzio.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/lzio.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/os_copyfile.o: gcc_cc ${srcdir}/src/host/os_copyfile.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/lauxlib.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/lauxlib.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/lopcodes.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/lopcodes.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/lobject.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/lobject.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/os_match.o: gcc_cc ${srcdir}/src/host/os_match.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/lstate.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/lstate.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/lapi.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/lapi.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/linit.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/linit.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/os_stat.o: gcc_cc ${srcdir}/src/host/os_stat.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/lparser.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/lparser.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/lfunc.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/lfunc.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/loadlib.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/loadlib.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/os_rmdir.o: gcc_cc ${srcdir}/src/host/os_rmdir.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/os_chdir.o: gcc_cc ${srcdir}/src/host/os_chdir.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/lgc.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/lgc.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/ltablib.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/ltablib.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/lmem.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/lmem.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+build ${objdir2}/llex.o: gcc_cc ${srcdir}/src/host/lua-5.1.4/src/llex.c
+ gcc_cc_defines=${tmp2}
+ gcc_cc_cfgflags=${tmp3}
+
+# Link Premake4 [debug]
+#++++++++++++++++++++++++++++++++
+build ${targetdir_debug}/premake4: gcc_link ${objdir2}/lvm.o ${objdir2}/ldo.o ${objdir2}/ldump.o ${objdir2}/os_isfile.o ${objdir2}/ltable.o ${objdir2}/premake.o ${objdir2}/lstrlib.o ${objdir2}/os_uuid.o ${objdir2}/os_pathsearch.o ${objdir2}/loslib.o ${objdir2}/os_getcwd.o ${objdir2}/ldebug.o ${objdir2}/liolib.o ${objdir2}/ltm.o ${objdir2}/string_endswith.o ${objdir2}/lstring.o ${objdir2}/ldblib.o ${objdir2}/os_getversion.o ${objdir2}/lbaselib.o ${objdir2}/lundump.o ${objdir2}/lcode.o ${objdir2}/scripts.o ${objdir2}/path_isabsolute.o ${objdir2}/os_is64bit.o ${objdir2}/os_mkdir.o ${objdir2}/lmathlib.o ${objdir2}/os_isdir.o ${objdir2}/lzio.o ${objdir2}/os_copyfile.o ${objdir2}/lauxlib.o ${objdir2}/lopcodes.o ${objdir2}/lobject.o ${objdir2}/os_match.o ${objdir2}/lstate.o ${objdir2}/lapi.o ${objdir2}/linit.o ${objdir2}/os_stat.o ${objdir2}/lparser.o ${objdir2}/lfunc.o ${objdir2}/loadlib.o ${objdir2}/os_rmdir.o ${objdir2}/os_chdir.o ${objdir2}/lgc.o ${objdir2}/ltablib.o ${objdir2}/lmem.o ${objdir2}/llex.o
+
+build Premake4.debug: phony ${targetdir_debug}/premake4
+
+
+# Global configuration build targets
+#######################################
+
+build release: phony Premake4.release
+build debug: phony Premake4.debug
+

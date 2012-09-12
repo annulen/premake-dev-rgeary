@@ -1,6 +1,9 @@
 syntax: glob
 
 .DS_Store
+.buildpath
+.cproject
+*.orig
 
 build
 bin
@@ -23,6 +26,9 @@ Makefile
 *.workspace
 *.project
 *.tags
+
+*.ninja
+.ninja_log
 
 *.bbprojectsettings
 Scratchpad.txt

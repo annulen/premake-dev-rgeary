@@ -4,502 +4,399 @@
 -- Copyright (c) 2002-2012 Jason Perkins and the Premake project
 --
 
-	premake.tools.gcc = {}
-	local gcc = premake.tools.gcc
-	local project = premake5.project
-	local config = premake5.config
+--
+-- GCC Compiler toolset
+--
+local atool = premake.abstract.buildtool 
+
+local gcc_cc = newtool {
+	toolName = 'cc',
+	binaryName = 'gcc',
+	fixedFlags = '-c -x c',
+	language = "C",
+
+	-- possible inputs in to the compiler
+	extensionsForCompiling = { ".c", },
 	
+	flagMap = {
+		AddPhonyHeaderDependency = "-MP",	 -- used by makefiles
+		CreateDependencyFile = "-MMD",
+		CreateDependencyFileIncludeSystem = "-MD",
+		InlineDisabled = "-fno-inline",
+		InlineExplicitOnly = "-inline-level=1",
+		InlineAnything = "-finline-functions",
+		EnableSSE2     = "-msse2",
+		EnableSSE3     = "-msse3",
+		EnableSSE41    = "-msse4.1",
+		EnableSSE42    = "-msse4.2",
+		EnableAVX      = "-mavx",
+		ExtraWarnings  = "-Wall",
+		FatalWarnings  = "-Werror",
+		FloatFast      = "-mfast-fp",
+		FloatStrict    = "-mfp-exceptions",
+		OptimizeOff	   = "-O0",
+		Optimize       = "-O2",
+		OptimizeSize   = "-Os",
+		OptimizeSpeed  = "-O3",
+		OptimizeOff    = "-O0",
+		Symbols        = "-g",
+	},
+	prefixes = {
+		defines 		= '-D',
+		includedirs 	= '-I',
+		output			= '-o',
+		depfileOutput   = '-MF',
+	},
+	suffixes = {
+		depfileOutput   = '.d',
+	},
+
+	-- System specific flags
+	getsysflags = function(self, cfg)
+		local cmdflags = {}
+		if cfg.system ~= premake.WINDOWS and cfg.kind == premake.SHAREDLIB then
+			table.insert(cmdflags, '-fPIC')
+		end
+		
+		if cfg.architecture == 'x32' then
+			table.insert(cmdflags, '-m32')
+		elseif cfg.architecture == 'x64' then
+			table.insert(cmdflags, '-m64')
+		end
+		
+		if cfg.flags.ThreadingMulti then
+			if cfg.system == premake.LINUX then
+				table.insert(cmdflags, '-pthread')
+			elseif cfg.system == premake.WINDOWS then 
+				table.insert(cmdflags, '-mthreads')
+			elseif cfg.system == premake.SOLARIS then 
+				table.insert(cmdflags, '-pthreads')
+			end
+		end
+		
+		return table.concat(cmdflags, ' ')
+	end
+}
+local gcc_cxx = newtool {
+	inheritFrom = gcc_cc,	
+	toolName = 'cxx',
+	language = "C++",
+	binaryName = 'g++',
+	fixedFlags = '-c -xc++',
+	extensionsForCompiling = { ".cc", ".cpp", ".cxx", ".c" },
+	flagMap = table.merge(gcc_cc.flagMap, {
+		NoExceptions   = "-fno-exceptions",
+		NoRTTI         = "-fno-rtti",
+	})
+}
+local gcc_asm = newtool {
+	inheritFrom = gcc_cxx,
+	toolName = 'asm',
+	language = "assembler",
+	fixedFlags = '-c -x assembler-with-cpp',
+	extensionsForCompiling = { '.s' },
+	
+	-- Bug in icc, only writes Makefile style depfiles. Just disable it.
+	prefixes = table.except(gcc_cxx.prefixes, { 'depfileOutput' }),
+	suffixes = table.except(gcc_cxx.suffixes, { 'depfileOutput' }),
+	flagMap = table.except(gcc_cxx.flagMap, { 'CreateDependencyFile', 'CreateDependencyFileIncludeSystem', }),
+}
+local gcc_ar = newtool {
+	toolName = 'ar',
+	binaryName = 'ar',
+	fixedFlags = 'rc',
+	extensionsForLinking = { '.o', '.a', },		-- possible inputs in to the linker
+	redirectStderr = true,
+	targetNamePrefix = 'lib',
+}
+local gcc_link = newtool {
+	toolName = 'link',
+	binaryName = 'g++',
+	fixedFlags = '-Wl,--start-group',
+	extensionsForLinking = { '.o', '.a', '.so' },		-- possible inputs in to the linker
+	flagMap = {
+		StdlibShared	= '-shared-libgcc',
+		StdlibStatic	= '-static-libgcc -static-libstdc++',		-- Might not work, test final binary with ldd. See http://www.trilithium.com/johan/2005/06/static-libstdc/
+	},
+	prefixes = {
+		libdirs 		= '-L',
+		output 			= '-o',
+		rpath			= '-Wl,-rpath=',
+		linkoptions		= '',
+	},
+	suffixes = {
+		input 			= ' -Wl,--end-group',
+	},
+	decorateFn = {
+		linkAsStatic	= function(list) return atool.decorateLibList(list, '-Wl,-Bstatic', '-l'); end,
+		linkAsShared	= function(list) return atool.decorateLibList(list, '-Wl,-Bdynamic', '-l'); end,
+	},
+	endFlags = '-Wl,-Bdynamic',	-- always put this at the end
+	
+	getsysflags = function(self, cfg)
+		if cfg == nil then
+			error('Missing cfg')
+		end
+		local cmdflags = {}
+		
+		if cfg.kind == premake.SHAREDLIB then
+			if cfg.system == premake.MACOSX then
+				table.insert(cmdflags, "-dynamiclib -flat_namespace")
+			elseif cfg.system == premake.WINDOWS and not cfg.flags.NoImportLib then
+				table.insert(cmdflags, '-shared -Wl,--out-implib="' .. cfg.linktarget.fullpath .. '"')
+			else
+				table.insert(cmdflags, "-shared")
+			end
+		end
+		
+		if cfg.flags.ThreadingMulti then
+			if cfg.system == premake.SOLARIS then
+				table.insert(cmdflags, '-pthread -lrt')
+			elseif cfg.system == 'bsd' then
+				table.insert(cmdflags, '-pthread -lrt')
+			elseif cfg.system ~= premake.WINDOWS then
+				table.insert(cmdflags, '-pthread -lrt')
+			end
+		end
+
+		return table.concat(cmdflags, ' ')
+	end	
+}
+newtoolset {
+	toolsetName = 'gcc', 
+	tools = { gcc_cc, gcc_cxx, gcc_ar, gcc_link },
+}
+
+--
+-------------------------------------------------------------
+--  All below can be deprecated
+-------------------------------------------------------------
+--
+--[=[
+premake.tools.gcc = {}
+local gcc = premake.tools.gcc
+local project = premake5.project
+local config = premake5.config
 
 --
 -- GCC flags for specific systems and architectures.
 --
 
-	gcc.sysflags = {
-		haiku = {
-			cppflags = "-MMD"
-		},
-		
-		x32 = {
-			cflags  = "-m32",
-			ldflags = { "-m32", "-L/usr/lib32" }
-		},
+gcc.sysflags = {
+	default = {
+		cc = "g++",
+		cxx = "g++",
+		ar = "ar",
+		cppflags = "-MMD",
+	},
 
-		x64 = {
-			cflags = "-m64",
-			ldflags = { "-m64", "-L/usr/lib64" }
-		},
-		
-		ps3 = {
-			cc = "ppu-lv2-g++",
-			cxx = "ppu-lv2-g++",
-			ar = "ppu-lv2-ar",
-		},
-		
-		universal = {
-			cppflags = "",  -- block default -MMD -MP flags
-		},
-		
-		wii = {
-			cppflags = "-MMD -MP -I$(LIBOGC_INC) $(MACHDEP)",
-			ldflags	= "-L$(LIBOGC_LIB) $(MACHDEP)",
-			cfgsettings = [[
-  ifeq ($(strip $(DEVKITPPC)),)
-    $(error "DEVKITPPC environment variable is not set")'
-  endif
-  include $(DEVKITPPC)/wii_rules']],
-		},
-	}
+	haiku = {
+	},
 
+	x32 = {
+		cflags  = "-m32",
+		ldflags = { "-m32", "-L/usr/lib32" }
+	},
 
-	function gcc.getsysflags(cfg, field)
-		local result = {}
-		
-		-- merge in system-level flags
-		local system = gcc.sysflags[cfg.system]
-		if system then
-			result = table.join(result, system[field])
-		end
-		
-		-- merge in architecture-level flags
-		local arch = gcc.sysflags[cfg.architecture]
-		if arch then
-			result = table.join(result, arch[field])
-		end
+	x64 = {
+		cflags = "-m64",
+		ldflags = { "-m64", "-L/usr/lib64" }
+	},
 
-		return result
-	end
+	ps3 = {
+		cc = "ppu-lv2-g++",
+		cxx = "ppu-lv2-g++",
+		ar = "ppu-lv2-ar",
+	},
 
+	universal = {
+	},
+
+	wii = {
+		cppflags = "-I$(LIBOGC_INC) $(MACHDEP)",
+		ldflags	= "-L$(LIBOGC_LIB) $(MACHDEP)",
+		cfgsettings = [[
+		ifeq ($(strip $(DEVKITPPC)),)
+		$(error "DEVKITPPC environment variable is not set")'
+		endif
+		include $(DEVKITPPC)/wii_rules']],
+	},
+}
 
 --
--- Returns list of CPPFLAGS for a specific configuration.
+-- C PreProcessor Flag mappings
 --
-
-	function gcc.getcppflags(cfg)
-		local flags = gcc.getsysflags(cfg, 'cppflags')
-
-		-- Use -MMD -P by default to generate dependency information
-		if #flags == 0 then
-			flags = { "-MMD", "-MP" }
-		end
-
-		return flags
-	end
+gcc.cppflags = {
+	AddPhonyHeaderDependency = "-MP",	 -- used by makefiles
+	CreateDependencyFile = "-MMD",
+	CreateDependencyFileIncludeSystem = "-MD",
+}
 
 --
--- Returns list of CFLAGS for a specific configuration.
+-- C flag mappings
 --
 
-	gcc.cflags = {
-		EnableSSE      = "-msse",
-		EnableSSE2     = "-msse2",
-		ExtraWarnings  = "-Wall -Wextra",
-		FatalWarnings  = "-Werror",
-		FloatFast      = "-ffast-math",
-		FloatStrict    = "-ffloat-store",
-		NoFramePointer = "-fomit-frame-pointer",
-		Optimize       = "-O2",
-		OptimizeSize   = "-Os",
-		OptimizeSpeed  = "-O3",
-		Symbols        = "-g",
-	}
-	
-	function gcc.getcflags(cfg)
-		local flags = table.translate(cfg.flags, gcc.cflags)
-
-		local sysflags = gcc.getsysflags(cfg, 'cflags')
-		flags = table.join(flags, sysflags)
-
-		if cfg.system ~= premake.WINDOWS and cfg.kind == premake.SHAREDLIB then
-			table.insert(flags, "-fPIC")
-		end
-
-		return flags
-	end
-
+gcc.cflags = {
+	EnableSSE      = "-msse",
+	EnableSSE2     = "-msse2",
+	ExtraWarnings  = "-Wall -Wextra",
+	FatalWarnings  = "-Werror",
+	FloatFast      = "-ffast-math",
+	FloatStrict    = "-ffloat-store",
+	NoFramePointer = "-fomit-frame-pointer",
+	NoWarnings     = "-w0",
+	Optimize       = "-O2",
+	OptimizeSize   = "-Os",
+	OptimizeSpeed  = "-O3",
+	OptimizeOff    = "-O0",
+	Profiling      = "-pg",
+	Symbols        = "-g",
+	ThreadingMulti = "-pthread",
+}
 
 --
--- Returns a list of CXXFLAGS for a specific configuration.
+-- CXX (C++) Flag mappings
 --
 
-	gcc.cxxflags = {
-		NoExceptions   = "-fno-exceptions",
-		NoRTTI         = "-fno-rtti",
-	}
+gcc.cxxflags = {
+	NoExceptions   = "-fno-exceptions",
+	NoRTTI         = "-fno-rtti",
+}
 
-	function gcc.getcxxflags(cfg)
-		local flags = table.translate(cfg.flags, gcc.cxxflags)
-		return flags
-	end
-
+-- Linker flag mappings
+gcc.ldflags = {
+	ThreadingMulti = '-pthread',
+	StdlibShared   = '-shared-libgcc',
+	StdlibStatic   = '-static-libgcc -static-stdlibc++',
+}
 
 --
 -- Decorate defines for the GCC command line.
 --
 
-	function gcc.getdefines(defines)
-		local result = {}
-		for _, define in ipairs(defines) do
-			table.insert(result, '-D' .. define)
-		end
-		return result
+function gcc:getdefines(defines)
+	local result = {}
+	for _, define in ipairs(defines) do
+		table.insert(result, '-D' .. define)
 	end
-
+	return result
+end
 
 --
 -- Decorate include file search paths for the GCC command line.
 --
 
-	function gcc.getincludedirs(cfg, dirs)
-		local result = {}
-		for _, dir in ipairs(dirs) do
-			table.insert(result, "-I" .. project.getrelative(cfg.project, dir))
-		end
-		return result
+function gcc:getincludedirs(cfg)
+	local result = {}
+	local dirs = cfg.includedirs or {}
+	for _, dir in ipairs(dirs) do
+		table.insert(result, "-I" .. project.getrelative(cfg.project, dir))
 	end
-
+	
+	return result
+end
 
 --
--- Return a list of LDFLAGS for a specific configuration.
+-- Decorate resource file search paths for the GCC command line.
 --
+function gcc:getresourcedirs(cfg)
+	local result = {}
+	local dirs = cfg.resourcedirs or {}
+	for _, dir in ipairs(dirs) do
+		table.insert(result, "-I" .. project.getrelative(cfg.project, dir))
+	end
+	return result
+end
 
-	function gcc.getldflags(cfg)
-		local flags = {}
-		
+--
+-- Returns a **table** of command line flags to pass to the tool
+--
+function gcc:getcmdflags(cfg, toolName)
+	local cmdflags = self.super.getcmdflags(self, cfg, toolName)
+	
+	if toolName == 'cc' then
+		if cfg.system ~= premake.WINDOWS and cfg.kind == premake.SHAREDLIB then
+			table.insert(cmdflags, "-fPIC")
+		end
+	elseif( toolName == 'link' ) then
+		-- Return a list of LDFLAGS for a specific configuration.
+	
 		-- Scan the list of linked libraries. If any are referenced with
 		-- paths, add those to the list of library search paths
 		for _, dir in ipairs(config.getlinks(cfg, "all", "directory")) do
-			table.insert(flags, '-L' .. dir)
+			table.insert(cmdflags, '-L' .. dir)
 		end
-		
+	
 		if not cfg.flags.Symbols then
 			-- OS X has a bug, see http://lists.apple.com/archives/Darwin-dev/2006/Sep/msg00084.html
 			if cfg.system == premake.MACOSX then
-				table.insert(flags, "-Wl,-x")
+				table.insert(cmdflags, "-Wl,-x")
 			else
-				table.insert(flags, "-s")
+				table.insert(cmdflags, "-s")
 			end
 		end
-		
+	
 		if cfg.kind == premake.SHAREDLIB then
 			if cfg.system == premake.MACOSX then
-				flags = table.join(flags, { "-dynamiclib", "-flat_namespace" })
+				cmdflags = table.join(cmdflags, { "-dynamiclib", "-flat_namespace" })
 			else
-				table.insert(flags, "-shared")
+				table.insert(cmdflags, "-shared")
 			end
-
+	
 			if cfg.system == "windows" and not cfg.flags.NoImportLib then
-				table.insert(flags, '-Wl,--out-implib="' .. cfg.linktarget.fullpath .. '"')
+				table.insert(cmdflags, '-Wl,--out-implib="' .. cfg.linktarget.fullpath .. '"')
 			end
 		end
 	
 		if cfg.kind == premake.WINDOWEDAPP and cfg.system == premake.WINDOWS then
-			table.insert(flags, "-mwindows")
+			table.insert(cmdflags, "-mwindows")
 		end
-		
-		local sysflags = gcc.getsysflags(cfg, 'ldflags')
-		flags = table.join(flags, sysflags)
-		
-		return flags
 	end
+	
+	return cmdflags
+end
 
 
 --
 -- Return the list of libraries to link, decorated with flags as needed.
 --
 
-	function gcc.getlinks(cfg, systemonly)
-		local result = {}
-		
-		local links
-		if not systemonly then
-			links = config.getlinks(cfg, "siblings", "object")
-			for _, link in ipairs(links) do
-				-- skip external project references, since I have no way
-				-- to know the actual output target path
-				if not link.project.externalname then
-					if link.kind == premake.STATICLIB then
-						-- Don't use "-l" flag when linking static libraries; instead use 
-						-- path/libname.a to avoid linking a shared library of the same
-						-- name if one is present
-						table.insert(result, project.getrelative(cfg.project, link.linktarget.abspath))
-					else
-						table.insert(result, "-l" .. link.linktarget.basename)
-					end
+function gcc:getlinks(cfg, systemonly)
+	local result = {}
+
+	local links
+	if not systemonly then
+		links = config.getlinks(cfg, "siblings", "object")
+		for _, link in ipairs(links) do
+			-- skip external project references, since I have no way
+			-- to know the actual output target path
+			if not link.project.externalname then
+				if link.kind == premake.STATICLIB then
+					-- Don't use "-l" flag when linking static libraries; instead use
+					-- path/libname.a to avoid linking a shared library of the same
+					-- name if one is present
+					table.insert(result, project.getrelative(cfg.project, link.linktarget.abspath))
+				else
+				 	-- Don't use path when linking shared libraries, otherwise loader will always expect the same
+				 	-- folder structure
+					table.insert(result, "-l" .. link.linktarget.basename)
 				end
 			end
 		end
-				
-		-- The "-l" flag is fine for system libraries
-		links = config.getlinks(cfg, "system", "basename")
-		for _, link in ipairs(links) do
-			if path.isframework(link) then
-				table.insert(result, "-framework " .. path.getbasename(link))
-			elseif path.isobjectfile(link) then
-				table.insert(result, link)
-			else
-				table.insert(result, "-l" .. link)
-			end
-		end
-		
-		return result
 	end
 
-
-
------------------------------------------------------------------------------
--- Everything below this point is a candidate for deprecation
------------------------------------------------------------------------------
-	
-	premake.gcc = { }
-	
-
---
--- Set default tools
---
-
-	premake.gcc.cc     = "gcc"
-	premake.gcc.cxx    = "g++"
-	premake.gcc.ar     = "ar"
-	
-	
---
--- Translation of Premake flags into GCC flags
---
-
-	local cflags =
-	{
-		EnableSSE      = "-msse",
-		EnableSSE2     = "-msse2",
-		ExtraWarnings  = "-Wall",
-		FatalWarnings  = "-Werror",
-		FloatFast      = "-ffast-math",
-		FloatStrict    = "-ffloat-store",
-		NoFramePointer = "-fomit-frame-pointer",
-		Optimize       = "-O2",
-		OptimizeSize   = "-Os",
-		OptimizeSpeed  = "-O3",
-		Symbols        = "-g",
-	}
-
-	local cxxflags =
-	{
-		NoExceptions   = "-fno-exceptions",
-		NoRTTI         = "-fno-rtti",
-	}
-	
-	
---
--- Map platforms to flags
---
-
-	premake.gcc.platforms = 
-	{
-		Native = { 
-			cppflags = "-MMD",
-		},
-		x32 = { 
-			cppflags = "-MMD",	
-			flags    = "-m32",
-			ldflags  = "-L/usr/lib32", 
-		},
-		x64 = { 
-			cppflags = "-MMD",
-			flags    = "-m64",
-			ldflags  = "-L/usr/lib64",
-		},
-		Universal = { 
-			cppflags = "",
-			flags    = "-arch i386 -arch x86_64 -arch ppc -arch ppc64",
-		},
-		Universal32 = { 
-			cppflags = "",
-			flags    = "-arch i386 -arch ppc",
-		},
-		Universal64 = { 
-			cppflags = "",
-			flags    = "-arch x86_64 -arch ppc64",
-		},
-		PS3 = {
-			cc         = "ppu-lv2-g++",
-			cxx        = "ppu-lv2-g++",
-			ar         = "ppu-lv2-ar",
-			cppflags   = "-MMD",
-		},
-		WiiDev = {
-			cppflags    = "-MMD -MP -I$(LIBOGC_INC) $(MACHDEP)",
-			ldflags		= "-L$(LIBOGC_LIB) $(MACHDEP)",
-			cfgsettings = [[
-  ifeq ($(strip $(DEVKITPPC)),)
-    $(error "DEVKITPPC environment variable is not set")'
-  endif
-  include $(DEVKITPPC)/wii_rules']],
-		},
-	}
-
-	local platforms = premake.gcc.platforms
-	
-
---
--- Returns a list of compiler flags, based on the supplied configuration.
---
-
-	function premake.gcc.getcppflags(cfg)
-		local flags = { }
-		table.insert(flags, platforms[cfg.platform].cppflags)
-
-		-- We want the -MP flag for dependency generation (creates phony rules
-		-- for headers, prevents make errors if file is later deleted), but 
-		-- Haiku doesn't support it (yet)
-		if flags[1]:startswith("-MMD") and cfg.system ~= "haiku" then
-			table.insert(flags, "-MP")
+	-- The "-l" flag is fine for system libraries
+	links = config.getlinks(cfg, "system", "basename")
+	for _, link in ipairs(links) do
+		if path.isframework(link) then
+			table.insert(result, "-framework " .. path.getbasename(link))
+		elseif path.isobjectfile(link) then
+			table.insert(result, link)
+		else
+			table.insert(result, "-l" .. link)
 		end
-
-		return flags
 	end
 
-
-	function premake.gcc.getcflags(cfg)
-		local result = table.translate(cfg.flags, cflags)
-		table.insert(result, platforms[cfg.platform].flags)
-		if cfg.system ~= "windows" and cfg.kind == "SharedLib" then
-			table.insert(result, "-fPIC")
-		end
-		return result		
-	end
-	
-
-	function premake.gcc.getcxxflags(cfg)
-		local result = table.translate(cfg.flags, cxxflags)
-		return result
-	end
-
-	
---
--- Returns a list of linker flags, based on the supplied configuration.
---
-
-	function premake.gcc.getldflags(cfg)
-		local result = { }
-		
-		-- OS X has a bug, see http://lists.apple.com/archives/Darwin-dev/2006/Sep/msg00084.html
-		if not cfg.flags.Symbols then
-			if cfg.system == "macosx" then
-				table.insert(result, "-Wl,-x")
-			else
-				table.insert(result, "-s")
-			end
-		end
-	
-		if cfg.kind == "SharedLib" then
-			if cfg.system == "macosx" then
-				result = table.join(result, { "-dynamiclib", "-flat_namespace" })
-			else
-				table.insert(result, "-shared")
-			end
-				
-			if cfg.system == "windows" and not cfg.flags.NoImportLib then
-				table.insert(result, '-Wl,--out-implib="' .. cfg.linktarget.fullpath .. '"')
-			end
-		end
-
-		if cfg.kind == "WindowedApp" and cfg.system == "windows" then
-			table.insert(result, "-mwindows")
-		end
-		
-		local platform = platforms[cfg.platform]
-		table.insert(result, platform.flags)
-		table.insert(result, platform.ldflags)
-		
-		return result
-	end
-		
-
---
--- Return a list of library search paths. Technically part of LDFLAGS but need to
--- be separated because of the way Visual Studio calls GCC for the PS3. See bug 
--- #1729227 for background on why library paths must be split.
---
-
-	function premake.gcc.getlibdirflags(cfg)
-		local result = { }
-		for _, value in ipairs(premake.getlinks(cfg, "all", "directory")) do
-			table.insert(result, '-L' .. _MAKE.esc(value))
-		end
-		return result
-	end
-	
-
-
---
--- Returns a list of linker flags for library search directories and library
--- names. See bug #1729227 for background on why the path must be split.
---
-
-	function premake.gcc.getlinkflags(cfg)
-		local result = { }
-
-		for _, value in ipairs(premake.getlinks(cfg, "siblings", "object")) do
-			if (value.kind == "StaticLib") then
-				-- don't use "-lname" when linking static libraries
-				-- instead use path/Name.ext so as not to link with a SharedLib of the same name
-				-- if one is present.
-				local pathstyle = premake.getpathstyle(value)
-				local namestyle = premake.getnamestyle(value)
-				local linktarget = premake.gettarget(value, "link",  pathstyle, namestyle, cfg.system)
-				local rebasedpath = path.rebase(linktarget.fullpath, value.location, cfg.location)
-				table.insert(result, rebasedpath)
-			else
-				--premake does not support creating frameworks so this is just a SharedLib link
-				--link using -lname
-				table.insert(result, '-l' .. _MAKE.esc(value.linktarget.basename))
-			end
-		end
-
-		-- "-llib" is fine for system dependencies
-		for _, value in ipairs(premake.getlinks(cfg, "system", "basename")) do
-			if path.getextension(value) == ".framework" then
-				table.insert(result, '-framework ' .. _MAKE.esc(path.getbasename(value)))
-			else
-				table.insert(result, '-l' .. _MAKE.esc(value))
-			end
-		end
-		return result
-	end
-	
-	
-
---
--- Decorate defines for the GCC command line.
---
-
-	function premake.gcc.getdefines(defines)
-		local result = { }
-		for _,def in ipairs(defines) do
-			table.insert(result, '-D' .. def)
-		end
-		return result
-	end
-
-
-	
---
--- Decorate include file search paths for the GCC command line.
---
-
-	function premake.gcc.getincludedirs(includedirs)
-		local result = { }
-		for _,dir in ipairs(includedirs) do
-			table.insert(result, "-I" .. _MAKE.esc(dir))
-		end
-		return result
-	end
-
-
--- 
--- Return platform specific project and configuration level
--- makesettings blocks.
---	
-
-	function premake.gcc.getcfgsettings(cfg)
-		return platforms[cfg.platform].cfgsettings
-	end
+	return result
+end
+]=]

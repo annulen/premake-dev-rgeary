@@ -4,7 +4,7 @@
 -- Copyright (c) 2002-2012 Jason Perkins and the Premake project
 --
 
-	premake.solution = { }
+	premake.solution = premake.solution or { }
 	local solution = premake.solution
 	local oven = premake5.oven
 	local project = premake5.project
@@ -26,17 +26,36 @@
 		local sln = { }
 
 		-- add to master list keyed by both name and index
-		table.insert(premake.solution.list, sln)
-		premake.solution.list[name] = sln
+		if name == '_GLOBAL_CONTAINER' then
+			ptypeSet( sln, "globalcontainer" )
+		else
+			table.insert(premake.solution.list, sln)
+			premake.solution.list[name] = sln
+			ptypeSet( sln, "solution" )
+		end
 			
-		-- attach a type descriptor
-		setmetatable(sln, { __type="solution" })
-
 		sln.name           = name
 		sln.basedir        = os.getcwd()			
-		sln.projects       = { }
-		sln.blocks         = { }
-		sln.configurations = { }
+		sln.projects       = { }		-- real projects, not usages
+
+		-- merge in global configuration
+		local slnTemplate = premake5.globalContainer.solution 
+		if slnTemplate then
+			sln.configurations 	= oven.merge({}, slnTemplate.configurations)
+			sln.blocks 			= oven.merge({}, slnTemplate.blocks)
+			sln.platforms		= oven.merge({}, slnTemplate.platforms or {})
+			sln.language		= slnTemplate.language
+			
+			for name,info in pairs(premake.fields) do
+				if slnTemplate[name] and (not sln[name]) then
+					sln[name] = slnTemplate[name]
+				end
+			end
+		else
+			sln.configurations = { }
+			sln.blocks         = { }
+		end
+		
 		return sln
 	end
 
@@ -52,7 +71,10 @@
 	function solution.bakeall()
 		local result = {}
 		for i, sln in ipairs(solution.list) do
-			result[i] = solution.bake(sln)
+			local bakedSln = solution.bake(sln)
+			
+			result[i] = bakedSln
+			result[sln.name] = bakedSln
 		end
 		solution.list = result
 	end
@@ -67,41 +89,53 @@
 --
 
 	function solution.bake(sln)
+		
+		-- early out
+		if sln.isbaked then
+			return sln
+		end
+	
 		-- start by copying all field values into the baked result
 		local result = oven.merge({}, sln)
-		result.baked = true
+		result.isbaked = true
 		
 		-- keep a reference to the original configuration blocks, in
 		-- case additional filtering (i.e. for files) is needed later
 		result.blocks = sln.blocks
 		
-		-- bake all of the projects in the list, and store that result
-		local projects = {}
-		for i, prj in ipairs(sln.projects) do
-			projects[i] = project.bake(prj, result)
-			projects[prj.name] = projects[i]
+		-- Resolve baked projects
+		local prjList = {}	
+		for i,prj in ipairs(result.projects) do
+			table.insert( prjList, project.getRealProject(prj.name) )
 		end
-		result.projects = projects
-	
-		-- assign unique object directories to every project configurations
-		solution.bakeobjdirs(result)
+		result.projects = prjList
 		
-		-- expand all tokens contained by the solution
-		for prj in solution.eachproject_ng(result) do
-			oven.expandtokens(prj, "project")
-			for cfg in project.eachconfig(prj) do
-				oven.expandtokens(cfg, "config")
-			end
-		end
+		-- expand all tokens
 		oven.expandtokens(result, "project")
 
 		-- build a master list of solution-level configuration/platform pairs
 		result.configs = solution.bakeconfigs(result)
 		
+		-- flatten includesolution
+		if sln.includesolution then
+			local includeList = {}
+			for _,child in ipairs(sln.includesolution) do
+				if child == '*' then
+					for _,s in ipairs(solution.list) do
+						if s.name ~= sln.name then
+							table.insert( includeList, s.name )
+						end
+					end
+				else
+					table.insert( includeList, child )
+				end
+			end
+			result.includesolution = includeList
+		end
+		
 		return result
 	end
-
-
+	
 --
 -- Create a list of solution-level build configuration/platform pairs.
 --
@@ -124,77 +158,12 @@
 		-- fill in any calculated values
 		for _, cfg in ipairs(configs) do
 			premake5.config.bake(cfg)
+			ptypeSet( cfg, 'configs' )
 		end
+		oven.expandtokens(sln, "solution", nil, "ninjaBuildDir", false)
 		
 		return configs
 	end
-
-
---
--- Assigns a unique objects directory to every configuration of every project
--- in the solution, taking any objdir settings into account, to ensure builds
--- from different configurations won't step on each others' object files. 
--- The path is built from these choices, in order:
---
---   [1] -> the objects directory as set in the config
---   [2] -> [1] + the platform name
---   [3] -> [2] + the build configuration name
---   [4] -> [3] + the project name
---
-
-	function solution.bakeobjdirs(sln)
-		-- function to compute the four options for a specific configuration
-		local function getobjdirs(cfg)
-			local dirs = {}
-			
-			local dir = path.getabsolute(path.join(project.getlocation(cfg.project), cfg.objdir or "obj"))
-			table.insert(dirs, dir)
-			
-			if cfg.platform then
-				dir = path.join(dir, cfg.platform)
-				table.insert(dirs, dir)
-			end
-			
-			dir = path.join(dir, cfg.buildcfg)
-			table.insert(dirs, dir)
-
-			dir = path.join(dir, cfg.project.name)
-			table.insert(dirs, dir)
-			
-			return dirs
-		end
-
-		-- walk all of the configs in the solution, and count the number of
-		-- times each obj dir gets used
-		local counts = {}
-		local configs = {}
-		
-		for prj in premake.solution.eachproject_ng(sln) do
-			for cfg in project.eachconfig(prj) do
-				-- expand any tokens contained in the field
-				oven.expandtokens(cfg, "config", nil, "objdir")
-				
-				-- get the dirs for this config, and remember the association
-				local dirs = getobjdirs(cfg)
-				configs[cfg] = dirs
-				
-				for _, dir in ipairs(dirs) do
-					counts[dir] = (counts[dir] or 0) + 1
-				end
-			end
-		end
-
-		-- now walk the list again, and assign the first unique value
-		for cfg, dirs in pairs(configs) do
-			for _, dir in ipairs(dirs) do
-				if counts[dir] == 1 then
-					cfg.objdir = dir 
-					break
-				end
-			end
-		end
-	end
-
 
 --
 -- Iterate over the collection of solutions in a session.
@@ -213,7 +182,6 @@
 		end
 	end
 
-
 --
 -- Iterate over the configurations of a solution.
 --
@@ -226,19 +194,30 @@
 	function solution.eachconfig(sln)
 		-- to make testing a little easier, allow this function to
 		-- accept an unbaked solution, and fix it on the fly
-		if not sln.baked then
+		if not sln.isbaked then
 			sln = solution.bake(sln)
 		end
 
 		local i = 0
 		return function()
 			i = i + 1
-			if i > #sln.configs then
+			if i > #sln.configs
+			 then
 				return nil
 			else
 				return sln.configs[i]
 			end
 		end
+	end
+	
+	function solution.getConfigs(sln)
+		-- to make testing a little easier, allow this function to
+		-- accept an unbaked solution, and fix it on the fly
+		if not sln.isbaked then
+			sln = solution.bake(sln)
+		end
+
+		return Seq:new(sln.configs)	
 	end
 
 
@@ -298,6 +277,24 @@
 		for _, prj in ipairs(sln.projects) do
 			if name == prj.name:lower() then
 				return prj
+			end
+		end
+		return nil
+	end
+
+--
+--  Find a usage configuration
+--
+	function solution.findusage(sln, useProjName)
+		name = name:lower()
+		for _, prj in ipairs(sln.projects) do
+			if useProjName == prj.name:lower() then
+				return iif( prj.usageProj, prj.usageProj, prj )
+			end
+		end
+		for _, prj in ipairs(premake.globalContainer.projects) do
+			if useProjName == prj.name:lower() then
+				return iif( prj.usageProj, prj.usageProj, prj )
 			end
 		end
 		return nil
@@ -369,8 +366,9 @@
 	function solution.getproject_ng(sln, idx)
 		-- to make testing a little easier, allow this function to
 		-- accept an unbaked solution, and fix it on the fly
-		if not sln.baked then
+		if not sln.isbaked then
 			sln = solution.bake(sln)
 		end
 		return sln.projects[idx]
 	end
+	

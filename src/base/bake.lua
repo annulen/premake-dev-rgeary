@@ -7,7 +7,6 @@
 -- project, and can be retrieved by calling the getconfig() or eachconfig().
 --
 -- Copyright (c) 2008-2012 Jason Perkins and the Premake project
---
 
 	premake.bake = { }
 	local bake = premake.bake
@@ -419,7 +418,7 @@
   				local theUseProj = nil;
   				for _, prj in ipairs(cfg.project.solution.projects) do
   					if (prj.name:lower() == testName) then
-  						if(prj.usage) then
+  						if(prj.isUsage) then
   							theUseProj = prj;
   						else
   							theProj = prj;
@@ -563,7 +562,7 @@
   
   			for name, field in pairs(premake.fields) do
   				if(srcCfg[name]) then
-  					if(field.usagecopy) then
+  					if(field.usagefield) then
   						if(not prjEntry.bLinkageOnly) then
   							copydependentfield(srcCfg, cfg, name)
   						end
@@ -685,7 +684,7 @@
 		
 		-- remove excluded files from the file list
 		local files = { }
-		for _, fname in ipairs(cfg.files) do
+		for _, fname in ipairs(cfg.files or {}) do
 			local excluded = false
 			for _, exclude in ipairs(cfg.excludes) do
 				excluded = (fname == exclude)

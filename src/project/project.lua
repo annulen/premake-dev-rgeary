@@ -4,28 +4,39 @@
 -- Copyright (c) 2011-2012 Jason Perkins and the Premake project
 --
 
-	premake5.project = { }
+	premake5.project = premake5.project or { }
 	local project = premake5.project
 	local oven = premake5.oven
-
-
+	local globalContainer = premake5.globalContainer
+	local keyedblocks = premake.keyedblocks
+		
 --
 -- Flatten out a project and all of its configurations, merging all of the
 -- values contained in the script-supplied configuration blocks.
---
+--   project.bake must be recursive, as if A depends on B, we need to bake B first. 
 
-	function project.bake(prj, sln)
+	function project.bake(prj)
 		-- make sure I've got the actual project, and not the root configurations
 		prj = prj.project or prj
+		local sln = prj.solution
+		
+		keyedblocks.create(sln)
+		keyedblocks.create(prj, sln)
+		
+		if prj.isbaked then
+			return prj
+		end
+		local tmr = timer.start('project.bake')
 		
 		-- bake the project's "root" configuration, which are all of the
 		-- values that aren't part of a more specific configuration
-		local result = oven.merge(oven.merge({}, sln), prj)
+		local result = oven.merge({}, sln)
+		result = oven.merge(result, prj)
 		result.solution = sln
 		result.platforms = result.platforms or {}
 		result.blocks = prj.blocks
-		result.baked = true
-				
+		result.isbaked = true
+		
 		-- prevent any default system setting from influencing configurations
 		result.system = nil
 		
@@ -44,11 +55,20 @@
 				configs[(buildcfg or "*") .. (platform or "")] = cfg
 			end
 		end
+		
 		result.configs = configs
 		
+		-- Replace prj's contents with result. Ugly, but we don't want to accidentally reference the non-baked project later.
+		for k,v in pairs(prj) do
+			prj[k] = nil
+		end
+		for k,v in pairs(result) do
+			prj[k] = v
+		end
+		
+		timer.stop(tmr)
 		return result
 	end
-
 
 --
 -- Flattens out the build settings for a particular build configuration and
@@ -58,7 +78,7 @@
 	function project.bakeconfig(prj, buildcfg, platform)
 		local system
 		local architecture
-
+local tmr1 = timer.start('bakeconfig1')
 		-- for backward compatibility with the old platforms API, use platform
 		-- as the default system or architecture if it would be a valid value.
 		if platform then
@@ -67,28 +87,106 @@
 		end
 
 		-- figure out the target operating environment for this configuration
-		local filter = {
-			["buildcfg"] = buildcfg,
-			["platform"] = platform,
-			["action"] = _ACTION
-		}
+		local filter, cfg
 		
-		-- look to see if this configuration specifies a target system and, if so,
-		-- use that to further filter the results
-		local cfg = oven.bake(prj, prj.solution, filter, "system")
-		filter.system = cfg.system or system or premake.action.current().os or os.get()
-				
-		cfg = oven.bake(prj, prj.solution, filter)
+		if true then
+			system = system or premake.action.current().os or os.get()
+			filter = { buildcfg, _ACTION, system }
+			if platform then table.insert(filter, platform) end
+			cfg = keyedblocks.getfield(prj, filter)
+			cfg.filter = filter
+			system = cfg.system or system
+			if architecture == nil and os.is64bit() then
+				architecture = 'x86_64'
+			end
+		
+		elseif true then
+			filter = { buildcfg, _ACTION }
+			if platform then table.insert(filter, platform) end
+
+			system = keyedblocks.getfield(prj, filter, 'system' )
+			system = system or premake.action.current().os or os.get()
+			table.insert(filter, system)
+			if architecture == nil and os.is64bit() then
+				architecture = 'x86_64'
+			end
+			if architecture then
+				table.insert(filter, architecture)
+			end
+			local cfgKind = keyedblocks.getfield(prj, filter, "kind")
+
+			-- Look to see what kind of project this is, and use that to filter for further configurations
+			if cfgKind then
+				table.insert(filter, cfgKind)
+			end
+
+			-- Find any other configs we should be using
+			local usesconfigs = keyedblocks.getfield(prj, filter, "usesconfig")
+			if usesconfigs then
+				for _,v in ipairs(usesconfigs) do
+					table.insert(filter, v)
+				end
+			end
+
+			cfg = oven.bake(prj, prj.solution, filter)
+		
+		else
+			filter = {
+				["buildcfg"] = buildcfg,
+				["action"] = _ACTION
+			}
+			if platform then table.insert(filter, platform) end
+			
+			-- look to see if this configuration specifies a target system and, if so,
+			-- use that to further filter the results
+			cfg = oven.bake(prj, prj.solution, filter, "system")
+			system = cfg.system or system or premake.action.current().os or os.get()
+			system = system or cfg.system
+			if architecture == nil and os.is64bit() then
+				architecture = 'x86_64'
+			end
+			filter.system = system
+			filter.architecture = architecture
+			-- Look to see what kind of project this is, and use that to filter for further configurations
+			local cfgKind = oven.bake(prj, prj.solution, filter, "kind")
+			filter.kind = cfgKind.kind
+			
+			cfg = oven.bake(prj, prj.solution, filter)
+		end
+		
+		--local cfgold = oven.bake(prj, prj.solution, filter); cfg = cfgold
+		cfg.buildcfg = buildcfg
+		cfg.platform = platform
+		cfg.action = _ACTION
 		cfg.solution = prj.solution
 		cfg.project = prj
+		cfg.system = cfg.system or system
 		cfg.architecture = cfg.architecture or architecture
+		cfg.isUsage = prj.isUsage
+		cfg.platform = cfg.platform or ''		-- should supply '' as you could ask for %{cfg.platform} in a token
+
+		-- add back any missing default values		
+		for name,field in pairs(premake.defaultfields) do
+			cfg[name] = cfg[name] or field.getDefaultValue()
+		end
 		
+		-- for usage filters
+		cfg.usesconfig = cfg.usesconfig or {}
+		cfg.usesconfig.buildcfg = cfg.buildcfg
+		cfg.usesconfig.platform = cfg.platform
+		cfg.usesconfig.system = cfg.system
+		cfg.usesconfig.architecture = cfg.architecture
+		cfg.usesconfig.kind = cfg.kind
+		cfg.usesconfig.toolset = cfg.toolset
+		
+		ptypeSet( cfg, 'configprj' )
+timer.stop(tmr1)
+local tmr3 = timer.start('bakeconfig3')
 		-- fill in any calculated values
 		premake5.config.bake(cfg)
-
+timer.stop(tmr3)
 		return cfg
 	end
-
 
 --
 -- Builds a list of build configuration/platform pairs for a project,
@@ -149,8 +247,8 @@
 	function project.eachconfig(prj)
 		-- to make testing a little easier, allow this function to
 		-- accept an unbaked project, and fix it on the fly
-		if not prj.baked then
-			prj = project.bake(prj, prj.solution)
+		if not prj.isbaked then
+			prj = project.bake(prj)
 		end
 
 		local configs = prj.cfglist
@@ -165,7 +263,9 @@
 		end
 	end
 
-
+	function project.getConfigs(prj)
+		return Seq:new(project.eachconfig(prj))
+	end
 -- 
 -- Locate a project by name; case insensitive.
 --
@@ -176,15 +276,65 @@
 --
 
 	function project.findproject(name)
-		for sln in premake.solution.each() do
-			for _, prj in ipairs(sln.projects) do
-				if (prj.name == name) then
-					return  prj
-				end
-			end
-		end
+		return project.allReal[name] or project.allUsage[name]
 	end
 
+-- Get a real project
+	function project.getRealProject(name)
+		return globalContainer.allReal[name]
+	end
+
+-- Get a usage project
+	function project.getUsageProject(name)
+		return globalContainer.allUsage[name]
+	end
+	
+-- Iterate over all real projects
+	function project.eachproject()
+		local iter,t,k,v = ipairs(globalContainer.allReal)
+		return function()
+			k,v = iter(t,k)
+			return v
+		end
+	end
+	
+-- Create a project
+	function project.createproject(name, sln, isUsage)
+		local prj = {}
+		
+		-- attach a type
+		ptypeSet(prj, 'project')
+		
+		-- add to master list keyed by both name and index
+		if isUsage then
+			table.insert(sln.projects, prj)
+			sln.projects[name] = prj
+		end
+		
+		if isUsage then
+			table.insert( globalContainer.allUsage, prj )
+			globalContainer.allUsage[name] = prj
+		else
+			table.insert( globalContainer.allReal, prj )
+			globalContainer.allReal[name] = prj
+		end
+		
+		prj.solution       = sln
+		prj.name           = name
+		prj.basedir        = os.getcwd()
+		prj.script         = _SCRIPT
+		prj.uuid           = os.uuid()
+		prj.blocks         = { }
+		prj.isUsage		   = isUsage;
+		
+		-- Create a default usage project if there isn't one
+		if (not isUsage) and (not project.getUsageProject(prj.name)) then
+			project.createproject(name, sln, true)
+		end
+		
+		return prj;
+	end
+	
 
 --
 -- Retrieve the project's configuration information for a particular build 
@@ -203,8 +353,8 @@
 	function project.getconfig(prj, buildcfg, platform)
 		-- to make testing a little easier, allow this function to
 		-- accept an unbaked project, and fix it on the fly
-		if not prj.baked then
-			prj = project.bake(prj, prj.solution)
+		if not prj.isbaked then
+			prj = project.bake(prj)
 		end
 	
 		-- if no build configuration is specified, return the "root" project
@@ -432,7 +582,10 @@
 		-- find *all* files referenced by the project, regardless of configuration
 		local files = {}
 		for cfg in project.eachconfig(prj) do
-			for _, file in ipairs(cfg.files) do
+			for _, file in ipairs(cfg.files or {}) do
+				if not path.isabsolute(file) then
+					file = path.join( prj.basedir, file )
+				end
 				files[file] = file
 			end
 		end

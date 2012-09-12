@@ -5,6 +5,7 @@
 --
 
 	premake.codelite = { }
+	local clean = premake.actions.clean
 
 	newaction {
 		trigger         = "codelite",
@@ -28,15 +29,15 @@
 		end,
 		
 		oncleansolution = function(sln)
-			premake.clean.file(sln, "%%.workspace")
-			premake.clean.file(sln, "%%_wsp.mk")
-			premake.clean.file(sln, "%%.tags")
+			clean.file(sln, "%%.workspace")
+			clean.file(sln, "%%_wsp.mk")
+			clean.file(sln, "%%.tags")
 		end,
 		
 		oncleanproject = function(prj)
-			premake.clean.file(prj, "%%.project")
-			premake.clean.file(prj, "%%.mk")
-			premake.clean.file(prj, "%%.list")
-			premake.clean.file(prj, "%%.out")
+			clean.file(prj, "%%.project")
+			clean.file(prj, "%%.mk")
+			clean.file(prj, "%%.list")
+			clean.file(prj, "%%.out")
 		end
 	}

@@ -8,6 +8,7 @@
 	local project = premake5.project
 	local config = premake5.config
 	local oven = premake5.oven
+	local keyedblocks = premake.keyedblocks
 
 
 --
@@ -17,16 +18,18 @@
 
 	function config.bake(cfg)		
 		-- assign human-readable names
-		cfg.longname = table.concat({ cfg.buildcfg, cfg.platform }, "|")
-		cfg.shortname = table.concat({ cfg.buildcfg, cfg.platform }, " ")
+		local platform = iif( cfg.platform == '', nil, cfg.platform )
+		cfg.longname = table.concat({ cfg.buildcfg, platform }, "|")
+		cfg.shortname = table.concat({ cfg.buildcfg, platform }, " ")
 		cfg.shortname = cfg.shortname:gsub(" ", "_"):lower()
 
-		if cfg.project and cfg.kind then
+		if cfg.project and cfg.kind and cfg.kind ~= 'None' then
 			cfg.buildtarget = config.gettargetinfo(cfg)
-			oven.expandtokens(cfg, nil, nil, "buildtarget")
+			oven.expandtokens(cfg, nil, nil, "buildtarget", true)
 			cfg.linktarget = config.getlinkinfo(cfg)
-			oven.expandtokens(cfg, nil, nil, "linktarget")
+			oven.expandtokens(cfg, nil, nil, "linktarget", true)
 		end
+		
 	end
 
 
@@ -51,6 +54,9 @@
 
 		local directory = cfg[field.."dir"] or cfg.targetdir or basedir
 		local basename = cfg[field.."name"] or cfg.targetname or cfg.project.name
+		
+		-- in case a project has a slash in the name
+		basename = path.getbasename(basename)
 
 		local bundlename = ""
 		local bundlepath = ""
@@ -142,6 +148,8 @@
 			
 			-- expand inline tokens
 			oven.expandtokens(cfg, "config", filecfg)
+			
+			filecfg.extension = path.getextension(filename):lower()
 			
 			-- and cache the result
 			cfg.files[filename] = filecfg
@@ -323,3 +331,13 @@
 	function config.gettargetinfo(cfg)
 		return buildtargetinfo(cfg, cfg.kind, "target")
 	end
+
+--
+--	Returns true if the configuration requests a dependency file output
+--
+	function config.hasDependencyFileOutput(cfg)
+		return cfg.flags.AddPhonyHeaderDependency or
+			cfg.flags.CreateDependencyFile or
+			cfg.flags.CreateDependencyFileIncludeSystem 
+	end
+	

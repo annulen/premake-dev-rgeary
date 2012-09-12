@@ -9,7 +9,6 @@
 	local gcc = premake.tools.gcc
 	local config = premake5.config
 	
-
 --
 -- SNC flags for specific systems and architectures.
 --

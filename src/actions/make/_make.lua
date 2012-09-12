@@ -6,6 +6,7 @@
 
 	premake.make = { }
 	local make = premake.make
+	local clean = premake.actions.clean
 	local solution = premake.solution
 	local project = premake5.project
 
@@ -26,7 +27,7 @@
 		valid_languages = { "C", "C++", "C#" },
 
 		valid_tools     = {
-			cc     = { "gcc"   },
+			cc     = { "gcc", "ow"   },
 			dotnet = { "mono", "msnet", "pnet" }
 		},
 
@@ -44,11 +45,11 @@
 		end,
 		
 		oncleansolution = function(sln)
-			premake.clean.file(sln, make.getmakefilename(sln, false))
+			clean.file(sln, make.getmakefilename(sln, false))
 		end,
 		
 		oncleanproject = function(prj)
-			premake.clean.file(prj, make.getmakefilename(prj, true))
+			clean.file(prj, make.getmakefilename(prj, true))
 		end
 	}
 
@@ -289,7 +290,7 @@
 			cc     = { "gcc" },
 			dotnet = { "mono", "msnet", "pnet" },
 		},
-		
+
 		onsolution = function(sln)
 			premake.generate(sln, make.getmakefilename(sln, false), premake.make_solution)
 		end,
@@ -304,10 +305,10 @@
 		end,
 		
 		oncleansolution = function(sln)
-			premake.clean.file(sln, make.getmakefilename(sln, false))
+			clean.file(sln, make.getmakefilename(sln, false))
 		end,
 		
 		oncleanproject = function(prj)
-			premake.clean.file(prj, make.getmakefilename(prj, true))
+			clean.file(prj, make.getmakefilename(prj, true))
 		end
 	}

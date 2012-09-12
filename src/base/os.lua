@@ -10,22 +10,46 @@
 --
 
 	function os.executef(cmd, ...)
+		if repoRoot then
+			cmd = cmd:replace('$root', repoRoot)
+		end
 		cmd = string.format(cmd, unpack(arg))
-		return os.execute(cmd)
+		if( _OPTIONS['dryrun'] ) then	
+			print("Execute : " ..cmd)
+			return 0 
+		else
+			return os.execute(cmd)
+		end
+	end
+	
+--
+-- Override to replace $root with repoRoot
+--
+	local builtin_isfile = os.isfile
+	function os.isfile(s)
+		if not s then 
+			return false 
+		end
+		if repoRoot then
+			s = s:replace('$root', repoRoot)
+		end
+		return builtin_isfile(s)
 	end
 
-
 --
--- Scan the well-known system locations for a particular library.
+-- Scan the well-known system locations for a particular library. 
+--  Add to the search path using premake.libsearchpath
 --
 
 	function os.findlib(libname)
 		local path, formats
+		local delimiter = ':'
 
 		-- assemble a search path, depending on the platform
 		if os.is("windows") then
 			formats = { "%s.dll", "%s" }
 			path = os.getenv("PATH")
+			delimiter = ';'
 		elseif os.is("haiku") then
 			formats = { "lib%s.so", "%s.so" }
 			path = os.getenv("LIBRARY_PATH")
@@ -53,6 +77,10 @@
 			end
 			path = path .. ":/lib:/usr/lib:/usr/local/lib"
 		end
+		
+		if premake.libSearchPath then
+			path = path .. delimiter .. table.concat(premake.libSearchPath, delimiter)
+		end
 
 		for _, fmt in ipairs(formats) do
 			local name = string.format(fmt, libname)
@@ -62,6 +90,57 @@
 	end
 
 
+--
+-- Scan the well-known system locations for a particular binary.
+--
+
+	function os.findbin(binname, hintPath)
+		local formats = {} 
+		local path = os.getenv("PATH") or ""
+		
+		if os.isfile(binname) then
+			return binname
+		end
+		
+		if( hintPath ) then
+			path = hintPath..os.getPathDelimiter()..path
+		end
+				
+		local firstArg = string.find(binname, ' ')
+		if firstArg then
+			binname = string.sub(binname,1,firstArg-1)
+		end
+
+		-- assemble a search path, depending on the platform
+		if os.is("windows") then
+			formats = { "%s.exe", "%s.com", "%s" }
+		elseif os.is("haiku") then
+			formats = { "%s" }
+		else
+			if os.is("macosx") then
+				formats = { "%s", "%s.app" }
+			else
+				formats = { "%s" }
+			end
+		end
+
+		for _, fmt in ipairs(formats) do
+			local name = string.format(fmt, binname)
+			local result = os.pathsearch(name, path)
+			if result then return result end
+		end
+	end
+
+--
+-- Platform specific path delimiter
+--
+	function os.getPathDelimiter()
+		if _OS == "windows" then 
+			return ';'
+		else 
+			return ':' 
+		end
+	end
 
 --
 -- Retrieve the current operating system ID string.
@@ -95,32 +174,36 @@
 		"powerpc64",
 		"sparc64"
 	}
-
+	local hostIs64bit 
 	function os.is64bit()
 		-- Call the native code implementation. If this returns true then
 		-- we're 64-bit, otherwise do more checking locally
 		if (os._is64bit()) then
 			return true
 		end
-
-		-- Identify the system
-		local arch
-		if _OS == "windows" then
-			arch = os.getenv("PROCESSOR_ARCHITECTURE")
-		elseif _OS == "macosx" then
-			arch = os.outputof("echo $HOSTTYPE")
-		else
-			arch = os.outputof("uname -m")
-		end
-
-		-- Check our known 64-bit identifiers
-		arch = arch:lower()
-		for _, hosttype in ipairs(_64BitHostTypes) do
-			if arch:find(hosttype) then
-				return true
+		
+		if( hostIs64bit == nil ) then
+			-- Identify the system
+			local arch
+			if _OS == "windows" then
+				arch = os.getenv("PROCESSOR_ARCHITECTURE")
+			elseif _OS == "macosx" then
+				arch = os.outputof("echo $HOSTTYPE")
+			else
+				arch = os.outputof("uname -m")
 			end
+	
+			-- Check our known 64-bit identifiers
+			arch = arch:lower()
+			for _, hosttype in ipairs(_64BitHostTypes) do
+				if arch:find(hosttype) then
+					hostIs64bit = true
+					return true
+				end
+			end
+			hostIs64bit = false
 		end
-		return false
+		return hostIs64bit 
 	end
 
 
@@ -210,6 +293,11 @@
 
 	local builtin_mkdir = os.mkdir
 	function os.mkdir(p)
+		if( _OPTIONS['dryrun'] ) then	
+			printf("mkdir : " .. p .. '\n')
+			return true
+		end
+			
 		local dir = iif(p:startswith("/"), "/", "")
 		for part in p:gmatch("[^/]+") do
 			dir = dir .. part
@@ -243,9 +331,21 @@
 --
 -- Remove a directory, along with any contained files or subdirectories.
 --
+	local removeList = {}		-- just so we don't print the same command twice
 
 	local builtin_rmdir = os.rmdir
 	function os.rmdir(p)
+		if repoRoot then
+			p = p:replace('$root', repoRoot)
+		end
+		if( _OPTIONS['dryrun'] ) then
+			if (os.isfile(p)	or os.isdir(p)) and (not removeList[p]) then
+				print("rm -rf " .. p)
+				removeList[p] = true
+			end	
+			return true
+		end
+	
 		-- recursively remove subdirectories
 		local dirs = os.matchdirs(p .. "/*")
 		for _, dname in ipairs(dirs) do
@@ -262,3 +362,32 @@
 		builtin_rmdir(p)
 	end
 
+--
+-- Remove a directory if it's empty, and any parents if they're empty too
+--
+
+	function os.rmdirParentsIfEmpty(p)
+		if repoRoot then
+			p = p:replace('$root', repoRoot)
+		end
+
+		local dirs = os.matchdirs(p .. "/*")
+		local files = os.matchfiles(p .. "/*")
+		
+		if (#dirs == 0) and (#files == 0) then
+			
+			if( _OPTIONS['dryrun'] ) then
+				if not removeList[p] then	
+					print("rmdir " .. p )
+				end
+				removeList[p] = true
+			else
+				builtin_rmdir(p)
+			end
+			
+			local parent = path.getdirectory(p)
+			os.rmdirParentsIfEmpty(parent)
+			return true
+		end
+		return false
+	end

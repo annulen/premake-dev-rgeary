@@ -5,7 +5,7 @@
 --
 
 	local make = premake.make
-
+	local dotnet = premake.tools.dotnet
 
 --
 
@@ -50,7 +50,7 @@
 --
 	
 	function premake.make_csharp(prj)
-		local csc = premake.dotnet
+		local csc = dotnet
 
 		-- Do some processing up front: build a list of configuration-dependent libraries.
 		-- Libraries that are built to a location other than $(TARGETDIR) will need to

@@ -4,7 +4,9 @@
 -- Copyright (c) 2002-2009 Jason Perkins and the Premake project
 --
 
-	premake.clean = { }
+	premake.actions.clean = { }
+	local clean = premake.actions.clean
+	local project = premake5.project
 
 
 --
@@ -18,9 +20,16 @@
 --    a description of the format.
 --
 
-	function premake.clean.directory(obj, pattern)
+	function clean.directory(obj, pattern, removeParentsIfEmpty)
+		if pattern == '.' then
+			return false		-- avoid deleting everything
+		end
 		local fname = premake.project.getfilename(obj, pattern)
 		os.rmdir(fname)
+		if removeParentsIfEmpty then
+			os.rmdirParentsIfEmpty(fname)
+		end
+		return true
 	end
 
 
@@ -35,7 +44,7 @@
 --    a description of the format.
 --
 
-	function premake.clean.file(obj, pattern)
+	function clean.file(obj, pattern)
 		local fname = premake.project.getfilename(obj, pattern)
 		os.remove(fname)
 	end
@@ -48,6 +57,8 @@
 	newaction {
 		trigger     = "clean",
 		description = "Remove all binaries and generated files",
+		
+		isnextgen 	= true,
 
 		onsolution = function(sln)
 			for action in premake.action.each() do
@@ -65,7 +76,7 @@
 			end
 
 			if (prj.objectsdir) then
-				premake.clean.directory(prj, prj.objectsdir)
+				clean.directory(prj, prj.objectsdir)
 			end
 
 			-- build a list of supported target platforms that also includes a generic build
@@ -74,25 +85,17 @@
 				platforms = table.join(platforms, { "Native" })
 			end
 
-			for _, platform in ipairs(platforms) do
-				for cfg in premake.eachconfig(prj, platform) do
-					premake.clean.directory(prj, cfg.objectsdir)
-
-					-- remove all permutations of the target binary
-					premake.clean.file(prj, premake.gettarget(cfg, "build", "posix", "windows", "windows").fullpath)
-					premake.clean.file(prj, premake.gettarget(cfg, "build", "posix", "posix", "linux").fullpath)
-					premake.clean.file(prj, premake.gettarget(cfg, "build", "posix", "posix", "macosx").fullpath)
-					premake.clean.file(prj, premake.gettarget(cfg, "build", "posix", "PS3", "windows").fullpath)
-					if cfg.kind == "WindowedApp" then
-						premake.clean.directory(prj, premake.gettarget(cfg, "build", "posix", "posix", "linux").fullpath .. ".app")
+			if not prj.isUsage then
+				for cfg in project.eachconfig(prj) do
+					if cfg.objdir then
+						clean.directory(prj, cfg.objdir, true)
 					end
-
-					-- if there is an import library, remove that too
-					premake.clean.file(prj, premake.gettarget(cfg, "link", "windows", "windows", "windows").fullpath)
-					premake.clean.file(prj, premake.gettarget(cfg, "link", "posix", "posix", "linux").fullpath)
-
+					if cfg.linktarget then
+						clean.directory(prj, cfg.linktarget.directory, true)
+					end
+	
 					-- call action.oncleantarget() with the undecorated target name
-					local target = path.join(premake.project.getfilename(prj, cfg.buildtarget.directory), cfg.buildtarget.basename)
+					local target = cfg.project.basedir
 					for action in premake.action.each() do
 						if action.oncleantarget then
 							action.oncleantarget(target)

@@ -10,6 +10,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#if !PLATFORM_WINDOWS
+	#include <sys/time.h>
+#endif
 
 #define loslib_c
 #define LUA_LIB
@@ -72,7 +75,16 @@ static int os_getenv (lua_State *L) {
 
 
 static int os_clock (lua_State *L) {
+#if PLATFORM_WINDOWS
   lua_pushnumber(L, ((lua_Number)clock())/(lua_Number)CLOCKS_PER_SEC);
+#else
+  struct timeval tod;
+  gettimeofday(&tod, NULL);
+
+  double seconds = ((double)tod.tv_sec + (tod.tv_usec / 1000000.0));
+
+  lua_pushnumber(L, ((lua_Number)seconds));
+#endif
   return 1;
 }
 
