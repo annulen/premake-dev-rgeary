@@ -97,9 +97,9 @@ local gcc_asm = newtool {
 	extensionsForCompiling = { '.s' },
 	
 	-- Bug in icc, only writes Makefile style depfiles. Just disable it.
-	prefixes = table.except(gcc_cxx.prefixes, { 'depfileOutput' }),
-	suffixes = table.except(gcc_cxx.suffixes, { 'depfileOutput' }),
-	flagMap = table.except(gcc_cxx.flagMap, { 'CreateDependencyFile', 'CreateDependencyFileIncludeSystem', }),
+	prefixes = table.exceptKeys(gcc_cxx.prefixes, { 'depfileOutput' }),
+	suffixes = table.exceptKeys(gcc_cxx.suffixes, { 'depfileOutput' }),
+	flagMap = table.exceptKeys(gcc_cxx.flagMap, { 'CreateDependencyFile', 'CreateDependencyFileIncludeSystem', }),
 }
 local gcc_ar = newtool {
 	toolName = 'ar',

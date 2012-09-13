@@ -233,8 +233,9 @@
 --
 -- Returns a copy of table t without the keys in list removeKeys
 -- 
-	function table.except(t, removeKeys)
+	function table.exceptKeys(t, removeKeys)
 		local rv = {}
+		local i = 0
 		removeKeys = toSet(removeKeys)
 		for k,v in pairs(t) do
 			if not removeKeys[k] then
@@ -244,6 +245,24 @@
 		return rv
 	end
 
+--
+-- Returns a copy of table t without the values in list removeValues
+-- 
+	function table.exceptValues(t, removeValues)
+		local rv = {}
+		local i = 0
+		removeValues = toSet(removeValues)
+		for k,v in pairs(t) do
+			if not removeValues[v] then
+				if type(k) == 'number' then
+					i = i + 1
+					k = i
+				end
+				rv[k] = v
+			end
+		end
+		return rv
+	end
 
 --
 -- Looks for an object within an array. Returns its index if found,

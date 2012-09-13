@@ -104,9 +104,9 @@ local icc_asm = newtool {
 	},
 	
 	-- Bug in icc, only writes Makefile style depfiles. Just disable it.
-	prefixes = table.except(icc_cxx.prefixes, { 'depfileOutput' }),
-	suffixes = table.except(icc_cxx.suffixes, { 'depfileOutput' }),
-	flagMap = table.except(icc_cxx.flagMap, { 'CreateDependencyFile', 'CreateDependencyFileIncludeSystem', }),
+	prefixes = table.exceptKeys(icc_cxx.prefixes, { 'depfileOutput' }),
+	suffixes = table.exceptKeys(icc_cxx.suffixes, { 'depfileOutput' }),
+	flagMap = table.exceptKeys(icc_cxx.flagMap, { 'CreateDependencyFile', 'CreateDependencyFileIncludeSystem', }),
 }
 local icc_ar = newtool {
 	toolName = 'ar',
