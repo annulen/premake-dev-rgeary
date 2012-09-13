@@ -61,8 +61,8 @@
 			names = table.join(names, field.namealiases)
 		end
 
-		for _,n in ipairs(names) do		
-			if _G[n] then
+		for _,n in ipairs(names) do
+			if rawget(_G,n) then
 				error('name '..n..' in use', 2)
 			end
 			
@@ -549,7 +549,7 @@
 			return
 		end
 	
-		value, err = api.checkvalue(value, field.allowed, field.aliases)
+		local value, err = api.checkvalue(value, field.allowed, field.aliases)
 		
 		if err then
 			error(err, 3)

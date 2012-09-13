@@ -61,7 +61,7 @@
 --
 
 	local builtin_dofile = dofile
-	function dofile(fname)
+	function dofile(fname, enableSpellCheck)
 		-- remember the current working directory and file; I'll restore it shortly
 		local oldcwd = os.getcwd()
 		local oldfile = _SCRIPT
@@ -82,8 +82,16 @@
 		local newcwd = path.getdirectory(_SCRIPT)
 		os.chdir(newcwd)
 		
+		if enableSpellCheck then
+			premake.spellCheckEnable(_G)
+		end
+		
 		-- run the chunk. How can I catch variable return values?
 		local a, b, c, d, e, f = builtin_dofile(_SCRIPT)
+
+		if enableSpellCheck then
+			premake.spellCheckDisable(_G)
+		end
 		
 		-- restore the previous working directory when done
 		_SCRIPT = oldfile
@@ -459,11 +467,7 @@
 			end
 			return rv
 		elseif type(vs) == 'table' then
-			if #vs > 0 then
-				return vs
-			else
-				return {}
-			end
+			return vs
 		else
 			-- Convert to sequence
 			return { vs }

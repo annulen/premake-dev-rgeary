@@ -89,3 +89,30 @@
 		
 		return true
 	end
+
+	function premake.spellCheckEnable(envTable)
+		local mt = getmetatable(envTable) or {}
+		mt.__index = function(self, key)	
+			return premake.doSpellCheck(key, self)
+		end
+		mt.__newindex = function(self, key, value)
+			rawset(self, key, value)
+		end
+		setmetatable(envTable, mt)
+	end
+	
+	function premake.spellCheckDisable(envTable)
+		local mt = getmetatable(envTable) or {}
+		mt.__index = nil
+		mt.__newindex = nil
+		setmetatable(envTable, mt)
+	end
+	
+	function premake.doSpellCheck(key, validValues)
+		local rv = rawget(validValues, key) 
+		if rv then
+			return rv
+		else
+			error("Not recognised : "..key, 2)
+		end
+	end

@@ -152,7 +152,7 @@
 		end
 		if systemScript and os.isfile(systemScript) then
 			timer.start('Load system script')
-			dofile(systemScript)
+			dofile(systemScript, true)
 			timer.stop()
 		end 
 		
@@ -180,7 +180,7 @@
 		
 		if (os.isfile(fname)) then
 			timer.start('Load build script')
-			dofile(fname)
+			dofile(fname, true)
 			timer.stop()
 		end
 

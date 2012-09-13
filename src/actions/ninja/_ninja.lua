@@ -149,8 +149,10 @@
 	end
 
 	function ninja.setNinjaBuildDir(sln)
-		-- builddir is where the build log & main ninja file is placed 
-		repoRoot = repoRoot or path.getabsolute(_WORKING_DIR)
+		-- builddir is where the build log & main ninja file is placed
+		if repoRoot == '' then 
+			repoRoot = path.getabsolute(_WORKING_DIR)
+		end
 		if (not ninja.builddir) then
 			ninja.builddir = iif( sln.ninjaBuildDir, sln.ninjaBuildDir, repoRoot)
 			ninja.builddir = ninja.builddir:replace('$root',repoRoot)

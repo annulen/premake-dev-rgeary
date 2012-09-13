@@ -45,7 +45,7 @@
 		if (mode) then
 			if (mode:find("w")) then
 				local dir = path.getdirectory(fname)
-				ok, err = os.mkdir(dir)
+				local ok, err = os.mkdir(dir)
 				if (not ok) then
 					error(err, 0)
 				end
