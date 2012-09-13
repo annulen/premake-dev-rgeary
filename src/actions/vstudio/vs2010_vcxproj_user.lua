@@ -42,10 +42,10 @@
 			_p(2,'<DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>')	
 		end
 
-		if #cfg.debugargs > 0 then
+		if cfg.debugargs and #cfg.debugargs > 0 then
 			_x(2,'<LocalDebuggerCommandArguments>%s</LocalDebuggerCommandArguments>', table.concat(cfg.debugargs, " "))
 		end
-		if #cfg.debugenvs > 0 then
+		if cfg.debugenvs and #cfg.debugenvs > 0 then
 			local envs = table.concat(cfg.debugenvs, "\n")
 			if cfg.flags.DebugEnvsInherit then
 				envs = envs .. "\n$(LocalDebuggerEnvironment)"

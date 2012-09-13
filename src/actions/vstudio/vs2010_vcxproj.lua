@@ -289,7 +289,7 @@
 			_p(3,'<EnableEnhancedInstructionSet>StreamingSIMDExtensions</EnableEnhancedInstructionSet>')
 		end
 
-		if #cfg.buildoptions > 0 then
+		if cfg.buildoptions and #cfg.buildoptions > 0 then
 			local options = table.concat(cfg.buildoptions, " ")
 			_x(3,'<AdditionalOptions>%s %%(AdditionalOptions)</AdditionalOptions>', options)
 		end
@@ -371,7 +371,7 @@
 
 	function vc2010.buildEvents(cfg)
 		function write(group, list)			
-			if #list > 0 then
+			if list and #list > 0 then
 				_p(2,'<%s>', group)
 				_x(3,'<Command>%s</Command>', table.implode(list, "", "", "\r\n"))
 				_p(2,'</%s>', group)
@@ -557,7 +557,7 @@
 --
 
 	function vc2010.additionalIncludeDirectories(cfg, includedirs)
-		if #includedirs > 0 then
+		if includedirs and #includedirs > 0 then
 			local dirs = project.getrelative(cfg.project, includedirs)
 			dirs = path.translate(table.concat(dirs, ";"))
 			_x(3,'<AdditionalIncludeDirectories>%s;%%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>', dirs)
@@ -570,7 +570,7 @@
 --
 
 	function vc2010.additionalLibraryDirectories(cfg)
-		if #cfg.libdirs > 0 then
+		if cfg.libdirs and #cfg.libdirs > 0 then
 			local dirs = project.getrelative(cfg.project, cfg.libdirs)
 			dirs = path.translate(table.concat(dirs, ";"))
 			_x(3,'<AdditionalLibraryDirectories>%s;%%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>', dirs)
@@ -583,7 +583,7 @@
 --
 
 	function vc2010.additionalLinkOptions(cfg)
-		if #cfg.linkoptions > 0 then
+		if cfg.linkoptions and #cfg.linkoptions > 0 then
 			local opts = table.concat(cfg.linkoptions, " ")
 			_x(3, '<AdditionalOptions>%s %%(AdditionalOptions)</AdditionalOptions>', opts)
 		end
@@ -664,7 +664,7 @@
 --
 
 	function vc2010.preprocessorDefinitions(defines)
-		if #defines > 0 then
+		if defines and #defines > 0 then
 			defines = table.concat(defines, ";")
 			_x(3,'<PreprocessorDefinitions>%s;%%(PreprocessorDefinitions)</PreprocessorDefinitions>', defines)
 		end

@@ -10,7 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#if !PLATFORM_WINDOWS
+#ifndef _WIN32
 	#include <sys/time.h>
 #endif
 
@@ -75,7 +75,7 @@ static int os_getenv (lua_State *L) {
 
 
 static int os_clock (lua_State *L) {
-#if PLATFORM_WINDOWS
+#ifdef _WIN32
   lua_pushnumber(L, ((lua_Number)clock())/(lua_Number)CLOCKS_PER_SEC);
 #else
   struct timeval tod;

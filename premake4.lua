@@ -2,6 +2,9 @@
 -- Premake 4.x build configuration script
 -- 
 
+-- For backwards compatibility
+if not _G['ninjaBuildDir'] then ninjaBuildDir = function() end end
+
 --
 -- Define the project. Put the release configuration first so it will be the
 -- default when folks build using the makefile. That way they don't have to 
@@ -55,6 +58,7 @@
 			defines	{"_CRT_SECURE_NO_DEPRECATE" }
 
 		configuration "windows"
+			defines "_WIN32"
 			links { "ole32" }
 
 		configuration "linux"
