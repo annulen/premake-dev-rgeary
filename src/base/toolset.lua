@@ -64,9 +64,9 @@ end
 
 function toolset:getLinkTool(cfg)
     if cfg.kind == premake.STATICLIB then
-    	return self.tools['ar'] or self.tools['link']
+    	return self.tools['ar'] or self.linkTool
     else
-    	return self.tools['link']
+    	return self.linkTool
     end
 end
 
@@ -118,9 +118,11 @@ function premake.tools.newtoolset(toolsetDef)
 			end
 			if tool.extensionsForLinking then
 				tool.extensionsForLinking = toSet(tool.extensionsForLinking)
-				for k,v in pairs(tool.extensionsForLinking) do 
-					t.toolsByExt[k] = tool
-				end
+			end
+			
+			-- t.linkTool defaults to 'link', or uses the first isLinker=true tool
+			if tool.isLinker then
+				t.linkTool = t.tools['link'] or tool
 			end
 		end
 		-- Special case, make sure it's the default

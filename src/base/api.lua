@@ -892,7 +892,7 @@
 			"WindowedApp",
 			"StaticLib",
 			"SharedLib",
-			"Header",					-- Ouput is a header file, ie. a compile dependency for another project
+			"SourceGen",					-- Ouput is a header or source file, usually a compile dependency for another project
 		},
 		aliases = {
 			Executable = 'ConsoleApp',
@@ -1044,6 +1044,17 @@
 		scope = "config",
 		kind = "string-list",
 		expandtokens = true,
+	}
+	
+	-- 
+	-- CPP = Directory which a protobuf project outputs C++ files to (optional) 
+	-- Directory which a protobuf project outputs Java files to (optional)
+	api.register {
+		name = "protobufout",
+		scope = "config",
+		kind = "key-path",
+		expandtokens = true,
+		usagefield = true,
 	}
 
 	api.register {

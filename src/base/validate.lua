@@ -108,11 +108,16 @@
 		setmetatable(envTable, mt)
 	end
 	
+	premake.apiKeywords = toSet({ '_ACTION', '_ARGS', '_OPTIONS', 'repoRoot' })
 	function premake.doSpellCheck(key, validValues)
 		local rv = rawget(validValues, key) 
 		if rv then
 			return rv
+		elseif premake.apiKeywords[key] then
+			return nil		-- allowed null values
 		else
-			error("Not recognised : "..key, 2)
+			local di = debug.getinfo(3, "S")
+			local fileLine = di.source:sub(2) .. ':' .. di.linedefined
+			error("Value not defined : "..key.." at "..fileLine, 2)
 		end
 	end

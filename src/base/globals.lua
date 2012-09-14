@@ -149,7 +149,10 @@
 		end
 	end
 
-
+--
+-- For printing in quiet mode
+--
+	_G.printAlways = _G.print
 
 --
 -- A shortcut for printing formatted output.

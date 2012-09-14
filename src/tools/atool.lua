@@ -36,7 +36,7 @@ tool.binaryName = nil
 tool.binaryFullpath = nil
 
 -- Fixed flags which always appear first in the command line. Two ways to override this.
-tool.fixedFlags = ''
+tool.fixedFlags = nil
 function tool:getFixedFlags()
 	return self.fixedFlags
 end
@@ -316,8 +316,8 @@ end
 --
 -- Returns true if this is an object file for the toolset
 --
-function tool:isLinkInput(cfg, fileName)
-	return (not self.extensionsForLinking) or (self.extensionsForLinking[path.getextension(fileName)] ~= nil)
+function tool:isLinkInput(cfg, fileExt)
+	return (not self.extensionsForLinking) or (self.extensionsForLinking[fileExt] ~= nil)
 end
 
 -- Get library includes
@@ -412,7 +412,16 @@ function premake.tools.newtool(toolDef)
 	-- Set up a list of arguments to decorate
 	t.decorateArgs = {}
 	-- extraArgs are arguments we always insert
-	local extraArgs = { 'fixedFlags', 'cfgflags', 'sysflags', 'input', 'output' }
+	local extraArgs = {}
+	if t.fixedFlags then table.insert(extraArgs, 'fixedFlags') end
+	table.insert(extraArgs, 'cfgflags')
+	if t.getsysflags ~= tool.getsysflags then 
+		table.insert(extraArgs, 'sysflags')
+	else
+		t.argumentOrder = table.exceptValues(t.argumentOrder, 'sysflags') 
+	end
+	table.insertflat(extraArgs, { 'input', 'output' } )
+	
 	if t.isCompiler then
 		table.insert( extraArgs, 'buildoptions' )
 	end

@@ -215,13 +215,15 @@ function ninja.writeProjectTargets(prj, scope)
 	-- Validate
 	for cfg in project.eachconfig(prj) do
 		if not cfg.kind then
-			error("Malformed project '"..prj.name.."', has no kind specified")
+			--error("Malformed project '"..prj.name.."', has no kind specified")
 		end 
 		if not cfg.toolset then
 			error("Malformed project '"..prj.name.."', has no toolset specified for kind "..cfg.kind)
 		end
-		if cfg.kind ~= 'Header' and not cfg.buildtarget then
-			error("Malformed project '"..prj.name.."', toolset "..cfg.toolset.." requires buildtarget but none specified")
+		if not (cfg.toolset == 'command' or cfg.kind == 'SourceGen') then 
+			if not cfg.buildtarget then
+				error("Malformed project '"..prj.name.."', toolset "..cfg.toolset.." requires buildtarget but none specified")
+			end
 		end
 	
 		cfg.language = prj.language
@@ -348,8 +350,8 @@ function ninja.writeProjectTargets(prj, scope)
 					addBuildEdge(outputFullpath, buildCmd, implicitDeps, fileCompileOverrides)
 					
 					table.insert( allLinkInputs, outputFullpath )
-				elseif (not linkTool) or linkTool:isLinkInput(cfg, fileName ) then
-					table.insert( allLinkInputs, fileName )
+				elseif (linkTool == nil) or linkTool:isLinkInput(cfg, fileExt ) then
+					table.insert( allLinkInputs, srcdirN..'/'..sourceFileRel )
 				end
 							
 				table.insertflat(finalTargetInputs, extraTargets)
@@ -386,6 +388,9 @@ function ninja.writeProjectTargets(prj, scope)
 		
 		-- Link
 		local finalTargetN = prj.name.. '.' ..cfgname
+		if prj.name == prj.solution.name then
+			finalTargetN = prj.name..'.Project.' .. cfgname 
+		end
 		
 		if #allLinkInputs > 0 then
 		
@@ -397,12 +402,16 @@ function ninja.writeProjectTargets(prj, scope)
 			local linkToolRuleName
 		
 			if not linkTool then
-				if not extraTargets then 
-					local buildCmd = 'phony '..table.concat(allLinkInputs, ' ')
-					local linkTargetN = targetdirN..'/'..cfg.buildtarget.name
-					addBuildEdge(linkTargetN, buildCmd)
-					_p('build '..linkTargetN..': '..buildCmd)
-					table.insert(finalTargetInputs,linkTargetN)
+				if not extraTargets then
+					if cfg.buildtarget then 
+						local buildCmd = 'phony '..table.concat(allLinkInputs, ' ')
+						local linkTargetN = targetdirN..'/'..cfg.buildtarget.name
+						addBuildEdge(linkTargetN, buildCmd)
+						_p('build '..linkTargetN..': '..buildCmd)
+						table.insert(finalTargetInputs,linkTargetN)
+					else
+						table.insert(finalTargetInputs,targetdirN)
+					end
 				else
 					table.insertflat(finalTargetInputs, extraTargets)
 				end
@@ -530,7 +539,7 @@ function ninja.writeBuildRule(cfg, stage, inputs, scope)
 			
 				-- Generate a unique name to reference this post build command
 				cfg.stageNumber[stage] = (cfg.stageNumber[stage] or 0) + 1
-				local buildTarget = cfg.project.name..'.'..stage..tostring(cfg.stageNumber[stage])
+				local buildTarget = cfg.project.name..'.'..cfg.buildcfg..'.'..stage..tostring(cfg.stageNumber[stage])
 				local cmd = buildrule.commands or ''
 				if type(cmd) == 'table' then cmd = table.concat(cmd, '\n') end
 				repeat
@@ -540,6 +549,10 @@ function ninja.writeBuildRule(cfg, stage, inputs, scope)
 				
 				local implicits = buildrule.dependencies or '' 
 				if type(implicits) == 'table' then implicits = table.concat(implicits, ' ') end
+				
+				if buildrule.absOutput then
+					buildTarget = buildrule.absOutput
+				end 
 				
 				if buildrule.language then
 					-- Write the command to a file, and execute it
@@ -564,9 +577,6 @@ function ninja.writeBuildRule(cfg, stage, inputs, scope)
 						io.close(f)
 					end
 					
-					if buildrule.absOutput then
-						buildTarget = buildrule.absOutput
-					end 
 					cmd = mkstring( { buildrule.language, scriptFilename, buildrule.absoutput })
 					
 					-- Don't add the script to the implicits 
@@ -575,26 +585,25 @@ function ninja.writeBuildRule(cfg, stage, inputs, scope)
 				
 				-- This fixes the issue where auto-generated header files placed in the source tree incorrectly get
 				--  multiple build edges for the same target output, despite the command being the same for each cfg
-				if ninja.buildEdges[buildTarget] then
-					return
+				if not ninja.buildEdges[buildTarget] then
+					if type(inputs) == 'table' then inputs = table.concat(inputs, ' ') end
+	
+					if #implicits > 0 then
+						inputs = inputs .. '|'..implicits
+					end
+	
+					local buildCmd = 'exec '..inputs
+					_p('build '..buildTarget..' : ' .. buildCmd)
+					_p(' cmd='..cmd)
+					
+					if buildrule.description then
+						_p(' description='..buildrule.description)
+					end
+					
+					addBuildEdge(buildTarget, buildCmd, implicits, { cmd=cmd, description=buildrule.description })
 				end
-				
-				if type(inputs) == 'table' then inputs = table.concat(inputs, ' ') end
-
-				if #implicits > 0 then
-					inputs = inputs .. '|'..implicits
-				end
-
-				local buildCmd = 'exec '..inputs
-				_p('build '..buildTarget..' : ' .. buildCmd)
-				_p(' cmd='..cmd)
-				
-				if buildrule.description then
-					_p(' description='..buildrule.description)
-				end
-				
-				addBuildEdge(buildTarget, buildCmd, implicits, { cmd=cmd, description=buildrule.description })
 				table.insert(finalTargetInputs, buildTarget)
+				
 			end
 			_p('')
 		end

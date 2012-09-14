@@ -74,6 +74,7 @@
 
 	function _premake_main(scriptpath)
 
+		-- Attach Debugger
 		local ok,err
 		if(_OPTIONS["attach"] ) then
 			local debuggerIP = _OPTIONS["attach"]
@@ -104,6 +105,7 @@
 			end
 		end
 
+		-- Start profiling
 		if (_OPTIONS['profile']) then
 			timer.enable()
 		end
@@ -140,6 +142,11 @@
 		-- Set up global container
 		global()
 		
+		-- Enable quiet mode. In quiet mode, Print with printAlways 
+		if _OPTIONS['quiet'] then
+			print = function() end
+		end
+		
 		-- Search for a system-level premake4-system.lua file
 		local systemScript
 		if os.getenv('PREMAKE_PATH') then
@@ -159,7 +166,7 @@
 		-- Set up the environment for the chosen action early, so side-effects
 		-- can be picked up by the scripts.
 
-		premake.action.set(_ACTION)
+		premake.action.set(_ACTION or '')
 
 		
 		-- Seed the random number generator so actions don't have to do it themselves
@@ -200,7 +207,7 @@
 			
 		-- If no action was specified, show a short help message
 		
-		if (not _ACTION) then
+		if (not _ACTION) or (_ACTION == '') then
 			print(shorthelp)
 			return 1
 		end

@@ -103,7 +103,7 @@ function Seq:each()
 end
 
 function Seq:mkstring(delimiter)
-	rv = nil
+	local rv = nil
 	delimiter = delimiter or ' '
 	for _,v in self:each() do
 		if rv then

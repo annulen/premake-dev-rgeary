@@ -94,3 +94,9 @@
 		trigger     = "systemScript",
 		description = "Run a system script before the build script. Default filename is premake-system.lua. Overridden by $PREMAKE_PATH.",
 	}
+	
+	newoption {
+		trigger 	= "quiet",
+		description = "Don't print status messages",
+	}
+	

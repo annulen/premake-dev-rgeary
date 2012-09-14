@@ -49,6 +49,7 @@
 		"tools/ow.lua",
 		"tools/snc.lua",
 		"tools/icc.lua",
+		"tools/protobuf.lua",
 
 		-- Clean action
 		"actions/clean/_clean.lua",

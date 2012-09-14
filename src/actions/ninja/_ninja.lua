@@ -150,7 +150,7 @@
 
 	function ninja.setNinjaBuildDir(sln)
 		-- builddir is where the build log & main ninja file is placed
-		if repoRoot == '' then 
+		if not repoRoot then 
 			repoRoot = path.getabsolute(_WORKING_DIR)
 		end
 		if (not ninja.builddir) then

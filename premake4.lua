@@ -2,6 +2,20 @@
 -- Premake 4.x build configuration script
 -- 
 
+-- For Backwards compatibility
+local premakeVersion = tonumber(string.match(_PREMAKE_VERSION, "[%d.]+")) or 99
+if premakeVersion <= 4.3 then
+	local function checkFn(name) 
+		if not rawget(_G, name) then 
+			_G[name] = function() end
+		end
+	end
+	checkFn("ninjaBuildDir")
+	checkFn("uses")
+	checkFn("buildrule")
+	checkFn("toolset")
+end
+
 --
 -- Define the project. Put the release configuration first so it will be the
 -- default when folks build using the makefile. That way they don't have to 

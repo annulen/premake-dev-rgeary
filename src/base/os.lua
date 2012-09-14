@@ -4,14 +4,12 @@
 -- Copyright (c) 2002-2011 Jason Perkins and the Premake project
 --
 
-	-- default global for the codebase root
-	repoRoot = ''
 --
 -- Same as os.execute(), but accepts string formatting arguments.
 --
 
 	function os.executef(cmd, ...)
-		if repoRoot ~= '' then
+		if repoRoot then
 			cmd = cmd:replace('$root', repoRoot)
 		end
 		cmd = string.format(cmd, unpack(arg))
@@ -31,7 +29,7 @@
 		if not s then 
 			return false 
 		end
-		if repoRoot ~= '' then
+		if repoRoot then
 			s = s:replace('$root', repoRoot)
 		end
 		return builtin_isfile(s)
@@ -336,7 +334,7 @@
 
 	local builtin_rmdir = os.rmdir
 	function os.rmdir(p)
-		if repoRoot ~= '' then
+		if repoRoot then
 			p = p:replace('$root', repoRoot)
 		end
 		if( _OPTIONS['dryrun'] ) then
@@ -368,7 +366,7 @@
 --
 
 	function os.rmdirParentsIfEmpty(p)
-		if repoRoot ~= '' then
+		if repoRoot then
 			p = p:replace('$root', repoRoot)
 		end
 
