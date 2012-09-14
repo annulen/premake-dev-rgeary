@@ -1,6 +1,11 @@
 #!/bin/bash
 
-premakeDir=$(readlink -f $(dirname $0) )
+$(which readlink 2> /dev/null)
+if [[ $? == 0 ]]; then
+	premakeDir=$(readlink -f $(dirname $0) )
+else
+	premakeDir=$(dirname $0)
+fi
 premake="$premakeDir/bin/debug/premake4 --scripts=$premakeDir/src"
 systemScript="--systemScript=$premakeDir/premake-system.lua"
 cd $premakeDir

@@ -164,6 +164,7 @@ local tmr1 = timer.start('bakeconfig1')
 		cfg.architecture = cfg.architecture or architecture
 		cfg.isUsage = prj.isUsage
 		cfg.platform = cfg.platform or ''		-- should supply '' as you could ask for %{cfg.platform} in a token
+		cfg.flags = cfg.flags or {}
 
 		-- add back any missing default values		
 		for name,field in pairs(premake.defaultfields) do
@@ -391,7 +392,7 @@ timer.stop(tmr3)
 		local result = {}
 
 		for cfg in project.eachconfig(prj) do
-			for _, link in ipairs(cfg.links) do
+			for _, link in ipairs(cfg.links or {}) do
 				local dep = premake.solution.findproject(cfg.solution, link)
 				if dep and not table.contains(result, dep) then
 					table.insert(result, dep)

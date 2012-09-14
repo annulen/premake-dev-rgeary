@@ -616,6 +616,8 @@ static void addinfo (lua_State *L, const char *msg) {
 
 
 void luaG_errormsg (lua_State *L) {
+  int verboseErrors;
+
   if (L->errfunc != 0) {  /* is there an error handling function? */
     StkId errfunc = restorestack(L, L->errfunc);
     if (!ttisfunction(errfunc)) luaD_throw(L, LUA_ERRERR);
@@ -627,7 +629,7 @@ void luaG_errormsg (lua_State *L) {
   else
   {
     lua_getglobal(L, "_VERBOSE_ERRORS");
-    int verboseErrors = lua_toboolean(L, -1);
+    verboseErrors = lua_toboolean(L, -1);
     lua_pop(L, 1);
     if( verboseErrors )
     {

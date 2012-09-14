@@ -112,7 +112,7 @@
 
 		-- assemble a search path, depending on the platform
 		if os.is("windows") then
-			formats = { "%s.exe", "%s.com", "%s" }
+			formats = { "%s.exe", "%s.com", "%.bat", "%.cmd", "%s" }
 		elseif os.is("haiku") then
 			formats = { "%s" }
 		else

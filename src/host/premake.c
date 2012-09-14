@@ -243,6 +243,7 @@ int process_option(lua_State* L, const char* arg, int singleHyphen)
 {
 	char key[512];
 	const char* value;
+	int verboseErrors;
 
 	/* If a value is specified, split the option into a key/value pair */
 	char* ptr = strchr(arg, '=');
@@ -277,7 +278,7 @@ int process_option(lua_State* L, const char* arg, int singleHyphen)
 	}
 
 	/* Set verbose debug error messages */
-	int verboseErrors = (strcmp(key, "debug") == 0);
+	verboseErrors = (strcmp(key, "debug") == 0);
 	if( verboseErrors ) {
 		lua_pushboolean(L, verboseErrors);
 		lua_setglobal(L, "_VERBOSE_ERRORS");

@@ -247,7 +247,7 @@
 			end
 		end	
 
-		for _, link in ipairs(cfg.links) do
+		for _, link in ipairs(cfg.links or {}) do
 			local item
 
 			-- is this a sibling project?

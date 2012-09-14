@@ -69,6 +69,7 @@ end
 			defines	{"_CRT_SECURE_NO_DEPRECATE" }
 
 		configuration "windows"
+			defines "_WIN32"
 			links { "ole32" }
 
 		configuration "linux"
