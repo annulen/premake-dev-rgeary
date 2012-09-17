@@ -1139,15 +1139,6 @@
 		expandtokens = true,
 	}
 
-	for i=1,1 do
-		api.register {
-			name = "dummy"..tostring(i),
-			scope = "config",
-			kind = "string-list",
-			expandtokens = true,
-		}
-	end
-
 	api.register {
 		name = "toolset",
 		scope = "config",
@@ -1750,3 +1741,47 @@
 		return premake.tools.newtoolset(t)
 	end
 		
+--
+-- Google protocol buffers
+--  Example usage in a project section : protobuf { cppRoot = "..", javaRoot = ".." }
+--
+	function api.protobuf(t)
+	
+		local protoPath = path.getabsolute( api.scope.solution.basedir )
+		
+		-- Some alternative quick inputs. eg. protobuf "*.protobuf" or protobuf "cpp"
+		if type(t) == 'string' then
+			if t:contains('proto') then 		t = { files = t }
+			elseif t:startswith("cpp") then 	t = { cppRoot = protoPath }
+			elseif t:startswith("java") then 	t = { javaRoot = protoPath }
+			elseif t:startswith("python") then 	t = { pythonRoot = protoPath }
+			else
+				error("unknown protobuf argument "..t)
+			end
+		end
+
+		local inputFilePattern = toList(t.files or '*.proto')
+		local prj = api.scope.project or {}
+		local prjName = iif( prj.name, prj.name..'/protobuf', 'protobuf')
+		local outputs = {}
+		
+		-- ** protoc's cpp/java/python_out is relative to the specified --proto_path **
+		  
+		outputs.protoPath = protoPath
+		if t.cppRoot then outputs.cppRoot = t.cppRoot end
+		if t.javaRoot then outputs.javaRoot = t.javaRoot end
+		if t.pythonRoot then outputs.pythonRoot = t.pythonRoot end
+		-- default to cpp output in the current directory
+		if (not outputs.cppRoot) and (not outputs.javaRoot) and (not outputs.pythonRoot) then
+			outputs.cppRoot = protoPath
+		end
+		
+		api.scopepush()
+		project(prjName)
+			toolset("protobuf")
+			kind("SourceGen")
+			files(inputFilePattern)
+			protobufout(outputs)
+		api.scopepop()
+		uses(prjName)
+	end

@@ -142,45 +142,9 @@ function tool:decorateInputs(cfg, outputVar, inputVar, previousResult)
 		end
 	end
 	
-	--[[rv.sysflags = self:decorateInput('sysflags', self:getsysflags(cfg), true)
-	
-	-- Some options should always be outputted
-	if self.isCompiler then
-		cfg.buildoptions = cfg.buildoptions or {}
-		
-		-- sort the flags, as premake may reorder them unnecessarily which causes unnecessary rebuilds
-		table.sort(cfg.buildoptions)
-		rv.buildoptions = self:decorateInput('buildoptions', cfg.buildoptions, true)
+	if self.getDescription then
+		rv.description = self:getDescription(cfg)
 	end
-	if self.isLinker then
-		rv.ldflags = self:decorateInput('ldflags', cfg.ldflags or {}, true)
-	end
-	
-	if self.toolName == 'cxx' then
-		cfg.cxxflags = cfg.cxxflags or {}
-		table.sort(cfg.cxxflags)
-		rv.cxxflags = self:decorateInput('cxxflags', cfg.cxxflags, true)
-	end
-	
-	local output = self:decorateInput('output', outputVar, true)
-	local input = self:decorateInput('input', inputVar, true)
-
-	local cfgflags = table.translateV2(cfg.flags, self.flagMap)
-	if #cfgflags > 0 then
-		rv.cfgflags = table.concat(cfgflags, ' ')
-	end
-	
-	table.insert(rv, output)
-	table.insert(rv, input)
-	
-	-- Special case for depfile output (a secondary output). Only output depfile cmd if we want it
-	if config.hasDependencyFileOutput(cfg) then
-		local depfileOutput = self:decorateInput('depfileOutput', outputVar)
-		if depfileOutput then
-			rv['depfileOutput'] = depfileOutput
-		end
-	end
-	]]
 	
 	timer.stop(tmr)
 	return rv

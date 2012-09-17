@@ -310,6 +310,10 @@ timer.stop(tmr)
 		end
 	end
 	
+	function ninja.escPath(value)
+		return value
+	end
+	
 	-- Get the syntax for accessing a variable, with correct escaping
 	 
 	function ninja.escVarName(varName)

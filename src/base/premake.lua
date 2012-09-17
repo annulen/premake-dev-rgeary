@@ -12,6 +12,7 @@
 	solution = api.solution
 	project = api.project
 	configuration = api.configuration
+	protobuf = api.protobuf
 
 --
 -- Define some commonly used symbols, for future-proofing.

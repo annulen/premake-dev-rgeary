@@ -161,7 +161,7 @@ timer.stop(tmr)
 	function path.stripextension(p)
 		local i = p:findlast(".", true)
 		if (i) then
-			return p:sub(1,i)
+			return p:sub(1,i-1)
 		else
 			return p
 		end

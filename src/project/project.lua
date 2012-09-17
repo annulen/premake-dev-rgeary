@@ -28,6 +28,10 @@
 		end
 		local tmr = timer.start('project.bake')
 		
+		
+		if prj.name == "gti_client/us_equities_fees" then
+			local x = 0
+		end		
 		-- bake the project's "root" configuration, which are all of the
 		-- values that aren't part of a more specific configuration
 		local result = oven.merge({}, sln)

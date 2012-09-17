@@ -220,7 +220,9 @@ function ninja.writeProjectTargets(prj, scope)
 		if not cfg.toolset then
 			error("Malformed project '"..prj.name.."', has no toolset specified for kind "..cfg.kind)
 		end
-		if not (cfg.toolset == 'command' or cfg.kind == 'SourceGen') then 
+		
+		local linkTool,linkOverrides = ninja.getLinkTool(cfg, scope)
+		if linkTool and cfg.kind ~= 'SourceGen' then 
 			if not cfg.buildtarget then
 				error("Malformed project '"..prj.name.."', toolset "..cfg.toolset.." requires buildtarget but none specified")
 			end
@@ -421,7 +423,17 @@ function ninja.writeProjectTargets(prj, scope)
 					_p('#++++++++++++++++++++++++++++++++')
 				end
 			
-				local linkTargetN = targetdirN..'/'..cfg.buildtarget.name
+				local linkTargetN
+				if linkTool.getOutputFiles then
+					-- Use this if your tool outputs multiple files
+					local outputFiles = linkTool:getOutputFiles(cfg, allLinkInputs)
+					outputFiles = ninja.escPath(outputFiles)
+					makeShorterBuildVars(scope, outputFiles, 1)
+					linkTargetN = table.concat(outputFiles, ' ')
+				else
+					linkTargetN = targetdirN..'/'..cfg.buildtarget.name
+				end
+				
 				local buildCmd = linkTool.ruleName ..' '..table.concat(allLinkInputs, ' ')
 				local buildStr = 'build '..linkTargetN..': '..buildCmd
 				
@@ -742,6 +754,13 @@ local tmr = timer.start('ninja.writeToolsets')
 				local varName = toolVars[v] or ninja.escVarName(toolName .. '_'..v)
 				table.insert( toolVars, varName )
 			end
+			
+			local description
+			if tool.getDescription then
+				description = ninja.escVarName(toolName..'_description')
+			else
+				description = tool.toolName.. ' $out'
+			end
 		    
 			_pt('rule ' .. toolName)
 				local cmdLine = tool:getCommandLine(toolBin, toolVars)
@@ -749,7 +768,7 @@ local tmr = timer.start('ninja.writeToolsets')
 				if depfileName then
 				_pt('  depfile=' .. depfileName )
 				end
-				_pt('  description=' ..tool.toolName.. ' $out')
+				_pt('  description=' ..description)
 			_pt('')
 		end
 	end

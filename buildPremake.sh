@@ -1,6 +1,6 @@
 #!/bin/bash
 
-$(which readlink 2> /dev/null)
+which readlink 2>&1 > /dev/null
 if [[ $? == 0 ]]; then
 	premakeDir=$(readlink -f $(dirname $0) )
 else
@@ -8,6 +8,7 @@ else
 fi
 premake="$premakeDir/bin/debug/premake4 --scripts=$premakeDir/src"
 systemScript="--systemScript=$premakeDir/premake-system.lua"
+hashFile=$premakeDir/hash.tmp
 cd $premakeDir
 
 forceBuild=0
@@ -59,11 +60,13 @@ fi
 	
 # Now rebuild to make sure it's the latest
 $premake --file=$premakeDir/premake4.lua embed nobuild "$@"
-$premake --file=$premakeDir/premake4.lua $systemScript --relativepaths ninja $debug $threads "$@"
 result=$?
+$premake --file=$premakeDir/premake4.lua $systemScript --relativepaths ninja $debug $threads "$@"
+result=$result || $?
 
 if [[ $result != 0 ]]; then
 	echo "Error : Failed to build Premake"
+	rm $hashFile 2> /dev/null
 fi
 
 if [[ $verbose ]]; then
