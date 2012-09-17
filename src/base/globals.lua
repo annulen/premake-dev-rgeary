@@ -138,7 +138,7 @@
 			
 		end
 		if not os.isfile(filename) then
-			error('Could not find file '..filename)
+			error('Could not find include "'..filename ..'" in file "'.._SCRIPT..'"')
 		end
 				
 		-- but only load each file once

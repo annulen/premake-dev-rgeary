@@ -64,6 +64,8 @@ static const luaL_Reg string_functions[] = {
 	{ NULL, NULL }
 };
 
+static int verboseErrors = 0;
+
 /**
  * Program entry point.
  */
@@ -227,6 +229,9 @@ int process_arguments(lua_State* L, int argc, const char** argv)
 		}
 	}
 
+	lua_pushboolean(L, verboseErrors);
+	lua_setglobal(L, "_VERBOSE_ERRORS");
+
 	/* push the Options and Args lists */
 	lua_setglobal(L, "_ARGS");
 	lua_setglobal(L, "_OPTIONS");
@@ -243,7 +248,6 @@ int process_option(lua_State* L, const char* arg, int singleHyphen)
 {
 	char key[512];
 	const char* value;
-	int verboseErrors;
 
 	/* If a value is specified, split the option into a key/value pair */
 	char* ptr = strchr(arg, '=');
@@ -278,9 +282,7 @@ int process_option(lua_State* L, const char* arg, int singleHyphen)
 	}
 
 	/* Set verbose debug error messages */
-	verboseErrors = (strcmp(key, "debug") == 0);
-	lua_pushboolean(L, verboseErrors);
-	lua_setglobal(L, "_VERBOSE_ERRORS");
+	verboseErrors |= (strcmp(key, "debug") == 0);
 
 	return OKAY;
 }
