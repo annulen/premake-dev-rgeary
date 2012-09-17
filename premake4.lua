@@ -60,7 +60,7 @@ end
 			targetdir   "bin/release"
 			objdir			"obj/release"
 			defines     "NDEBUG"
-			flags       { "OptimizeSpeed" }
+			flags       { "OptimizeSpeed", "Symbols" }
 
 		configuration "vs*"
 			defines     { "_CRT_SECURE_NO_WARNINGS" }

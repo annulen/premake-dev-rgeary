@@ -279,10 +279,8 @@ int process_option(lua_State* L, const char* arg, int singleHyphen)
 
 	/* Set verbose debug error messages */
 	verboseErrors = (strcmp(key, "debug") == 0);
-	if( verboseErrors ) {
-		lua_pushboolean(L, verboseErrors);
-		lua_setglobal(L, "_VERBOSE_ERRORS");
-	}
+	lua_pushboolean(L, verboseErrors);
+	lua_setglobal(L, "_VERBOSE_ERRORS");
 
 	return OKAY;
 }

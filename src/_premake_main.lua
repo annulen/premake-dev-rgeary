@@ -47,7 +47,7 @@
 	
 	local _HandlingError = 0
 	function _ErrorHandler ( errobj )
-		if( _HandlingError == 0 ) then
+		if( errobj and _HandlingError == 0 ) then
 		 	_HandlingError = 1
 		    local errStr = tostring(errobj) or "("..type(errobj)..")"
 		    if( type(errobj)=='table' ) then
