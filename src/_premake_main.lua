@@ -94,6 +94,11 @@
 			end
 		end
 		
+		-- Set reporoot
+		if _OPTIONS['reporoot'] then
+			_G.repoRoot = _OPTIONS.reporoot
+		end
+		
 		-- if running off the disk (in debug mode), load everything 
 		-- listed in _manifest.lua; the list divisions make sure
 		-- everything gets initialized in the proper order.

@@ -986,7 +986,7 @@
 		kind = "string-list",
 		expandtokens = true,
 	}
-	
+
 	-- Path to put the ninja build log
 	api.register {
 		name = "ninjaBuildDir",
@@ -1168,6 +1168,26 @@
 		namealiases = { "useconfig" },
 	}
 
+	-- Sets an prefix that is prepended to any "uses" statements which don't resolve without it
+	-- The prefix always ends with a /
+	-- eg. project "ModuleWithALongName/base" ... project "ModuleWithALongName/test"; namePrefix "ModuleWithALongName"; uses "base"; ... 	
+	api.register {
+		name = "usesPrefix",
+		scope = "project",
+		kind = "string",
+		allowed = function(value)
+			-- Always append / to the prefix
+			if type(value) ~= 'string' then
+				return nil, "Expected string"
+			end
+			if value:endswith('/') then
+				return value
+			else
+				return value..'/'
+			end
+		end,
+	}
+	
 	api.register {
 		name = "uuid",
 		scope = "project",

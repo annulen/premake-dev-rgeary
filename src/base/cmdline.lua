@@ -91,6 +91,12 @@
 	
 	newoption
 	{
+		trigger		= "reporoot",
+		description	= "Sets the root directory of the codebase (repository). Build files can base relative paths from reporoot", 
+	}
+	
+	newoption
+	{
 		trigger     = "systemScript",
 		description = "Run a system script before the build script. Default filename is premake-system.lua. Overridden by $PREMAKE_PATH.",
 	}
