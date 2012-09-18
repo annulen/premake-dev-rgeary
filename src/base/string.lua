@@ -52,16 +52,6 @@
 		end	
 	end
 
-
-
---
--- Returns true if `haystack` starts with the sequence `needle`.
---
-
-	function string.startswith(haystack, needle)
-		return (haystack:find(needle, 1, true) == 1)
-	end
-	
 --
 -- Returns true if the string has a match for the plain specified pattern
 --

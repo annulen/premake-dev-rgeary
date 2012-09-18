@@ -60,6 +60,7 @@ static const luaL_Reg os_functions[] = {
 };
 
 static const luaL_Reg string_functions[] = {
+	{ "startswith",  string_startswith },
 	{ "endswith",  string_endswith },
 	{ NULL, NULL }
 };
