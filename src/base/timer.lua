@@ -58,7 +58,7 @@ function enabled.stop(name_)
 	end 
 end
 
-function enabled.print()
+function enabled.print(tmr)
 	local totalTime = 0.0
 	local maxLen = Seq:new(enabled.totals):getKeys():max()
 	local sName = '%'..maxLen..'s'
@@ -68,13 +68,17 @@ function enabled.print()
 		totalTime = totalTime + selfTime
 	end	
 	for _,name in ipairs(enabled.order) do
-		local timeT = enabled.totals[name]
-		local selfTime = timeT[1]-timeT[2]
-		local selfPct = selfTime/totalTime * 100.0 
-		local totalPct = timeT[1]/totalTime * 100.0
-		printf(sName.." : %.4f (%2.f%%)   self %.4f (%2.f%%)  child %.4f   calls %d", name, timeT[1], totalPct, selfTime, selfPct, timeT[2], timeT[3])
+		if (not tmr) or tmr == name then
+			local timeT = enabled.totals[name]
+			local selfTime = timeT[1]-timeT[2]
+			local selfPct = selfTime/totalTime * 100.0 
+			local totalPct = timeT[1]/totalTime * 100.0
+			printf(sName.." : %.4f (%2.f%%)   self %.4f (%2.f%%)  child %.4f   calls %d", name, timeT[1], totalPct, selfTime, selfPct, timeT[2], timeT[3])
+		end
 	end
-	printf(sName.." : %.4f", 'Total', totalTime)
+	if not tmr then
+		printf(sName.." : %.4f", 'Total', totalTime)
+	end
 end
 
 function disabled.start(name) end
