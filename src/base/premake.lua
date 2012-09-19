@@ -8,11 +8,13 @@
 --  Define these as variables pointing to the functions to allow the user to override them (eg. to specify default behaviour)
 
 	local api = premake.api
-	global = api.global
-	solution = api.solution
-	project = api.project
-	configuration = api.configuration
-	protobuf = api.protobuf
+	global 			= api.global
+	solution 		= api.solution
+	project 		= api.project
+	usage 			= api.usage
+	configuration 	= api.configuration
+	protobuf 		= api.protobuf
+	export 			= api.export
 
 --
 -- Define some commonly used symbols, for future-proofing.

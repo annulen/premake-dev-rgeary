@@ -32,7 +32,7 @@
 				
 		-- Bake all real projects, but don't resolve usages		
 		local tmr = timer.start('Bake projects')
-		for i,prj in ipairs(globalContainer.allReal) do
+		for prjName,prj in pairs(globalContainer.allReal) do
 			project.bake(prj)
 		end
 		timer.stop(tmr)
@@ -43,12 +43,12 @@
 		
 		-- Apply the usage requirements now we have resolved the objdirs
 		--  This function may recurse
-		for _,prj in ipairs(globalContainer.allReal) do
+		for _,prj in pairs(globalContainer.allReal) do
 			globalContainer.applyUsageRequirements(prj)
 		end		
 				
 		-- expand all tokens (must come after baking objdirs)
-		for i,prj in ipairs(globalContainer.allReal) do
+		for i,prj in pairs(globalContainer.allReal) do
 			oven.expandtokens(prj, "project")
 			for cfg in project.eachconfig(prj) do
 				oven.expandtokens(cfg, "config")
@@ -74,7 +74,7 @@
 		end
 		keyedblocks.create(usageProj, parent)
 
-		local realProj = project.getRealProject(usageProj.name)
+		local realProj = project.getRealProject(usageProj.name, usageProj.namespace)
 		if realProj then
 		
 			-- Bake the real project (RP) first, and apply RP's usages to RP
@@ -156,13 +156,13 @@
 		for cfg in project.eachconfig(prj) do
 
 			for _,useProjName in ipairs(cfg.uses or {}) do
-				local useProj = project.getUsageProject( useProjName )
+				local useProj = project.getUsageProject( useProjName, prj.namespace )
 				local cfgFilterTerms = getValues(cfg.usesconfig)
 				
 				if not useProj then
 					-- can't find the project, perhaps we've specified configuration filters also
 					local parts = useProjName:split('.|')
-					useProj = project.getUsageProject( parts[1] )
+					useProj = project.getUsageProject( parts[1], prj.namespace )
 					if not useProj then
 						error("Could not find project/usage "..useProjName..' in project '..prj.name)
 					end
@@ -232,7 +232,7 @@
 		local counts = {}
 		local configs = {}
 		
-		for _,prj in ipairs(allProjects) do
+		for _,prj in pairs(allProjects) do
 			for cfg in project.eachconfig(prj) do
 				-- expand any tokens contained in the field
 				oven.expandtokens(cfg, "config", nil, "objdir")

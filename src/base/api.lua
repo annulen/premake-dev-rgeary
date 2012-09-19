@@ -392,7 +392,21 @@
 			-- expand to absolute later, as we don't know now if we have an absolute path or not 
 			target[name] = value
 		else
-			target[name] = path.getabsolute(value)
+			local filename = path.getabsolute(value)
+			local dir = path.getdirectory(value)
+			if not os.isfile(filename) then
+				if not os.isdir(dir) then
+					print("Warning : \""..dir.."\" is not a directory, can't find "..filename)
+				else
+					print("Warning : \""..filename.."\" is not a file")
+				
+					local allFiles = os.matchfiles(dir..'/*')
+					local spell = premake.spelling.new(allFiles)
+					local suggestions,str = spell:getSuggestions(value)
+					print(str)
+				end
+			end
+			target[name] = filename
 		end
 	end
 
@@ -1368,7 +1382,21 @@
 			if value:find("*") then
 				value = os.matchfiles(value)
 			end
-			return path.getabsolute(value)
+			local filename = path.getabsolute(value)
+			local dir = path.getdirectory(value)
+			if not os.isfile(filename) then
+				if not os.isdir(dir) then
+					print("Warning : \""..dir.."\" is not a directory, can't find "..filename)
+				else
+					print("Warning : \""..filename.."\" is not a file")
+				
+					local allFiles = os.matchfiles(dir..'/*')
+					local spell = premake.spelling.new(allFiles)
+					local suggestions,str = spell:getSuggestions(value)
+					print(str)
+				end
+			end
+			return file
 		end
 		return premake.setarray(obj, fieldname, value, set)
 	end
@@ -1591,7 +1619,7 @@
 		return cfg
 	end
 
-	function usage(name)
+	function api.usage(name)
 		if (not name) then
 			--Only return usage projects.
 			if(ptype(premake.CurrentContainer) ~= "project") then return nil end
@@ -1616,10 +1644,7 @@
 		end
 
   		-- if this is a new project, or the project in that slot doesn't have a usage, create it
-  		local prj = premake5.project.getUsageProject(name)
-  		if not prj then
-  			prj = premake5.project.createproject(name, sln, true)
-  		end
+		local prj = premake5.project.createproject(name, sln, true)
   		
   		-- Set the current container
   		premake.CurrentContainer = prj
@@ -1651,18 +1676,12 @@
   		end
 
   		-- if this is a new project, create it
-  		local prj = premake5.project.getRealProject(name)
-  		if not prj then
-  			prj = premake5.project.createproject(name, sln, false)
-  		end
+  		local prj = premake5.project.createproject(name, sln, false)
   		
   		-- Set the current container
   		premake.CurrentContainer = prj
 		api.scope.project = premake.CurrentContainer
 		  		
-  		-- Add it to the solution 
-		sln.projects[name] = prj
-		
 		-- add an empty, global configuration to the project
 		configuration { }
 	
@@ -1781,9 +1800,11 @@
 		end
 
 		local inputFilePattern = toList(t.files or '*.proto')
+		local outputs = {}
+
+		-- Create a new project, append /protobuf on to the active project name
 		local prj = api.scope.project or {}
 		local prjName = iif( prj.name, prj.name..'/protobuf', 'protobuf')
-		local outputs = {}
 		
 		-- ** protoc's cpp/java/python_out is relative to the specified --proto_path **
 		  
@@ -1804,4 +1825,18 @@
 			protobufout(outputs)
 		api.scopepop()
 		uses(prjName)
+	end
+
+	-- "export" explicitly lists which projects are included in a solution
+	function api.export(name)
+		local sln = api.scope.solution
+		if not sln then
+			error("Can't export, no active solution to export to")
+		end
+		if type(name) ~= 'string' then
+			error("export expected string parameter, found "..type(name))
+		end
+		
+		sln.exports = sln.exports or {}
+		sln.exports[name] = name
 	end

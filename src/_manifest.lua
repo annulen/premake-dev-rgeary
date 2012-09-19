@@ -32,6 +32,7 @@
 		"base/validate.lua",
 		"base/help.lua",
 		"base/premake.lua",
+		"base/spelling.lua",
 		
 		-- project APIs
 		"project/keyedblocks.lua",

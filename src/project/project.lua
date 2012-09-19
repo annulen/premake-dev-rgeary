@@ -285,13 +285,23 @@ timer.stop(tmr3)
 	end
 
 -- Get a real project
-	function project.getRealProject(name)
-		return globalContainer.allReal[name]
+	function project.getRealProject(name, namespaceHint)
+		local prj = globalContainer.allReal[name]
+		if not prj and namespaceHint then
+			-- Try prepending the namespace
+			prj = globalContainer.allReal[namespaceHint..name]
+		end
+		return prj
 	end
 
 -- Get a usage project
-	function project.getUsageProject(name)
-		return globalContainer.allUsage[name]
+	function project.getUsageProject(name, namespaceHint)
+		local prj = globalContainer.allUsage[name]
+		if not prj and namespaceHint then
+			-- Try prepending the namespace
+			prj = globalContainer.allUsage[namespaceHint..name]
+		end
+		return prj
 	end
 	
 -- Iterate over all real projects
@@ -303,29 +313,59 @@ timer.stop(tmr3)
 		end
 	end
 	
+	-- helper function
+	function project.getNameParts(name, namespaceHint)
+		local lastSlash = name:findlast("/",true) or 0
+		local namespace = name:sub(1,lastSlash)
+		if namespace == '' and namespaceHint then
+			namespace = namespaceHint .. '/'
+		end
+		local shortname = name:replace(namespace, '') 
+		return namespace,shortname	
+	end
+	
 -- Create a project
 	function project.createproject(name, sln, isUsage)
+	
+		-- Project full name is MySolution/MyProject, shortname is MyProject
+		local namespaceHint
+		if sln and ptype(sln) ~= "globalcontainer" then
+			namespaceHint = sln.name
+		end
+		local namespace,shortname = project.getNameParts(name, namespaceHint)
+		local fullname =  namespace .. shortname
+		
+		-- Now we have the fullname, check if this is already a project
+		if isUsage then
+			local existing = globalContainer.allUsage[fullname]
+			if existing then return existing end
+		else
+			local existing = globalContainer.allReal[fullname]
+			if existing then return existing end
+		end
+					
 		local prj = {}
 		
 		-- attach a type
 		ptypeSet(prj, 'project')
 		
-		-- add to master list keyed by both name and index
+		-- add to global list keyed by name
 		if isUsage then
-			table.insert(sln.projects, prj)
-			sln.projects[name] = prj
+			globalContainer.allUsage[fullname] = prj
+		else
+			globalContainer.allReal[fullname] = prj
 		end
 		
-		if isUsage then
-			table.insert( globalContainer.allUsage, prj )
-			globalContainer.allUsage[name] = prj
-		else
-			table.insert( globalContainer.allReal, prj )
-			globalContainer.allReal[name] = prj
+		-- add to solution list keyed by both name and index
+		if not sln.projects[shortname] then
+			table.insert(sln.projects, prj)
+			sln.projects[shortname] = prj
 		end
 		
 		prj.solution       = sln
-		prj.name           = name
+		prj.namespace      = namespace
+		prj.name           = fullname
+		prj.shortname      = shortname
 		prj.basedir        = os.getcwd()
 		prj.script         = _SCRIPT
 		prj.uuid           = os.uuid()
@@ -333,7 +373,7 @@ timer.stop(tmr3)
 		prj.isUsage		   = isUsage;
 		
 		-- Create a default usage project if there isn't one
-		if (not isUsage) and (not project.getUsageProject(prj.name)) then
+		if (not isUsage) and (not project.getUsageProject(prj.name, namespace)) then
 			project.createproject(name, sln, true)
 		end
 		

@@ -61,6 +61,8 @@ function keyedblocks.create(obj, parent)
 		return obj
 	end
 	
+	local namespace = obj.namespace or ''
+	
 timer.start('keyedblocks.create')
 	for _,block in ipairs(obj.blocks or {}) do
 		local terms = block.keywords
@@ -100,14 +102,19 @@ timer.start('keyedblocks.create')
 					end
 					local fieldKind = field.kind
 					
-					-- Recurse on nested 'uses' statements
+					-- Delay processing 'uses' statements until later
 					if k == 'uses' then
 						kb.__uses = kb.__uses or {}
 						
 						for _,useProjName in ipairs(v) do
-							local usageProj = keyedblocks.getUsage(useProjName)
+							local usageProj, suggestions = keyedblocks.getUsage(useProjName, namespace)
 							if not usageProj then
-								error('Could not find usage '..tostring(useProjName)..' in project '..tostring(obj.name))
+								local errMsg = '\nCould not find usage "'..tostring(useProjName)..'" ' ..
+								 "for project "..tostring(obj.name) ..' at ' .. tostring(obj.basedir)
+								if suggestions then
+									errMsg = errMsg .. '"\n' .. suggestions
+								end								
+								error(errMsg)
 							end
 							kb.__uses[useProjName] = usageProj
 						end
@@ -145,14 +152,45 @@ timer.stop(tmr)
 	return obj
 end
 
-function keyedblocks.getUsage(name)
-	local usage = project.getUsageProject(name)
+function keyedblocks.getUsage(name, namespaceHint)
+	local suggestionStr
+	local usage = project.getUsageProject(name, namespaceHint)
 	if not usage then
-		if name:startswith('__solution_') then
-			usage = solution.get(name:sub(12))
+		-- check if it's a solution usage
+		usage = project.getUsageProject(name..'/'..name)
+	end
+	
+	if not usage then
+		-- Find hints
+		local namespace,shortname = project.getNameParts(name, namespaceHint)
+		local fullname = namespace .. shortname
+		
+		-- Check for wrong namespace
+		local suggestions = {}
+		for prjName,prj in pairs(globalContainer.allUsage) do
+			if prj.shortname == shortname then
+				table.insert(suggestions, prj.name)
+			end			 
+		end
+		
+		if #suggestions == 0 then
+			-- check for misspellings
+			local allUsageNames = getKeys(globalContainer.allUsage)
+			local spell = premake.spelling.new(allUsageNames)
+			
+			suggestions = spell:getSuggestions(fullname)
+		end
+		
+		if #suggestions > 0 then
+			suggestionStr = Seq:new(suggestions):take(20):mkstring(',')
+			if #suggestions > 20 then 
+				suggestionStr = suggestionStr .. '...'
+			end 
+			suggestionStr = ' Did you mean ' .. suggestionStr .. '?'
 		end
 	end
-	return usage
+	
+	return usage, suggestionStr
 end
 
 function keyedblocks.bake(usage)
