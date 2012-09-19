@@ -98,6 +98,20 @@ function Seq.isSeq(s)
 	return s and mt and mt.__seq
 end
 
+function Seq.range(from, to)
+	local s = Seq:new(nil)
+	s.iterate = function()
+		local i = from
+		return function()
+			i = i + 1
+			if i < to then return i,i
+			else return nil
+			end
+		end
+	end
+	return s
+end
+
 function Seq:each()
 	return self.iterate()
 end
@@ -496,6 +510,9 @@ function Seq:flatten()
 	end
 	return s
 end
+
+-- alias
+	Seq.selectMany = Seq.flatten
 
 --
 -- Return sequence of unique values
