@@ -61,7 +61,7 @@ function keyedblocks.create(obj, parent)
 		return obj
 	end
 	
-	local namespace = obj.namespace or ''
+	local namespaces = obj.namespaces
 	
 timer.start('keyedblocks.create')
 	for _,block in ipairs(obj.blocks or {}) do
@@ -107,7 +107,7 @@ timer.start('keyedblocks.create')
 						kb.__uses = kb.__uses or {}
 						
 						for _,useProjName in ipairs(v) do
-							local usageProj, suggestions = keyedblocks.getUsage(useProjName, namespace)
+							local usageProj, suggestions = keyedblocks.getUsage(useProjName, namespaces)
 							if not usageProj then
 								local errMsg = '\nCould not find usage "'..tostring(useProjName)..'" ' ..
 								 "for project "..tostring(obj.name) ..' at ' .. tostring(obj.basedir)
@@ -152,9 +152,9 @@ timer.stop(tmr)
 	return obj
 end
 
-function keyedblocks.getUsage(name, namespaceHint)
+function keyedblocks.getUsage(name, namespaces)
 	local suggestionStr
-	local usage = project.getUsageProject(name, namespaceHint)
+	local usage = project.getUsageProject(name, namespaces)
 	if not usage then
 		-- check if it's a solution usage
 		usage = project.getUsageProject(name..'/'..name)
@@ -162,8 +162,7 @@ function keyedblocks.getUsage(name, namespaceHint)
 	
 	if not usage then
 		-- Find hints
-		local namespace,shortname = project.getNameParts(name, namespaceHint)
-		local fullname = namespace .. shortname
+		local namespaces,shortname,fullname = project.getNameParts(name, namespaces)
 		
 		-- Check for wrong namespace
 		local suggestions = {}
@@ -172,7 +171,7 @@ function keyedblocks.getUsage(name, namespaceHint)
 				table.insert(suggestions, prj.name)
 			end			 
 		end
-		
+		local usage = project.getUsageProject(name, namespaces)
 		if #suggestions == 0 then
 			-- check for misspellings
 			local allUsageNames = getKeys(globalContainer.allUsage)
@@ -182,7 +181,7 @@ function keyedblocks.getUsage(name, namespaceHint)
 		end
 		
 		if #suggestions > 0 then
-			suggestionStr = Seq:new(suggestions):take(20):mkstring(',')
+			suggestionStr = Seq:new(suggestions):take(20):mkstring(', ')
 			if #suggestions > 20 then 
 				suggestionStr = suggestionStr .. '...'
 			end 

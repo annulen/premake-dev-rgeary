@@ -177,6 +177,18 @@
 		end
 	end
 
+--
+-- Returns the size of the table including keyed values
+--
+	function table.size(t)
+		if t and type(t) == 'table' then
+			local i = 0
+			for k,v in pairs(t) do
+				i = i + 1
+			end
+			return i
+		end
+	end
 
 --
 -- Adds the values from one array to the end of another and

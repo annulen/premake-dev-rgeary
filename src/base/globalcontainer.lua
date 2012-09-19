@@ -156,13 +156,13 @@
 		for cfg in project.eachconfig(prj) do
 
 			for _,useProjName in ipairs(cfg.uses or {}) do
-				local useProj = project.getUsageProject( useProjName, prj.namespace )
+				local useProj = project.getUsageProject( useProjName, prj.namespaces )
 				local cfgFilterTerms = getValues(cfg.usesconfig)
 				
 				if not useProj then
 					-- can't find the project, perhaps we've specified configuration filters also
 					local parts = useProjName:split('.|')
-					useProj = project.getUsageProject( parts[1], prj.namespace )
+					useProj = project.getUsageProject( parts[1], prj.namespaces )
 					if not useProj then
 						error("Could not find project/usage "..useProjName..' in project '..prj.name)
 					end

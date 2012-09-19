@@ -28,10 +28,6 @@
 		end
 		local tmr = timer.start('project.bake')
 		
-		
-		if prj.name == "gti_client/us_equities_fees" then
-			local x = 0
-		end		
 		-- bake the project's "root" configuration, which are all of the
 		-- values that aren't part of a more specific configuration
 		local result = oven.merge({}, sln)
@@ -284,25 +280,37 @@ timer.stop(tmr3)
 		return project.allReal[name] or project.allUsage[name]
 	end
 
--- Get a real project
-	function project.getRealProject(name, namespaceHint)
-		local prj = globalContainer.allReal[name]
-		if not prj and namespaceHint then
-			-- Try prepending the namespace
-			prj = globalContainer.allReal[namespaceHint..name]
+	local function getProject(allProjects, name, namespaces)
+		local prj = allProjects[name]
+		
+		if not prj and namespaces then
+			local possibles = {}
+			for _,namespace in ipairs(namespaces) do
+				-- Try prepending the namespace
+				prj = allProjects[namespace..name]
+				if prj then possibles[prj.fullname] = prj end
+			end
+			if table.size(possibles) > 1 then
+				error("Ambiguous project name \""..name.."\", do you mean "..table.concat(getKeys(possibles), ', ')..'?')
+			else
+				local k,v = next(possibles)
+				prj = v
+			end
+			
 		end
 		return prj
 	end
 
--- Get a usage project
-	function project.getUsageProject(name, namespaceHint)
-		local prj = globalContainer.allUsage[name]
-		if not prj and namespaceHint then
-			-- Try prepending the namespace
-			prj = globalContainer.allUsage[namespaceHint..name]
-		end
-		return prj
+-- Get a real project. Namespaces is an optional list of prefixes to try to prepend to "name"
+	function project.getRealProject(name, namespaces)
+		return getProject(globalContainer.allReal, name, namespaces)
 	end
+	
+-- Get a usage project. Namespaces is an optional list of prefixes to try to prepend to "name"
+	function project.getUsageProject(name, namespaces)
+		return getProject(globalContainer.allUsage, name, namespaces)
+	end
+
 	
 -- Iterate over all real projects
 	function project.eachproject()
@@ -314,26 +322,32 @@ timer.stop(tmr3)
 	end
 	
 	-- helper function
-	function project.getNameParts(name, namespaceHint)
-		local lastSlash = name:findlast("/",true) or 0
-		local namespace = name:sub(1,lastSlash)
-		if namespace == '' and namespaceHint then
-			namespace = namespaceHint .. '/'
+	function project.getNameParts(name, defaultNamespaces)
+		local namespaces = {}
+		if defaultNamespaces and defaultNamespaces ~= '' then
+			table.insertflat(namespaces, defaultNamespaces)
 		end
-		local shortname = name:replace(namespace, '') 
-		return namespace,shortname	
+		local prevNS = ''
+		for n in name:gmatch("[^/]+/") do
+			n = prevNS .. n
+			table.insert(namespaces, n)
+			prevNS = n
+		end
+		local namespace = namespaces[#namespaces] or '' 
+		local shortname = name:replace(namespace, '')
+		local fullname = namespace .. shortname 
+		return namespaces,shortname,fullname
 	end
 	
 -- Create a project
 	function project.createproject(name, sln, isUsage)
 	
 		-- Project full name is MySolution/MyProject, shortname is MyProject
-		local namespaceHint
+		local defaultNamespace
 		if sln and ptype(sln) ~= "globalcontainer" then
-			namespaceHint = sln.name
+			defaultNamespace = sln.name..'/' 
 		end
-		local namespace,shortname = project.getNameParts(name, namespaceHint)
-		local fullname =  namespace .. shortname
+		local namespaces,shortname,fullname = project.getNameParts(name, defaultNamespace)
 		
 		-- Now we have the fullname, check if this is already a project
 		if isUsage then
@@ -363,8 +377,9 @@ timer.stop(tmr3)
 		end
 		
 		prj.solution       = sln
-		prj.namespace      = namespace
+		prj.namespaces     = namespaces
 		prj.name           = fullname
+		prj.fullname       = fullname
 		prj.shortname      = shortname
 		prj.basedir        = os.getcwd()
 		prj.script         = _SCRIPT
@@ -373,7 +388,7 @@ timer.stop(tmr3)
 		prj.isUsage		   = isUsage;
 		
 		-- Create a default usage project if there isn't one
-		if (not isUsage) and (not project.getUsageProject(prj.name, namespace)) then
+		if (not isUsage) and (not project.getUsageProject(prj.name, namespaces)) then
 			project.createproject(name, sln, true)
 		end
 		

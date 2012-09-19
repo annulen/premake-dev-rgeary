@@ -119,7 +119,7 @@
 		
 		local suggestionStr = ''
 		if #candidates > 0 then
-			suggestionStr = Seq:new(candidates):take(20):mkstring(',')
+			suggestionStr = Seq:new(candidates):take(20):mkstring(', ')
 			if #candidates > 20 then 
 				suggestionStr = suggestionStr .. '...'
 			end 
