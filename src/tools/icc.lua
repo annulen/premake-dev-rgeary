@@ -111,7 +111,7 @@ local icc_asm = newtool {
 local icc_ar = newtool {
 	toolName = 'ar',
 	binaryName = 'xiar',
-	fixedFlags = 'rc',
+	fixedFlags = 'rsc',
 	extensionsForLinking = { '.o', '.a', '.so' },		-- possible inputs in to the linker
 	
 	redirectStderr = true,
