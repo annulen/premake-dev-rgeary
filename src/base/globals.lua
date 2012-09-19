@@ -83,7 +83,7 @@
 		os.chdir(newcwd)
 		
 		if enableSpellCheck then
-			premake.spellCheckEnable(_G)
+			premake.spellCheckEnable(_G, "_G")
 		end
 		
 		-- run the chunk. How can I catch variable return values?

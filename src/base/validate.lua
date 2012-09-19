@@ -90,10 +90,10 @@
 		return true
 	end
 
-	function premake.spellCheckEnable(envTable)
+	function premake.spellCheckEnable(envTable, envTableName)
 		local mt = getmetatable(envTable) or {}
 		mt.__index = function(self, key)	
-			return premake.doSpellCheck(key, self)
+			return premake.doSpellCheck(key, self, envTableName)
 		end
 		mt.__newindex = function(self, key, value)
 			rawset(self, key, value)
@@ -109,7 +109,7 @@
 	end
 	
 	premake.apiKeywords = toSet({ '_ACTION', '_ARGS', '_OPTIONS', 'repoRoot' })
-	function premake.doSpellCheck(key, validValues)
+	function premake.doSpellCheck(key, validValues, tableName)
 		local rv = rawget(validValues, key) 
 		if rv then
 			return rv
@@ -118,6 +118,6 @@
 		else
 			local di = debug.getinfo(3, "S")
 			local fileLine = di.source:sub(2) .. ':' .. di.linedefined
-			error("Value not defined : "..key.." at "..fileLine, 2)
+			error("Value not defined : "..tableName..'.'..key.." at "..fileLine, 2)
 		end
 	end
