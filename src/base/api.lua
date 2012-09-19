@@ -199,7 +199,20 @@
 		local target = api.gettarget(field.scope)
 		
 		-- fields with this property will allow users to customise using "configuration <value>"
-		if field.isConfigurationFilter then
+		if field.isConfigurationKeyword then
+			if type(value) == 'table' then
+				-- if you have a keyed table, convert it in to a list of literal strings "key=value"
+				local svalue = {}
+				for k,v in pairs(value) do
+					if type(k) == 'number' then
+						table.insert(svalue, tostring(v))
+					else
+						table.insert(svalue, tostring(k)..'='..tostring(v))
+					end
+				end
+				value = svalue
+			end
+			
 			api.callback(premake.fields['usesconfig'], value)
 		end
 		
