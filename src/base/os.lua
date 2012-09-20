@@ -218,14 +218,13 @@
 		if mask:startswith("./") then
 			mask = mask:sub(3)
 		end
+		
+		-- if mask has double // from concatenating a dir with a trailing slash, remove it
+		mask = mask:replace('//','/')
 
 		-- strip off any leading directory information to find out
 		-- where the search should take place
-		local basedir = mask
-		local starpos = mask:find("%*")
-		if starpos then
-			basedir = basedir:sub(1, starpos - 1)
-		end
+		local basedir = mask:replace("**","*")
 		basedir = path.getdirectory(basedir)
 		if (basedir == ".") then basedir = "" end
 
@@ -236,6 +235,18 @@
 		mask = path.wildcards(mask)
 
 		local function matchwalker(basedir)
+			if basedir:endswith("*") then
+				local wildcard = basedir
+				m = os.matchstart(wildcard)
+				while (os.matchnext(m)) do
+					if not os.matchisfile(m) then
+						local dirname = os.matchname(m)
+						matchwalker(path.join(basedir:sub(1,#basedir-1), dirname))
+					end
+				end
+				os.matchdone(m)
+				return
+			end
 			local wildcard = path.join(basedir, "*")
 
 			-- retrieve files from OS and test against mask
