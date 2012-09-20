@@ -71,7 +71,7 @@
 		if #searchStr == 0 then
 			return str
 		end
-		while( i < #str ) do
+		while( i <= #str ) do
 			local findIdx = string.find(str, searchStr, i, true)
 			if findIdx then
 				str = str:sub(1,findIdx-1) .. replaceStr .. str:sub(findIdx + #searchStr)
