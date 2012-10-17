@@ -12,7 +12,7 @@ hashFile=$premakeDir/hash.tmp
 cd $premakeDir
 
 forceBuild=0
-threads=""
+threads="-j16"
 verbose=
 debug=""
 
@@ -61,8 +61,10 @@ fi
 # Now rebuild to make sure it's the latest
 $premake --file=$premakeDir/premake4.lua embed nobuild --quiet --reporoot=$premakeDir "$@"
 result=$?
-$premake --file=$premakeDir/premake4.lua $systemScript --reporoot=$premakeDir --relativepaths ninja $debug $threads "$@"
-result=$(( $result || $? ))
+if [[ $result == 0 ]]; then
+	$premake --file=$premakeDir/premake4.lua $systemScript --reporoot=$premakeDir ninja $debug $threads "$@"
+	result=$?
+fi
 
 if [[ $result != 0 ]]; then
 	echo "Error : Failed to build Premake"

@@ -66,6 +66,10 @@
 	
 	function spelling:edits2(word)
 		local e1 = self:edits1(word)
+		if #word > 25 then
+			-- too slow
+			return e1
+		end
 		local set = {}
 		for w,_ in pairs(e1) do
 			if #w < self.dictionaryMaxLen then 

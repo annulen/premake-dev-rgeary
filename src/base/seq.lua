@@ -89,6 +89,22 @@ function Seq.toSeq(s, optValue)
 	end
 end
 
+function Seq:gmatch(text, pattern)
+	local s = Seq:new(nil)
+	s.iterate = function()
+		local iter = text:gmatch(pattern)
+		local i = 0
+		return function()
+			i = i + 1
+			local v = iter()
+			if v then return i, v
+			else return nil
+			end
+		end
+	end
+	return s
+end
+
 function Seq:tostring()
 	return 'Seq' .. self.uid
 end
@@ -334,10 +350,30 @@ function Seq:getKeys()
 	s.iterate = function()
 		-- setup
 		local iter = self.iterate()
+		local i = 0
 		-- moveNext
 		return function()
 			for k,_ in iter do
-				return k, k
+				i = i + 1
+				return i, k
+			end
+		end
+	end
+	return s
+end
+
+--
+-- Iterate over the values in a sequence
+--
+function Seq:getValues()
+	local s = Seq:new(self)
+	s.iterate = function()
+		-- setup
+		local iter = self.iterate()
+		-- moveNext
+		return function()
+			for _,v in iter do
+				return v, v
 			end
 		end
 	end
@@ -467,7 +503,7 @@ function Seq:flatten()
 		local i = 0
 		-- moveNext
 		return function()
-			k,v = iter()
+			local k,v = iter()
 			local loop = true
 			while loop do
 				loop = false
@@ -531,6 +567,26 @@ function Seq:unique()
 	return s
 end
 
+-- Reverse a sequence
+function Seq:reverse()
+	local s = Seq:new(self)
+	s.iterate = function()
+		local t = {}
+		for k,v in self.iterate() do
+			table.insert(t, { key=k, value=v })
+		end
+		local i = #t + 1
+		return function()
+			i = i - 1
+			if i > 0 then
+				return t[i].key, t[i].value
+			end
+			return nil
+		end
+	end
+	return s
+end
+
 --
 -- Return the number of elements in the sequence
 --
@@ -544,6 +600,15 @@ function Seq:count()
 	end
 	self.__count = c
 	return c	
+end
+
+function Seq:isempty()
+	local iter = self.iterate()
+	if not iter() then
+		return true
+	else
+		return false
+	end 
 end
 
 --

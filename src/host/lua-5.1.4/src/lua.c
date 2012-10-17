@@ -18,11 +18,9 @@
 #include "lualib.h"
 
 
-
 static lua_State *globalL = NULL;
 
 static const char *progname = LUA_PROGNAME;
-
 
 
 static void lstop (lua_State *L, lua_Debug *ar) {
@@ -212,30 +210,6 @@ static int loadline (lua_State *L) {
   return status;
 }
 
-
-static void dotty (lua_State *L) {
-  int status;
-  const char *oldprogname = progname;
-  progname = NULL;
-  while ((status = loadline(L)) != -1) {
-    if (status == 0) status = docall(L, 0, 0);
-    report(L, status);
-    if (status == 0 && lua_gettop(L) > 0) {  /* any result to print? */
-      lua_getglobal(L, "print");
-      lua_insert(L, 1);
-      if (lua_pcall(L, lua_gettop(L)-1, 0, 0) != 0)
-        l_message(progname, lua_pushfstring(L,
-                               "error calling " LUA_QL("print") " (%s)",
-                               lua_tostring(L, -1)));
-    }
-  }
-  lua_settop(L, 0);  /* clear stack */
-  fputs("\n", stdout);
-  fflush(stdout);
-  progname = oldprogname;
-}
-
-
 static int handle_script (lua_State *L, char **argv, int n) {
   int status;
   const char *fname;
@@ -362,17 +336,18 @@ static int pmain (lua_State *L) {
     s->status = handle_script(L, argv, script);
   if (s->status != 0) return 0;
   if (has_i)
-    dotty(L);
+    lua_dotty(L);
   else if (script == 0 && !has_e && !has_v) {
     if (lua_stdin_is_tty()) {
       print_version();
-      dotty(L);
+      lua_dotty(L);
     }
     else dofile(L, NULL);  /* executes stdin as a file */
   }
   return 0;
 }
 
+#ifdef LUA_C_MAIN
 
 int main (int argc, char **argv) {
   int status;
@@ -388,5 +363,29 @@ int main (int argc, char **argv) {
   report(L, status);
   lua_close(L);
   return (status || s.status) ? EXIT_FAILURE : EXIT_SUCCESS;
+}
+#endif // LUA_C_MAIN
+
+LUA_API lua_dotty (lua_State *L) {
+  int status;
+  const char *oldprogname = progname;
+  progname = NULL;
+  while ((status = loadline(L)) != -1) {
+    if (status == 0) status = docall(L, 0, 0);
+    report(L, status);
+    if (status == 0 && lua_gettop(L) > 0) {  /* any result to print? */
+      lua_getglobal(L, "print");
+      lua_insert(L, 1);
+      if (lua_pcall(L, lua_gettop(L)-1, 0, 0) != 0)
+        l_message(progname, lua_pushfstring(L,
+                               "error calling " LUA_QL("print") " (%s)",
+                               lua_tostring(L, -1)));
+    }
+  }
+  lua_settop(L, 0);  /* clear stack */
+  fputs("\n", stdout);
+  fflush(stdout);
+  progname = oldprogname;
+  return 0;
 }
 

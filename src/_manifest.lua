@@ -100,4 +100,9 @@
 		-- Ninja build action
 		"actions/ninja/_ninja.lua",
 		"actions/ninja/ninja_solution.lua",
+		
+		-- Convert bjam scripts to premake
+		"actions/bjam/readbjam.lua",
+		"actions/bjam/convertbjam.lua",
+		"actions/bjam/bjamtest.lua",
 	}

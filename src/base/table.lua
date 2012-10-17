@@ -107,6 +107,22 @@
 		return result
 	end
 
+--
+-- Returns true if two tables contain the same elements (first level compare)
+--
+	function table.equals(t1, t2)
+		for k,v in pairs(t1) do
+			local v2 = t2[k] 
+			if v2 ~= v then
+				if type(v) == 'table' and type(v2) == 'table' then
+					return table.equals(v, v2)
+				else
+					return false
+				end
+			end
+		end
+		return true
+	end
 
 --
 -- Merge two lists into an array of objects, containing pairs

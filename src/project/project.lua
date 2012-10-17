@@ -85,82 +85,26 @@ local tmr1 = timer.start('bakeconfig1')
 			system = premake.api.checkvalue(platform, premake.fields.system.allowed)
 			architecture = premake.api.checkvalue(platform, premake.fields.architecture.allowed)
 		end
+		if architecture == nil and os.is64bit() then
+			architecture = 'x86_64'
+		end
 
 		-- figure out the target operating environment for this configuration
 		local filter, cfg
 		
-		if true then
-			system = system or premake.action.current().os or os.get()
-			filter = { buildcfg, _ACTION, system }
-			if platform then table.insert(filter, platform) end
-			cfg = keyedblocks.getfield(prj, filter)
-			cfg.filter = filter
-			system = cfg.system or system
-			if architecture == nil and os.is64bit() then
-				architecture = 'x86_64'
-			end
-		
-		elseif true then
-			filter = { buildcfg, _ACTION }
-			if platform then table.insert(filter, platform) end
-
-			system = keyedblocks.getfield(prj, filter, 'system' )
-			system = system or premake.action.current().os or os.get()
-			table.insert(filter, system)
-			if architecture == nil and os.is64bit() then
-				architecture = 'x86_64'
-			end
-			if architecture then
-				table.insert(filter, architecture)
-			end
-			local cfgKind = keyedblocks.getfield(prj, filter, "kind")
-
-			-- Look to see what kind of project this is, and use that to filter for further configurations
-			if cfgKind then
-				table.insert(filter, cfgKind)
-			end
-
-			-- Find any other configs we should be using
-			local usesconfigs = keyedblocks.getfield(prj, filter, "usesconfig")
-			if usesconfigs then
-				for _,v in ipairs(usesconfigs) do
-					table.insert(filter, v)
-				end
-			end
-
-			cfg = oven.bake(prj, prj.solution, filter)
-		
-		else
-			filter = {
-				["buildcfg"] = buildcfg,
-				["action"] = _ACTION
-			}
-			if platform then table.insert(filter, platform) end
-			
-			-- look to see if this configuration specifies a target system and, if so,
-			-- use that to further filter the results
-			cfg = oven.bake(prj, prj.solution, filter, "system")
-			system = cfg.system or system or premake.action.current().os or os.get()
-			system = system or cfg.system
-			if architecture == nil and os.is64bit() then
-				architecture = 'x86_64'
-			end
-			filter.system = system
-			filter.architecture = architecture
-			-- Look to see what kind of project this is, and use that to filter for further configurations
-			local cfgKind = oven.bake(prj, prj.solution, filter, "kind")
-			filter.kind = cfgKind.kind
-			
-			cfg = oven.bake(prj, prj.solution, filter)
-		end
-		
+		system = system or premake.action.current().os or os.get()
+		filter = { buildcfg, _ACTION, system, architecture }
+		if platform then table.insert(filter, platform) end
+		cfg = keyedblocks.getfield(prj, filter)
+		cfg.system = cfg.system or system
+	
 		--local cfgold = oven.bake(prj, prj.solution, filter); cfg = cfgold
 		cfg.buildcfg = buildcfg
 		cfg.platform = platform
 		cfg.action = _ACTION
 		cfg.solution = prj.solution
 		cfg.project = prj
-		cfg.system = cfg.system or system
+		cfg.system = cfg.system
 		cfg.architecture = cfg.architecture or architecture
 		cfg.isUsage = prj.isUsage
 		cfg.platform = cfg.platform or ''		-- should supply '' as you could ask for %{cfg.platform} in a token
@@ -180,6 +124,31 @@ local tmr1 = timer.start('bakeconfig1')
 		cfg.usesconfig.kind = cfg.kind
 		cfg.usesconfig.toolset = cfg.toolset
 		
+		-- Move any links in to linkAsStatic or linkAsShared
+		if cfg.links then
+			for _,linkName in ipairs(cfg.links) do
+				local linkPrj = project.getRealProject(linkName)
+				local linkKind 
+				
+				if linkPrj then 
+					linkKind = linkPrj.kind
+				else 
+					-- must be a system lib
+					linkKind = cfg.kind
+				end
+				
+				if linkKind == premake.STATICLIB then
+					oven.mergefield(cfg, 'linkAsStatic', linkName)
+				else
+					oven.mergefield(cfg, 'linkAsShared', linkName)
+				end
+			end
+			cfg.links = nil
+		end
+		
+		-- Remove any libraries in linkAsStatic that have also been defined in linkAsShared
+		oven.removefromfield(cfg.linkAsStatic, cfg.linkAsShared) 
+					
 		ptypeSet( cfg, 'configprj' )
 timer.stop(tmr1)
 local tmr3 = timer.start('bakeconfig3')
@@ -249,7 +218,8 @@ timer.stop(tmr3)
 		-- to make testing a little easier, allow this function to
 		-- accept an unbaked project, and fix it on the fly
 		if not prj.isbaked then
-			prj = project.bake(prj)
+			error("Project not baked")
+			--prj = project.bake(prj)
 		end
 
 		local configs = prj.cfglist
@@ -276,18 +246,39 @@ timer.stop(tmr3)
 --    The corresponding project, or nil if no matching project could be found.
 --
 
-	function project.findproject(name)
-		return project.allReal[name] or project.allUsage[name]
-	end
-
 	local function getProject(allProjects, name, namespaces)
 		local prj = allProjects[name]
+
+		-- check aliases		
+		if not prj then
+			local tryName = name
+			local i = 0
+			while globalContainer.aliases[tryName] do
+				tryName = globalContainer.aliases[tryName]
+				i = i + 1
+				if i > 100 then
+					error("Recursive project alias : "..tryName)
+				end
+			end
 		
+			prj = allProjects[tryName]
+		end
+	
+		-- check supplied implicit namespaces
 		if not prj and namespaces then
 			local possibles = {}
 			for _,namespace in ipairs(namespaces) do
 				-- Try prepending the namespace
-				prj = allProjects[namespace..name]
+				local tryName = namespace..name
+				local i = 0
+				while globalContainer.aliases[tryName] do
+					tryName = globalContainer.aliases[tryName]
+					i = i + 1
+					if i > 100 then
+						error("Recursive project alias : "..tryName)
+					end
+				end
+				prj = allProjects[tryName]
 				if prj then possibles[prj.fullname] = prj end
 			end
 			if table.size(possibles) > 1 then
@@ -298,6 +289,7 @@ timer.stop(tmr3)
 			end
 			
 		end
+				
 		return prj
 	end
 
@@ -322,33 +314,50 @@ timer.stop(tmr3)
 	end
 	
 	-- helper function
-	function project.getNameParts(name, defaultNamespaces)
+	function project.getNameParts(name, prefix)
 		local namespaces = {}
-		if defaultNamespaces and defaultNamespaces ~= '' then
-			table.insertflat(namespaces, defaultNamespaces)
-		end
+		
+		if prefix then
+			if type(prefix) == 'table' then
+				for _,p in ipairs(prefix) do
+					table.insert(namespaces, p)
+				end
+				prefix = namespaces[#namespaces]
+			end
+			
+			if not prefix:endswith('/') then
+				error("projectprefix must end with /")
+			end 
+			
+			-- special case, avoids a/b/b when you mean just a/b
+			if name:startswith(prefix) then
+				prefix = nil
+			else
+				name = prefix .. name
+			end
+		end		
+		
+		-- get the namespace from the name if it contains one
 		local prevNS = ''
 		for n in name:gmatch("[^/]+/") do
 			n = prevNS .. n
 			table.insert(namespaces, n)
 			prevNS = n
 		end
-		local namespace = namespaces[#namespaces] or '' 
-		local shortname = name:replace(namespace, '')
-		local fullname = namespace .. shortname 
+		local fullNamespace = namespaces[#namespaces] or '' 
+		
+		local shortname = name:replace(fullNamespace, '')
+		local fullname = fullNamespace .. shortname
 		return namespaces,shortname,fullname
 	end
-	
+		
 -- Create a project
 	function project.createproject(name, sln, isUsage)
 	
 		-- Project full name is MySolution/MyProject, shortname is MyProject
-		local defaultNamespace
-		if sln and ptype(sln) ~= "globalcontainer" then
-			defaultNamespace = sln.name..'/' 
-		end
-		local namespaces,shortname,fullname = project.getNameParts(name, defaultNamespace)
-		
+		local projectprefix = iif(isUsage, nil, sln.projectprefix)
+		local namespaces,shortname,fullname = project.getNameParts(name, projectprefix)
+				
 		-- Now we have the fullname, check if this is already a project
 		if isUsage then
 			local existing = globalContainer.allUsage[fullname]
@@ -371,9 +380,9 @@ timer.stop(tmr3)
 		end
 		
 		-- add to solution list keyed by both name and index
-		if not sln.projects[shortname] then
+		if not sln.projects[name] then
 			table.insert(sln.projects, prj)
-			sln.projects[shortname] = prj
+			sln.projects[name] = prj
 		end
 		
 		prj.solution       = sln
@@ -389,6 +398,9 @@ timer.stop(tmr3)
 		
 		-- Create a default usage project if there isn't one
 		if (not isUsage) and (not project.getUsageProject(prj.name, namespaces)) then
+			if not name:startswith(sln.projectprefix) then
+				name = sln.projectprefix..name
+			end
 			project.createproject(name, sln, true)
 		end
 		
@@ -784,3 +796,33 @@ timer.stop(tmr3)
 		return pairing
 	end
 
+
+--
+-- Returns true if the project use the C language.
+--
+
+	function project.iscproject(prj)
+		local language = prj.language or prj.solution.language
+		return language == "C"
+	end
+
+
+--
+-- Returns true if the project uses a C/C++ language.
+--
+
+	function project.iscppproject(prj)
+		local language = prj.language or prj.solution.language
+		return language == "C" or language == "C++"
+	end
+
+
+
+--
+-- Returns true if the project uses a .NET language.
+--
+
+	function project.isdotnetproject(prj)
+		local language = prj.language or prj.solution.language
+		return language == "C#"
+	end

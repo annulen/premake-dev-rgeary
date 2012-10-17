@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "premake.h"
+#include "lua.h"
 
 #if PLATFORM_MACOSX
 #include <CoreFoundation/CFBundle.h>
@@ -65,6 +66,11 @@ static const luaL_Reg string_functions[] = {
 	{ NULL, NULL }
 };
 
+static const luaL_Reg debug_functions[] = {
+	{ "dotty", lua_dotty },
+	{ NULL, NULL }
+};
+
 static int verboseErrors = 0;
 
 /**
@@ -81,6 +87,7 @@ int main(int argc, const char** argv)
 	luaL_register(L, "path",   path_functions);
 	luaL_register(L, "os",     os_functions);
 	luaL_register(L, "string", string_functions);
+	luaL_register(L, "debug",  debug_functions);
 
 	/* push the location of the Premake executable */
 	find_premake_executable(L, argv[0]);

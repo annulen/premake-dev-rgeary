@@ -90,7 +90,7 @@
 					if cfg.objdir then
 						clean.directory(prj, cfg.objdir, true)
 					end
-					if cfg.linktarget then
+					if cfg.linktarget and cfg.linktarget.directory then
 						clean.directory(prj, cfg.linktarget.directory, true)
 					end
 	

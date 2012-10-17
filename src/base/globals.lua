@@ -4,7 +4,7 @@
 -- Copyright (c) 2002-2011 Jason Perkins and the Premake project
 --
 	
-	
+
 -- The list of supported platforms; also update list in cmdline.lua
 
 	premake.platforms = 
@@ -88,6 +88,14 @@
 		
 		-- run the chunk. How can I catch variable return values?
 		local a, b, c, d, e, f = builtin_dofile(_SCRIPT)
+		
+		if premake.clearActiveProjectOnNewFile then
+			-- close the project scope
+			premake.api.scope.configuration = nil
+			premake.api.scope.project = nil
+			premake.CurrentContainer = premake.api.scope.solution
+			premake.CurrentConfiguration = nil
+		end
 
 		if enableSpellCheck then
 			premake.spellCheckDisable(_G)
@@ -391,6 +399,9 @@
 	function mkstring(t, delimiter, seen)
 		delimiter = delimiter or ' '
 		seen = seen or {}
+		if not t then
+			error("table is nil")
+		end
 		if seen[t] then
 			return seen[t]
 		end
@@ -424,15 +435,21 @@
 		if type(vs) == 'string' then
 			-- Convert string to hashset
 			local t = {}
-			if toLower then vs = vs:lower() end
-			t[vs] = vs
+			if toLower then 
+				t[vs:lower()] = vs
+			else
+				t[vs] = vs
+			end
 			return t
 		elseif type(vs) == 'function' then
 			-- assume it's an iterator function
 			kvs = {}
 			for k,v in vs do
-				if toLower then v = v:lower() end
-				kvs[v] = v
+				if toLower then 
+					kvs[v:lower()] = v
+				else
+					kvs[v] = v
+				end
 			end
 			return kvs
 		end
@@ -440,8 +457,11 @@
 			-- Convert sequence to hashset
 			kvs = {}
 			for _,v in ipairs(vs) do
-				if toLower then v = v:lower() end
-				kvs[v] = v
+				if toLower then 
+					kvs[v:lower()] = v
+				else
+					kvs[v] = v
+				end
 			end
 			return kvs
 		else
@@ -449,9 +469,9 @@
 			if toLower then
 				for k,v in pairs(vs) do
 					if type(k) == 'string' then
-						t[k:lower()] = v:lower()
+						t[k:lower()] = v
 					else
-						t[k] = v:lower()
+						t[k] = v
 					end
 				end
 				return t
@@ -459,6 +479,21 @@
 				return vs
 			end
 		end
+	end
+	
+	-- Return only unique values in the list
+	function unique(list)
+		if not list then return nil end
+		
+		local set = {}
+		local newList = {}
+		for _,v in ipairs(list) do
+			if not set[v] then
+				table.insert(newList, v)
+				set[v] = v
+			end
+		end
+		return newList
 	end
 	
 	function toList(vs)

@@ -37,10 +37,14 @@
 		if _OPTIONS['dryrun'] then
 			if mode and mode:find('w') then
 				printf('write : ' .. fname .. '\n')
+				return 'nullfile'
+			elseif mode and mode:find('a') then
+				printf('append : ' .. fname .. '\n')
+				return 'nullfile'
 			else 
 				printf('read : ' .. fname .. '\n')
+				return builtin_open(fname, mode)
 			end
-			return 'nullfile'
 		end
 		if (mode) then
 			if (mode:find("w")) then

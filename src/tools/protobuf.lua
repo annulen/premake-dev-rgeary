@@ -12,7 +12,7 @@ newtoolset {
 			isLinker = true,				-- Pass in all the inputs to one command
 			extensionsForLinking = { '.proto' },
 			
-			argumentOrder = { 'protobufout', 'cfgflags', 'includedirs' },
+			argumentOrder = { 'cfgflags', 'includedirs', 'protobufout', 'input' },
 			
 			prefixes = {
 				includedirs = '-I',
@@ -21,20 +21,30 @@ newtoolset {
 			decorateFn = {
 				protobufout = function(arg)
 					local rv = {}
+					local cwd = repoRoot
+					
+					local function formatPath(p)
+						if _OPTIONS.absolutepaths then
+							return p
+						else
+							return path.getrelative(cwd, p)
+						end
+					end 
+					
 					if arg.protoPath then
-						table.insert(rv, '--proto_path='..arg.protoPath)
+						table.insert(rv, '--proto_path='..formatPath(arg.protoPath))
 					else
 						error("Must specify protobufout { protoPath=<path> }")
 					end
 					
 					if arg.cppRoot then
-						table.insert(rv, '--cpp_out='..arg.cppRoot)
+						table.insert(rv, '--cpp_out='..formatPath(arg.cppRoot))
 					end
 					if arg.javaRoot then
-						table.insert(rv, '--java_out='..arg.javaRoot)
+						table.insert(rv, '--java_out='..formatPath(arg.javaRoot))
 					end
 					if arg.pythonRoot then
-						table.insert(rv, '--python_out='..arg.pythonRoot)
+						table.insert(rv, '--python_out='..formatPath(arg.pythonRoot))
 					end
 					
 					if (not arg.cppRoot) and (not arg.javaRoot) and (not arg.pythonRoot) then

@@ -132,9 +132,9 @@
 -- @param fieldname
 --    Optional; if set, only this field will be expanded.
 --
-
+	
 	function oven.expandtokens(cfg, scope, filecfg, fieldname, delayedExpand)
-local tmr=timer.start('oven.expandTokens')
+		local tmr=timer.start('oven.expandTokens')
 
 		-- File this under "too clever by half": I want path tokens (targetdir, etc.)
 		-- to expand to relative paths, but it is easier to work with absolute paths 
@@ -169,12 +169,14 @@ local tmr=timer.start('oven.expandTokens')
 		
 		local function expand(target, field)
 			local value = target[field]
-			if type(value) == "string" then
+			if not value then
+				target[field] = nil
+			elseif type(value) == "string" then
 				target[field] = oven.expandvalue(value, context)
 			else
 				-- delayed expand, only expand if you need it. 
 				-- Makes a small perf increase, remove if it causes problems, eg. because you're unable to call ipairs(t)
-				if delayedExpand then
+				if false and delayedExpand then
 					local proxyTable = {}
 					local mt = {}
 					mt.__index = function(self, key)
@@ -185,8 +187,8 @@ local tmr=timer.start('oven.expandTokens')
 					setmetatable(proxyTable, mt)
 					target[field] = proxyTable
 				else
-					for key in pairs(value) do
-						expand(value, key)
+					for k,_ in pairs(value) do
+						expand(value, k)
 					end
 				end
 			end
@@ -433,23 +435,24 @@ timer.stop(tmr)
 --
 
 	function oven.mergefield(cfg, name, value)
-		local field = premake.fields[name]
-		
 		if not value then
 			return
 		end
 
+		local tmr = timer.start('oven.mergefield')
+		local field = premake.fields[name]
+
 		-- if this isn't a Premake field, then just copy
 		if not field then
 			cfg[name] = value
-			return
-		end
-
-		if field.kind:startswith("key-") then
-			oven.mergekeyvalue(cfg, name, field.kind, value)
 		else
-			oven.mergevalue(cfg, name, field.kind, value)
+			if field.kind:startswith("key-") then
+				oven.mergekeyvalue(cfg, name, field.kind, value)
+			else
+				oven.mergevalue(cfg, name, field.kind, value)
+			end
 		end
+		timer.stop(tmr)
 	end
 
 
@@ -495,8 +498,8 @@ timer.stop(tmr)
 		-- list values get merged, others overwrite; note that if the 
 		-- values contain tokens they will be modified in the token 
 		-- expansion phase, so important to make copies of objects
-		if fieldkind == 'flaglist' then
-			target[fieldname] = oven.mergeflags(target[fieldname] or {}, value)
+		if fieldkind == 'flaglist' or  fieldkind == 'usesconfig' then
+			target[fieldname] = oven.mergekeyedtables(target[fieldname] or {}, value)
 		elseif fieldkind:endswith("list") then
 			target[fieldname] = oven.mergetables(target[fieldname] or {}, value)
 		else
@@ -507,9 +510,13 @@ timer.stop(tmr)
 --
 -- Merge keyed tables
 --
-	function oven.mergeflags(t, additions)
+	function oven.mergekeyedtables(t, additions)
 		for k,v in pairs(additions) do
-			t[k] = v
+			if type(k) == 'number' then
+				table.insert(t, v)
+			else
+				t[k] = v
+			end
 		end			
 		return t
 	end
@@ -526,17 +533,26 @@ timer.stop(tmr)
 --
 
 	function oven.mergetables(original, additions)
+		if type(additions) == 'string' then 
+			additions = {additions} 
+		end
 		for _, item in ipairs(additions) do
 			-- if the item is already in the list, remove it. This allows a
 			-- later configuration block (i.e. a project) to override the
 			-- ordering of values from an earlier block (i.e. a solution).
 			-- Could be a performance hit; have to wait and see.
-			if original[item] then
+
+			--[[if original[item] then
 				local i = table.indexof(original, item)
 				table.remove(original, i)
 			end
 			original[item] = item
 			table.insert(original, item)
+			]]
+			if not original[item] then
+				original[item] = item
+				table.insert(original, item)
+			end 
 		end
 		return original
 	end

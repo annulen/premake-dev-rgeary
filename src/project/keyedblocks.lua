@@ -63,7 +63,7 @@ function keyedblocks.create(obj, parent)
 	
 	local namespaces = obj.namespaces
 	
-timer.start('keyedblocks.create')
+	local tmr = timer.start('keyedblocks.create')
 	for _,block in ipairs(obj.blocks or {}) do
 		local terms = block.keywords
 		
@@ -78,52 +78,47 @@ timer.start('keyedblocks.create')
 				-- case insensitive
 				term = term:lower()
 				
-				-- 'not' is a separate category
-				if term:startswith('-') then
-					kb['not'] = kb['not'] or {}
-					kb = kb['not']
-					term = term:sub(2)
+				if premake.fieldAliases[term] then
+					term = premake.fieldAliases[term]
 				end
-				
+				-- if it's of the form key=value, get the value
+				if term:contains('=') then
+					term = term:match(".*=(.*)")
+				end
+
+				-- 'not' is a separate category
+				local kbcfg
+				if term:startswith('-') then
+					kb.__notconfig = kb.__notconfig or {}
+					kbcfg = kb.__notconfig
+					term = term:sub(2)
+				else
+					kb.__config = kb.__config or {}
+					kbcfg = kb.__config
+				end
+
+				-- TODO : Separate category for wildcard configuration strings
+
 				-- Insert term in to keyedblocks
-				kb[term] = kb[term] or {}
-				
+				kbcfg[term] = kbcfg[term] or {}
+				if kb.__name then
+					kbcfg[term].__name = kb.__name ..':'.. term
+				end
+
 				-- recurse kb
-				kb = kb[term]
+				kb = kbcfg[term]
 			end
-			
+
 			-- insert the field values in to the keyed block
 			local ignoreField = { terms = 1, keywords = 1, removes = 1 }
 			for k,v in pairs(block) do
 				if (not ignoreField[k]) and v and (#v>0 or not table.isempty(v)) then
-					local field = premake.fields[k]
-					if not field then
-						error('Unknown field "'..k..'"')
+					if premake.fieldAliases[v] then
+						v = premake.fieldAliases[v]
 					end
-					local fieldKind = field.kind
-					
-					-- Delay processing 'uses' statements until later
-					if k == 'uses' then
-						kb.__uses = kb.__uses or {}
-						
-						for _,useProjName in ipairs(v) do
-							local usageProj, suggestions = keyedblocks.getUsage(useProjName, namespaces)
-							if not usageProj then
-								local errMsg = '\nCould not find usage "'..tostring(useProjName)..'" ' ..
-								 "for project "..tostring(obj.name) ..' at ' .. tostring(obj.basedir)
-								if suggestions then
-									errMsg = errMsg .. '"\n' .. suggestions
-								end								
-								error(errMsg)
-							end
-							kb.__uses[useProjName] = usageProj
-						end
-													
-					else
-						-- Include the key/value
-						kb.__values = kb.__values or {}
-						oven.mergefield(kb.__values, k, v)
-					end
+
+					-- Include the key/value
+					oven.mergefield(kb, k, v)
 				end
 			end -- each block
 
@@ -135,60 +130,99 @@ timer.start('keyedblocks.create')
 					end
 				end
 			end -- block.removes
-			
+
+			keyedblocks.resolveUses(kb, obj)
+
 		end -- expTerms
-		
+
 	end
-	
+
 	if parent then
 		kbBase.__parent = parent
 	end
 	kbBase.__name = obj.name
-	
+
 	obj.keyedblocks = kbBase
-	
-timer.stop(tmr)
-	
+
+	timer.stop(tmr)
+
 	return obj
+end
+
+function keyedblocks.resolveUses(kb, obj)
+	if kb.uses or kb.alwaysuses then
+		kb.__uses = kb.__uses or {}
+
+		local uses = kb.uses or kb.alwaysuses
+		if kb.alwaysuses and kb.uses then
+			uses = {}
+			for _,v in Seq:ipairs(kb.uses):iconcat(kb.alwaysuses):each() do
+				table.insert(uses, v)
+			end
+		end
+
+		for _,useProjName in ipairs(uses) do
+
+			local useProj = kb.__uses[useProjName]
+
+			if type(useProj) ~= 'table' then
+				local suggestions
+				useProj, suggestions = keyedblocks.getUsage(useProjName, obj.namespaces)
+				if not useProj then
+					local errMsg = '\nCould not find usage "'..tostring(useProjName)..'" ' ..
+					"for project "..tostring(obj.name) ..' at ' .. tostring(obj.basedir)
+					if suggestions then
+						errMsg = errMsg .. '"\n' .. suggestions
+					end
+					error(errMsg)
+				end
+				kb.__uses[useProjName] = useProj
+			end
+		end
+	end
 end
 
 function keyedblocks.getUsage(name, namespaces)
 	local suggestionStr
+
 	local usage = project.getUsageProject(name, namespaces)
 	if not usage then
 		-- check if it's a solution usage
 		usage = project.getUsageProject(name..'/'..name)
 	end
-	
+
 	if not usage then
 		-- Find hints
 		local namespaces,shortname,fullname = project.getNameParts(name, namespaces)
-		
+
 		-- Check for wrong namespace
 		local suggestions = {}
-		for prjName,prj in pairs(globalContainer.allUsage) do
+		for prjName,prj in Seq:new(globalContainer.aliases):concat(globalContainer.allUsage):each() do
 			if prj.shortname == shortname then
 				table.insert(suggestions, prj.name)
-			end			 
+			end
 		end
 		local usage = project.getUsageProject(name, namespaces)
 		if #suggestions == 0 then
 			-- check for misspellings
-			local allUsageNames = getKeys(globalContainer.allUsage)
+			local allUsageNames = Seq:new(globalContainer.aliases):concat(globalContainer.allUsage):getKeys():toTable()
 			local spell = premake.spelling.new(allUsageNames)
-			
-			suggestions = spell:getSuggestions(fullname)
+
+			suggestions = spell:getSuggestions(name)
+			if #suggestions == 0 then
+				suggestions = spell:getSuggestions(fullname)
+			end
 		end
-		
+
 		if #suggestions > 0 then
 			suggestionStr = Seq:new(suggestions):take(20):mkstring(', ')
-			if #suggestions > 20 then 
+			if #suggestions > 20 then
 				suggestionStr = suggestionStr .. '...'
-			end 
+			end
 			suggestionStr = ' Did you mean ' .. suggestionStr .. '?'
 		end
 	end
-	
+
 	return usage, suggestionStr
 end
 
@@ -204,17 +238,15 @@ function keyedblocks.merge(dest, src)
 	if not src then
 		return
 	end
-	if src.__values then
-		for k,v in ipairs(src.__values) do
-			oven.mergefield(dest.__values, k, v)
-		end
+	for k,v in ipairs(src) do
+		oven.mergefield(dest, k, v)
 	end
 	
 	for k,v in pairs(src) do
-		if k ~= '__values' and k ~= 'uses' then
+		--if k ~= '__values' and k ~= 'uses' then
 			dest[k] = dest[k] or {} 
 			keyedblocks.merge(dest[k], v)
-		end
+		--end
 	end
 end
 
@@ -225,16 +257,13 @@ end
 -- May have to create the usage & bake the project if it's not already created 
 --
 function keyedblocks.getfield(obj, keywords, fieldName, dest)
-	local rv = nil
-	local removes = nil
-	if not obj.keyedblocks then
-		return nil
-	end
-	local kbBase = obj.keyedblocks
+	dest = dest or {}
 	
-	timer.start('keyedblocks.getfield')
-	local terms = {}
-	function getKeywordSet(ws)
+	local tmr = timer.start('keyedblocks.getfield')
+	local tmr2 = timer.start('keyedblocks.getfilter')
+	
+	local function getKeywordSet(ws)
+		local rv = {}
 		for _,v in ipairs(ws) do
 			if true or v and type(v) == 'string' and v ~= '' then
 				v = v:lower()
@@ -244,109 +273,254 @@ function keyedblocks.getfield(obj, keywords, fieldName, dest)
 				if v:find(' or ') then
 					error("keyword 'or' not supported as a filter")
 				end
-				terms[v] = 1
+				local k = v:match("[^=]*")
+				
+				if k ~= v then
+					local c = k:lower()..'='..v
+					rv[c] = c
+				end
+				rv[v] = v
+			end
+		end
+		return rv
+	end
+	local filter = getKeywordSet(keywords)
+	
+	-- repeat until the filter is stable
+	local loop = 0
+	local loopMax = 10
+	local origFilter
+	local filterList = {}
+	
+	repeat
+		loop = loop + 1
+		
+		origFilter = table.deepcopy(filter)
+		table.insert(filterList, origFilter)
+		local usesconfig = keyedblocks.getfield2(obj, filter, "usesconfig", {})
+
+		-- usesconfig adds/mutates to the filter
+		if usesconfig then
+			local filter2 = {}
+			for k,v in Seq:new(filter):concat(usesconfig):each() do
+				-- .usesconfig & filter is of the form { Debug, "Threading=Multi", }
+				-- ie. set the filter on the key, match blocks on the value
+				v = v:lower()
+				filter2[v] = v
+			end
+			filter = filter2
+		end
+		
+		local filterUnchanged = table.equals(filter, origFilter)
+		if filterUnchanged then
+			break
+		end
+	until( loop > loopMax )
+	if loop >= loopMax then
+		print("Maximum recursion reached, configuration filter is oscillating : ")
+		for _,f in ipairs(filterList) do
+			print(mkstring(f))
+		end
+		error("Please change your configuration, you've defined an unstable loop")
+	end
+	timer.stop(tmr2)
+	
+	-- Now we've got the final filter, get the correct values
+	local rv = keyedblocks.getfield2(obj, filter, fieldName, dest)
+
+	timer.stop(tmr)
+
+	return rv
+end
+
+function keyedblocks.getfield2(obj, filter, fieldName, dest)
+	local rv = dest
+	if not obj.keyedblocks then
+		return nil
+	end
+	local kbBase = obj.keyedblocks
+	
+	local filterStr = getKeys(filter)
+	table.sort(filterStr)
+	filterStr = table.concat(filterStr, ' ')
+	if fieldName then
+		filterStr = filterStr..':'..fieldName
+	end
+
+	local function insertBlockList(dest, src)
+		if src then
+			for _,block in ipairs(src.foundBlocks) do
+				table.insert(dest.foundBlocks, block)
+			end
+			for _,block in pairs(src.recursiveBlocks or {}) do
+				if block.__name then
+					dest.recursiveBlocks[block.__name] = block
+				else
+					table.insert( dest.recursiveBlocks, block )
+				end
 			end
 		end
 	end
-	getKeywordSet(keywords)
-	
-	-- set of .__values structures which apply to 'keywords'
-	local foundValues = {}
-	-- set of .removes structures which apply to 'keywords'
-	local foundRemoves = {}
-	
-	-- Find the .__values & .removes structures which apply to 'keywords'
+
+	--[[
+	local ignoreFields = toSet({ '__cache', '__config', '__name', '__parent', '__namespaces'  })
+	local function insertBlockList(dest, src)
+	if not fieldName then
+
+	for k,v in pairs(src or {}) do
+	if k == '__removes' then
+	dest[k] = dest[k] or {}
+	table.insert( dest[k], v )
+	elseif not ignoreFields[k] then
+	oven.mergefield(dest, k, v)
+	end
+	end
+
+	elseif src and src[fieldName] and not ignoreFields[fieldName] then
+	oven.mergefield(dest, fieldName, src[fieldName])
+	end
+	end
+	]]
+
+	-- Find the values & .removes structures which apply to 'keywords'
 	local accessedBlocks = {}
-	local function findValues(kb)
-		if not kb or accessedBlocks[kb] then 
-			return 
+
+	local function findBlocks(kb)
+		local rv = {
+			foundBlocks = {},
+			recursiveBlocks = {},
+		}
+
+		if not kb or table.isempty(kb) then
+			return rv
+		elseif accessedBlocks[kb] then
+			table.insert(rv.recursiveBlocks, kb)
+			return rv
 		end
 		accessedBlocks[kb] = kb
-		
+
+		-- Check the cache
+		if false and (kb.__cache or {})[filterStr] then
+			local cachedResult = kb.__cache[filterStr]
+			-- apply cached found blocks & apply uncached/skipped recursive blocks
+			rv = findBlocks(cachedResult.recursiveBlocks)
+			insertBlockList(rv, cachedResult)
+
+			return rv
+		end
+
 		-- Apply parent before block
 		if kb.__parent then
 			keyedblocks.bake(kb.__parent)
-			findValues(kb.__parent.keyedblocks)
-		end		
-		
-		if kb.__values then
-			table.insert( foundValues, kb.__values )
-			if kb.__values.usesconfig then
-				for k,v in ipairs(kb.__values.usesconfig) do
-					terms[v] = 1
+			local parentBlocks = findBlocks(kb.__parent.keyedblocks)
+			insertBlockList(rv, parentBlocks)
+		end
+
+		-- Found some values to add/remove
+		insertBlockList( rv, { foundBlocks = { kb } } )
+
+		-- Iterate through the filters and apply any blocks that match
+		if kb.__config then
+			for _,term in pairs(filter) do
+				-- check if this combination of terms has been specified
+				if kb.__config[term] then
+					local configBlocks = findBlocks(kb.__config[term])
+					insertBlockList(rv, configBlocks)
 				end
-			end 
+			end
 		end
-		if kb.__removes then
-			table.insert( foundRemoves, kb.__removes )
-		end
-		
-		for term,_ in pairs(terms) do
-	
-			-- check the 'not' terms
-			local kbNot = kb['not']
-			if kbNot then
-				for notTerm,notTermKB in pairs(kbNot) do
-					if not terms[notTerm] then
-						-- recurse
-						findValues(notTermKB)
+
+		-- check the 'not' terms
+		if kb.__notconfig then
+			for notTerm,notTermKB in pairs(kb.__notconfig) do
+				local match = false
+				for _,term in pairs(filter) do
+					if term == notTerm then
+						match = true
+						break
 					end
 				end
-			end
-				
-			-- check if this combination of terms has been specified
-			if kb[term] then
-				findValues(kb[term])
+				if not match then
+					-- recurse
+					local notconfigBlocks = findBlocks(notTermKB)
+					insertBlockList(rv, notconfigBlocks)
+				end
 			end
 		end
-			
+
 		-- Apply usages after block
 		if kb.__uses then
-			for useProjName,useProj in pairs(kb.__uses) do
+			for useProjName, useProj in pairs(kb.__uses) do
 				keyedblocks.bake(useProj)
-				findValues(useProj.keyedblocks)
+				local usesBlocks = findBlocks(useProj.keyedblocks)
+				insertBlockList(rv, usesBlocks)
 			end
 		end
-		
-	end -- findValues
-	
-	findValues(kbBase)
-	
-	-- Filter values structures
-	local rv = dest or {}
-	local isEmpty = true
-	for _,values in ipairs(foundValues) do
-		isEmpty = false
-		if not fieldName then
-		
-			for k,v in pairs(values) do
-				oven.mergefield(rv, k, v)
+
+		if (kb.__cache or {})[filterStr] then
+			local cacheBlocks = kb.__cache[filterStr]
+			if not table.equals(cacheBlocks, rv.foundBlocks) then
+				local x =0
 			end
-		
-		elseif values[fieldName] then
-			oven.mergefield(rv, fieldName, values[fieldName])
+		end
+
+		-- Add to cache
+		kb.__cache = kb.__cache or {}
+		kb.__cache[filterStr] = rv
+
+		return rv
+
+	end -- findBlocks
+
+	local foundBlocks = findBlocks(kbBase).foundBlocks
+
+	if not fieldName then
+		rv.filter = table.deepcopy(filter)
+	end
+
+	timer.start('applyvalues')
+	-- Filter values structures
+	local isEmpty = table.isempty(foundBlocks)
+	--insertBlockList(rv, foundBlocks)
+
+	local removes = {}
+	for _,block in ipairs(foundBlocks) do
+		if not fieldName then
+			for k,v in pairs(block) do
+				if k == '__removes' then
+					table.insert(removes, v)
+				else
+					oven.mergefield(rv, k, v)
+				end
+			end
+		else
+			oven.mergefield(rv, fieldName, block[fieldName])
+			if block.__removes then
+				table.insert(removes, block.__removes)
+			end
 		end
 	end
-	
+
 	-- Remove values
-	for _,values in ipairs(foundRemoves) do
+	for _,removeBlock in ipairs(removes) do
 		if not fieldName then
-			for k,v in pairs(values) do
+			for k,v in pairs(removeBlock) do
 				oven.removefromfield(rv[k], v)
 			end
-		elseif values[fieldName] then
-			oven.remove(rv, fieldName, values[fieldName])
+		elseif removes[fieldName] then
+			for k,v in pairs(removeBlock) do
+				oven.remove(rv, fieldName, removes[fieldName])
+			end
 		end
 	end
-	
-	timer.stop(tmr)
+	timer.stop()
 	
 	if isEmpty then
-		return nil, accessedBlocks
+		return nil
 	elseif fieldName then
-		return rv[fieldName], accessedBlocks
+		return rv[fieldName]
 	else
-		return rv, accessedBlocks
+		return rv
 	end
 end
 
@@ -361,8 +535,9 @@ function keyedblocks.createblock(kb, terms)
 			error("keyword 'or' not supported as a filter")
 		end
 		
-		kb[v] = kb[v] or {}
-		kb = kb[v]
+		kb.__config = kb.__config or {}
+		kb.__config[v] = kb.__config[v] or {}
+		kb = kb.__config[v]
 	end
 	
 	return kb

@@ -61,7 +61,7 @@ local icc_cc = newtool {
 			table.insert(cmdflags, '-fPIC')
 		end
 		
-		if cfg.flags.ThreadingMulti then
+		if cfg.flags.Threading == 'Multi' then
 			if cfg.system == premake.LINUX then
 				table.insert(cmdflags, '-pthread')
 			elseif cfg.system == premake.WINDOWS then 
@@ -117,6 +117,10 @@ local icc_ar = newtool {
 	redirectStderr = true,
 --	filterStderr = { "xiar: executing " },
 	targetNamePrefix = 'lib',
+	
+	flagMap = {
+		WholeArchive = "-Wl,--whole-archive",
+	},
 }
 local icc_link = newtool {
 	toolName = 'link',
@@ -124,8 +128,10 @@ local icc_link = newtool {
 	fixedFlags = '-Wl,--start-group',
 	extensionsForLinking = { '.o', '.a', '.so' },		-- possible inputs in to the linker
 	flagMap = {
-		StdlibShared	= '-shared-libgcc -shared-intel',
-		StdlibStatic	= '-static-libgcc -static-intel',		-- Might not work, test final binary with ldd. See http://www.trilithium.com/johan/2005/06/static-libstdc/
+		Stdlib = {
+			Shared		= '-shared-libgcc -shared-intel',
+			Static		= '-static-libgcc -static-intel',		-- Might not work, test final binary with ldd. See http://www.trilithium.com/johan/2005/06/static-libstdc/
+		},
 	},
 	prefixes = {
 		libdirs 		= '-L',
@@ -169,7 +175,7 @@ local icc_link = newtool {
 		end
 		]]
 
-		if cfg.flags.ThreadingMulti then
+		if cfg.flags.Threading == 'Multi' then
 			if cfg.system ~= premake.WINDOWS then
 				table.insert(cmdflags, '-pthread -lrt')
 			end

@@ -27,3 +27,5 @@
 	
 	premake.cache = {}
 	
+-- Global defualt settings, override this in the system script
+	premake.clearActiveProjectOnNewFile = false

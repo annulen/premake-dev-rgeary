@@ -31,7 +31,6 @@
 		return p
 	end
 
-
 --
 -- Get the absolute file path from a relative path. The requested
 -- file path doesn't actually need to exist.
@@ -167,6 +166,12 @@ timer.stop(tmr)
 		end
 	end
 	
+--
+-- Strip & append a new extension
+--
+	function path.setextension(p, ext)
+		return path.appendextension(path.stripextension(p), ext)
+	end
 	
 --
 -- Retrieve the filename portion of a path.
@@ -404,7 +409,6 @@ timer.stop(tmr)
 --
 	--local patternCache = cache.new()
 	function path.wildcards(pattern)
-local tmr = timer.start('path.wildcards')
 		-- Escape characters that have special meanings in Lua patterns
 		pattern = pattern:gsub("([%+%.%-%^%$%(%)%%])", "%%%1")
 
@@ -416,6 +420,5 @@ local tmr = timer.start('path.wildcards')
 		-- Replace the placeholders with their Lua patterns
 		pattern = pattern:gsub("\001", ".*")
 		pattern = pattern:gsub("\002", "[^/]*")
-timer.stop(tmr)		
 		return pattern
 	end
