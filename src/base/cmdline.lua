@@ -85,8 +85,8 @@
 	
 	newoption
 	{
-		trigger     = "relativepaths",
-		description = "Always generate relative build paths",
+		trigger     = "absolutepaths",
+		description = "Always generate absolute build paths",
 	}
 	
 	newoption
@@ -104,5 +104,22 @@
 	newoption {
 		trigger 	= "quiet",
 		description = "Don't print status messages",
+	}
+	
+	newoption {
+		trigger 	= "tests",
+		description = "Run self tests on Premake. Specify with an action.",
+	}
+	
+	newoption {
+		trigger		= "interactive",
+		description = "Interactive Lua shell with Premake loaded. Press Ctrl-C to exit.",
+		aliases		= { "i" },
+	}
+	
+	newoption {
+		trigger		= "exportonly",
+		description = "Only build the projects specified with export",
+		aliases		= { "e" },
 	}
 	

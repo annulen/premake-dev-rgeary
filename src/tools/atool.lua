@@ -35,11 +35,8 @@ tool.binaryName = nil
 -- Cached result of getBinary
 tool.binaryFullpath = nil
 
--- Fixed flags which always appear first in the command line. Two ways to override this.
+-- Fixed flags which always appear first in the command line
 tool.fixedFlags = nil
-function tool:getFixedFlags()
-	return self.fixedFlags
-end
 
 -- Order of arguments in the command line. Arguments not specified in this list are appended (optional)
 tool.argumentOrder = { 'fixedFlags', 'output', 'sysflags', 'cfgflags' }
@@ -73,8 +70,7 @@ end
 --	toolCmd = tool:getBinary
 --  cmdArgs = tool:decorateInputs
 --
-function tool:getCommandLine(toolCmd, cmdArgs)
-	local fixedFlags = self:getFixedFlags() or ''
+function tool:getCommandLine(cmdArgs)
 	
 	if #cmdArgs == 0 then
 		error('#toolInputs == 0, did you forget to flatten it?')
@@ -101,7 +97,7 @@ function tool:getCommandLine(toolCmd, cmdArgs)
     	end]]
     end
 	
-	local cmdParts = table.join(toolCmd, fixedFlags, cmdArgs, self.endFlags)
+	local cmdParts = table.join(cmdArgs, self.endFlags)
 
 	local cmd = table.concat(cmdParts, ' ')
 	return cmd
@@ -129,6 +125,27 @@ function tool:decorateInputs(cfg, outputVar, inputVar, previousResult)
 		elseif category == 'input' then inputList = inputVar 
 		elseif category == 'sysflags' then inputList = self:getsysflags(cfg)
 		elseif category == 'cfgflags' then inputList = table.translateV2(cfg.flags, self.flagMap)
+		elseif category == 'toolbin' then inputList = self:getBinary()
+		elseif category == 'fixedFlags' then inputList = { self.fixedFlags }
+		elseif category == 'wrapper' then
+			local wrapper
+			if self.isCompiler and cfg.compilerwrapper then
+				-- Insert or append original command
+				wrapper = cfg.compilerwrapper
+			elseif self.isLinker and cfg.linkerwrapper then
+				wrapper = cfg.linkerwrapper
+			end
+			
+			if wrapper then
+				-- Try to find the wrapper
+				local launcherPath = os.findbin(wrapper, self.binaryDir)
+				if launcherPath then
+					wrapper = path.join( launcherPath, wrapper )
+				end
+
+				inputList = { wrapper }				
+			end
+			
 		elseif category == 'depfileOutput' then
 			if config.hasDependencyFileOutput(cfg) then
 				inputList = outputVar
@@ -201,7 +218,7 @@ function tool:decorateInput(category, input, alwaysReturnString)
 end
 
 -- Return the full path of the binary
-function tool:getBinary(cfg)
+function tool:getBinary()
 	if self.binaryFullpath then
 		return self.binaryFullpath
 	end
@@ -211,10 +228,10 @@ function tool:getBinary(cfg)
 	end
 
  	-- Find the binary
-	local path = os.findbin(self.binaryName, self.binaryDir)
+	local binpath = os.findbin(self.binaryName, self.binaryDir)
 	local fullpath = ''
-	if path then
-		fullpath = path .. '/' .. self.binaryName
+	if binpath then
+		fullpath = binpath .. '/' .. self.binaryName
 	else
 		-- Just assume it's there
 		if self.binaryDir then
@@ -222,25 +239,8 @@ function tool:getBinary(cfg)
 		end
 		fullpath = fullpath .. self.binaryName
 	end
-	self.binaryDir = path
-	
-	-- Wrap the command in another command. Original command will be appended, or inserted if binaryLauncher contains $CMD
-	if self.isCompiler and cfg.compilerwrapper then
-		-- Insert or append original command
-		local compilerwrapper = cfg.compilerwrapper
-		
-		if not compilerwrapper:contains('$CMD') then
-			compilerwrapper = compilerwrapper..' $CMD'
-		end
-		
-		-- Find the launcher
-		local launcherPath = os.findbin(compilerwrapper, self.binaryDir)
-		if launcherPath then
-			compilerwrapper = path.join( launcherPath, compilerwrapper )
-		end
-		
-		fullpath = compilerwrapper:replace('$CMD', fullpath)
-	end
+	self.binaryDir = binpath
+
 	self.binaryFullpath = fullpath
 	
 	return fullpath
@@ -283,47 +283,6 @@ end
 function tool:isLinkInput(cfg, fileExt)
 	return (not self.extensionsForLinking) or (self.extensionsForLinking[fileExt] ~= nil)
 end
-
--- Get library includes
---
-function tool:getIncludeLibs(cfg, systemonly)
-	local result = {}
-
-	local links
-	if not systemonly then
-		links = config.getlinks(cfg, "siblings", "object")
-		for _, link in ipairs(links) do
-			-- skip external project references, since I have no way
-			-- to know the actual output target path
-			if not link.project.externalname then
-				if link.kind == premake.STATICLIB then
-					-- Don't use "-l" flag when linking static libraries; instead use
-					-- path/libname.a to avoid linking a shared library of the same
-					-- name if one is present
-					table.insert(result, project.getrelative(cfg.project, link.linktarget.abspath))
-				else
-				 	-- Don't use path when linking shared libraries, otherwise loader will always expect the same
-				 	-- folder structure
-					table.insert(result, self.includeLibPrefix .. link.linktarget.basename)
-				end
-			end
-		end
-	end
-
-	-- The "-l" flag is fine for system libraries
-	links = config.getlinks(cfg, "system", "basename")
-	for _, link in ipairs(links) do
-		if path.isframework(link) then
-			table.insert(result, self.includeFrameworkPrefix .. path.getbasename(link))
-		elseif path.isobjectfile(link) then
-			table.insert(result, link)
-		else
-			table.insert(result, self.includeLibPrefix .. link)
-		end
-	end
-
-	return result
-end	
 
 --
 -- API callbacks
@@ -375,7 +334,8 @@ function premake.tools.newtool(toolDef)
 	
 	-- Set up a list of arguments to decorate
 	t.decorateArgs = {}
-	-- extraArgs are arguments we always insert
+	
+	-- extraArgs are arguments we always insert at the end
 	local extraArgs = {}
 	if t.fixedFlags then table.insert(extraArgs, 'fixedFlags') end
 	table.insert(extraArgs, 'cfgflags')
@@ -412,6 +372,10 @@ function premake.tools.newtool(toolDef)
 			table.insert(t.decorateArgs, category)
 		end
 	end
+	
+	-- Make sure the toolbin (and wrapper) is at the front
+	table.insert( t.decorateArgs, 1, 'wrapper' )
+	table.insert( t.decorateArgs, 2, 'toolbin' )
 	
 	t.cache = {}  
 	

@@ -6,7 +6,7 @@ local ninja = premake.actions.ninja
 local solution = premake.solution
 local project = premake5.project
 local config = premake5.config
-local ninjaVarLevel = 1		-- higher = use more ninja build vars
+local ninjaVarLevel = 2		-- higher = use more ninja build vars
 local toolsetDef = {}
 ninja.helpMsg = {}
 
@@ -39,7 +39,7 @@ function ninja.generateSolution(sln, scope)
 	--_p('#  This file is not designed to be invoked directly, the build.ninja header file specifies the dependencies')
 	--_p('')
 	if not scope:get('__header') then 
-		ninja.writeHeader(true, ninja.builddir)
+		ninja.writeExecRule()
 		scope:set('__header', true)
 	end
 
@@ -84,6 +84,15 @@ function ninja.generateSolution(sln, scope)
 	scope.slntargets = scope.slntargets or {}
 	scope.slntargets[sln.name] = slnTargets
 	mergeTargets(scope.alltargets, slnTargets)
+	
+	if sln.exports then
+		for alias,fullProjName in pairs(sln.exports) do
+			if alias ~= fullProjName then
+				_p('build '..alias..': phony '..fullProjName)
+			end
+		end
+		_p('')
+	end
 end
 
 function ninja.writeFooter(scope)
@@ -157,13 +166,19 @@ function ninja.getToolOverrides(cfg, tool, scope)
 	local toolDef = scope:get(tool.ruleName)
 	
 	if not toolDef then return nil end
+	-- add any missing vars
+	for k,_ in pairs(toolDef) do
+		toolInputs[k] = toolInputs[k] or ""
+	end
 	
 	-- See if we need to override any flags
 	local toolOverrides = {}
+	
 	for k,v in pairs(toolInputs) do
+		v = ninja.esc(v)
 		if not ninja.notBuildVar[k] then
-			k = tool.ruleName .. '_' .. k
 			if toolDef[k] ~= v then
+				k = tool.ruleName .. '_' .. k
 				toolOverrides[k] = v
 			end
 		end
@@ -197,9 +212,9 @@ function ninja.getLinkTool(cfg, scope)
 	return linkTool, linkOverrides
 end
 
-local function makeShorterBuildVars(scope, inputs, weight)
+local function makeShorterBuildVars(scope, inputs, weight, newVarPrefix)
 	-- See if it's worth creating extra build vars
-	local extraBuildVars = scope:getBuildVars(inputs, weight)
+	local extraBuildVars = scope:getBuildVars(inputs, weight, newVarPrefix)
 	for k,v in pairs(extraBuildVars) do
 		_p(k .. '=' .. v)
 	end			
@@ -211,7 +226,9 @@ function ninja.writeProjectTargets(prj, scope)
 	
 	local cfgs = {}
 	local prjTargets = {}
-
+	local isSourceGen = false
+	local prjTargetName = prj.name
+	
 	-- Validate
 	for cfg in project.eachconfig(prj) do
 		if not cfg.kind then
@@ -222,28 +239,45 @@ function ninja.writeProjectTargets(prj, scope)
 		end
 		
 		local linkTool,linkOverrides = ninja.getLinkTool(cfg, scope)
-		if linkTool and cfg.kind ~= 'SourceGen' then 
+		if linkTool and not isSourceGen then 
 			if not cfg.buildtarget then
 				error("Malformed project '"..prj.name.."', toolset "..cfg.toolset.." requires buildtarget but none specified")
 			end
 		end
 	
 		cfg.language = prj.language
+
+		-- Check if we should include this configuration in the build		
+		local buildThis = true
 		
-		-- Put the default configuration first. 
-		-- This fixes a problem where auto-generated header files put in the src folders are incorrectly updated
-		--  as the script name includes the name of the first cfg processed   
-		if cfg.buildcfg == prj.defaultconfiguration then 
-			table.insert(cfgs, 1, cfg)
-		else
-			table.insert(cfgs, cfg)
+		-- Only build source gen & command once
+		if cfg.kind == 'SourceGen' or cfg.kind == 'Command' then
+			if isSourceGen then
+				buildThis = false
+			end
+			isSourceGen = true
+		end
+		
+		if cfg.kind == 'Command' then
+			prjTargetName = prjTargetName:match("[^/]*$")
+		end
+		
+		if buildThis then   
+			-- Put the default configuration first. 
+			-- This fixes a problem where auto-generated header files put in the src folders are incorrectly updated
+			--  as the script name includes the name of the first cfg processed
+			if cfg.buildcfg == prj.defaultconfiguration then 
+				table.insert(cfgs, 1, cfg)
+			else
+				table.insert(cfgs, cfg)
+			end
 		end
 	end
 	
 	local tmr = timer.start('ninja.writeProjectTargets')
+	
 	-- Compile
 	for _,cfg in ipairs(cfgs) do
-				
 		local toolsetName = cfg.toolset
 		local toolset = premake.tools[toolsetName]
 		local allLinkInputs = {}
@@ -254,9 +288,14 @@ function ninja.writeProjectTargets(prj, scope)
 		-- List of all files in this config
 		local filesInCfg = filesPerConfig[cfg]
 		local srcdirFull = prj.basedir
-		local srcdir = string.replace(srcdirFull, repoRoot, '$root')
-		local objdir = string.replace(cfg.objdir, repoRoot, '$root')
-		local targetdir = string.replace(cfg.targetdir, repoRoot, '$root')
+		local hasObjdir = iif( isSourceGen, false, true )
+		local srcdir = string.replace(srcdirFull, repoRoot, ninja.rootVar)
+		local objdir = ''
+		local targetdir = ''
+		if hasObjdir then
+			objdir = string.replace(cfg.objdir, repoRoot, ninja.rootVar)
+			targetdir = string.replace(cfg.targetdir, repoRoot, ninja.rootVar)
+		end
 		local cfgname = string.replace(cfg.shortname, '_', '.')
 		
 		local numFilesToCompile = #(filesInCfg['Compile'] or {}) 
@@ -269,7 +308,9 @@ function ninja.writeProjectTargets(prj, scope)
 		
 		if not prj.name:find('/test',1,true) then
 			local foundO, foundT, foundS
-			objdirN,foundO = scope:set('objdir', objdir)
+			if hasObjdir then
+				objdirN,foundO = scope:set('objdir', objdir)
+			end
 			if targetdir ~= objdir then
 				targetdirN,foundT = scope:set('targetdir_' .. cfgname, targetdir)
 			else
@@ -283,7 +324,7 @@ function ninja.writeProjectTargets(prj, scope)
 				_p('#------------------------------------')
 				_p('')
 			end
-			if not foundO then _p(objdirN ..'='..objdir); end
+			if not foundO and hasObjdir then _p(objdirN ..'='..objdir); end
 			if not foundT then _p(targetdirN..'='..targetdir); end
 			if not foundS then _p(srcdirN..'='..srcdir); end
 			_p('')
@@ -306,10 +347,13 @@ function ninja.writeProjectTargets(prj, scope)
 				local outputFile
 				
 				local extraTargets = ninja.writeBuildRule(cfg, 'compile', fileName, scope)
-				table.insertflat( extraTargets, cfg.compiledepends )
+				if not isSourceGen then
+					-- SourceGen projects can have no compile dependencies, otherwise we end up in a loop
+					table.insertflat( extraTargets, cfg.compiledepends )
+				end
 				
 				-- See if it's worth creating extra build vars
-				makeShorterBuildVars(scope, extraTargets, numFilesToCompile)
+				makeShorterBuildVars(scope, extraTargets, numFilesToCompile, 'src')
 				
 				-- Check if we need to override the compile tool based on the extension
 				local fileExt = fileCfg.extension
@@ -339,7 +383,16 @@ function ninja.writeProjectTargets(prj, scope)
 					if extraTargets and #extraTargets > 0 then
 						-- Add implicit dependencies
 						implicitDeps = table.concat(extraTargets, ' ')
-						buildStr = buildStr .. '|'..implicitDeps 
+						
+						if #extraTargets > 1 then
+							local varName, alreadyExists = scope:getName(implicitDeps, 'deps')
+							if not alreadyExists then
+								_p('build '..varName..': phony '.. implicitDeps)
+							end
+							implicitDeps = varName
+						end
+						
+						buildStr = buildStr .. ' | '..implicitDeps 
 						extraTargets = nil
 					end
 					
@@ -352,6 +405,13 @@ function ninja.writeProjectTargets(prj, scope)
 					addBuildEdge(outputFullpath, buildCmd, implicitDeps, fileCompileOverrides)
 					
 					table.insert( allLinkInputs, outputFullpath )
+				elseif cfg.kind == 'Command' then
+					local fileTarget = srcdirN..'/'..sourceFileRel ..'.exec'
+					local buildStr = 'build ' .. fileTarget ..': exec '.. srcdirN..'/'..sourceFileRel
+					_p(buildStr)
+					addBuildEdge(fileTarget, buildStr, nil, nil)
+					table.insert( allLinkInputs, fileTarget )				
+					
 				elseif (linkTool == nil) or linkTool:isLinkInput(cfg, fileExt ) then
 					table.insert( allLinkInputs, srcdirN..'/'..sourceFileRel )
 				end
@@ -404,10 +464,13 @@ function ninja.writeProjectTargets(prj, scope)
 			local linkToolRuleName
 		
 			if not linkTool then
-				if not extraTargets then
+				if #extraTargets == 0 then
 					if cfg.buildtarget then 
 						local buildCmd = 'phony '..table.concat(allLinkInputs, ' ')
 						local linkTargetN = targetdirN..'/'..cfg.buildtarget.name
+						if isSourceGen then
+							linkTargetN = prjTargetName
+						end
 						addBuildEdge(linkTargetN, buildCmd)
 						_p('build '..linkTargetN..': '..buildCmd)
 						table.insert(finalTargetInputs,linkTargetN)
@@ -439,16 +502,13 @@ function ninja.writeProjectTargets(prj, scope)
 				
 				local implicitDepStr = nil
 				if #implicitDeps > 0 then
+					implicitDepStr = table.concat(implicitDeps, ' ')
 					if ninjaVarLevel >= 2 then
-						for _,v in ipairs(implicitDeps) do
-							local varName,found = scope:getName(v, 'dep')
-							if not found then
-								_p(varName..'='..v)
-							end
-							implicitDepStr = implicitDepStr..' '..ninja.escVarName(varName)
+						local varName, alreadyExists = scope:getName(implicitDepStr, 'deps')
+						if not alreadyExists then
+							_p('build '..varName..': phony '.. implicitDepStr)
 						end
-					else
-						implicitDepStr = table.concat(implicitDeps, ' ')
+						implicitDepStr = varName
 					end
 				 
 					buildStr = buildStr .. ' | ' .. implicitDepStr
@@ -512,21 +572,36 @@ function ninja.writeProjectTargets(prj, scope)
 		table.insertflat(finalTargetInputs, postbuildTargets)
 
 		-- Phony rule to build it all
-		local buildCmd = 'phony '..table.concat(finalTargetInputs, ' ')
-		addBuildEdge(finalTargetN, buildCmd)
-		_p('build '..finalTargetN..': '..buildCmd)
-		_p('')
-		prjTargets[cfgname] = { finalTargetN }
+		if cfg.kind == 'Command' and #finalTargetInputs == 1 then
+			finalTargetN = finalTargetInputs[1]
+		else
+			local buildCmd = 'phony '..table.concat(finalTargetInputs, ' ')
+			addBuildEdge(finalTargetN, buildCmd)
+			_p('build '..finalTargetN..': '..buildCmd)
+			_p('')
+		end
+		
+		if cfg.buildwhen ~= 'explicit' then
+			prjTargets[cfgname] = { finalTargetN }
+		end
+				
 	end -- for cfgs
 timer.stop(tmr)
 	
+	local defaultTarget = 'donothing'
 	if prj.defaultconfiguration and prj.configs[prj.defaultconfiguration] then
-		local defaultTarget = 'phony '..prj.name..'.'..prj.defaultconfiguration
-		addBuildEdge(prj.name, defaultTarget)
-		_p('build '..prj.name..': '..defaultTarget)
-		_p('')
-		prjTargets[''] = { prj.name }
+		
+		local cfg = prj.configs[prj.defaultconfiguration]
+		if cfg.buildwhen ~= 'explicit' then
+			defaultTarget = prj.name..'.'..prj.defaultconfiguration
+			prjTargets[''] = { prj.name }
+		end
 	end
+	if not ninja.buildEdges[prjTargetName] then
+		_p('build '..prjTargetName..': phony '..defaultTarget)
+		addBuildEdge(prjTargetName, defaultTarget)
+	end
+	_p('')
 	
 	return prjTargets
 end
@@ -552,6 +627,10 @@ function ninja.writeBuildRule(cfg, stage, inputs, scope)
 				-- Generate a unique name to reference this post build command
 				cfg.stageNumber[stage] = (cfg.stageNumber[stage] or 0) + 1
 				local buildTarget = cfg.project.name..'.'..cfg.buildcfg..'.'..stage..tostring(cfg.stageNumber[stage])
+				if cfg.kind == 'Command' then
+					buildTarget = cfg.project.name:match("[^/]*$")
+				end
+				
 				local cmd = buildrule.commands or ''
 				if type(cmd) == 'table' then cmd = table.concat(cmd, '\n') end
 				repeat
@@ -562,15 +641,11 @@ function ninja.writeBuildRule(cfg, stage, inputs, scope)
 				local implicits = buildrule.dependencies or '' 
 				if type(implicits) == 'table' then implicits = table.concat(implicits, ' ') end
 				
-				if buildrule.absOutput then
-					buildTarget = buildrule.absOutput
-				end 
-				
 				if buildrule.language then
 					-- Write the command to a file, and execute it
-					local script = cmd:replace('$root', repoRoot)
+					local script = cmd:replace(ninja.rootVar, repoRoot)
 					local scriptFilename = cfg.targetdir..'/'..buildTarget..'.'..buildrule.language
-					local scriptFilenameFull = scriptFilename:replace('$root', repoRoot)
+					local scriptFilenameFull = scriptFilename:replace(ninja.rootVar, repoRoot)
 					
 					-- Test if contents are different before writing
 					local writeToFile = true
@@ -595,13 +670,17 @@ function ninja.writeBuildRule(cfg, stage, inputs, scope)
 					--implicits = implicits..' '..scriptFilenameFull
 				end
 				
+				if buildrule.absOutput and #buildrule.absOutput > 0 then
+					buildTarget = scope:getBest(buildrule.absOutput)
+				end 
+ 				
 				-- This fixes the issue where auto-generated header files placed in the source tree incorrectly get
 				--  multiple build edges for the same target output, despite the command being the same for each cfg
 				if not ninja.buildEdges[buildTarget] then
 					if type(inputs) == 'table' then inputs = table.concat(inputs, ' ') end
 	
 					if #implicits > 0 then
-						inputs = inputs .. '|'..implicits
+						inputs = inputs .. ' | '..implicits
 					end
 	
 					local buildCmd = 'exec '..inputs
@@ -637,28 +716,30 @@ function ninja.writeEnvironment(sln)
 
 end
 
-function ninja.writeHeader(writeExecRule, buildFileDir)
-	--printDebug('builddir = "'..ninja.builddir..'"') 
-	--printDebug('repoRoot = "'..repoRoot..'"') 
-	if _OPTIONS.relativepaths then
-		_p('root=' .. path.getrelative(buildFileDir, repoRoot))
-		_p('builddir=' .. path.getrelative(buildFileDir, ninja.builddir))
-	else
-		_p('root=' .. repoRoot)
+function ninja.writeRoot(buildFileDir)
+	if _OPTIONS.absolutepaths then
+		_p('workingdir=' .. repoRoot)
+		_p('root=.')
 		_p('builddir=' .. ninja.builddir)
+	else
+		_p('workingdir=' .. path.getrelative(buildFileDir, repoRoot))
+		_p('root=.')
+		_p('builddir=' .. path.getrelative(repoRoot, ninja.builddir))
 	end
 	_p('')
-	
-	if writeExecRule then
-		_p('rule exec')
-		_p(' command=$cmd')
-		_p(' description=$description')
-		_p('')
-	end
-	
-	--_p('build clean: exec')
-	--_p(' cmd=ninja -t clean')
 end
+
+function ninja.writeExecRule()
+	_p('rule exec')
+	_p(' command=$cmd')
+	_p(' description=$description')
+	_p('build donothing: phony $builddir/.donothing')
+	_p('build $builddir/.donothing: exec')
+	_p(' cmd=touch $builddir/.donothing')
+	_p(' description=Prepare environment')
+	_p('')
+end
+
 
 --
 -- Define any toolsets which are not yet defined
@@ -700,7 +781,6 @@ local tmr = timer.start('ninja.writeToolsets')
 			:each()
 		 do
 			local toolName = toolsetName .. '_' .. tool.toolName
-			local toolBin = tool:getBinary(cfg)
 			local toolDef = {}
 			scope:set(toolName, toolDef)
 
@@ -713,12 +793,6 @@ local tmr = timer.start('ninja.writeToolsets')
 		    -- Set up tool vars
 		    _pt('# Tool ' .. toolName)
 		    
-			-- Get nice name for tool bin
-			local toolDir = path.getdirectory(toolBin)
-			local toolDirN, found = scope:set('tooldir_' .. toolsetName, toolDir)
-			if not found then _pt(toolDirN .. '=' .. toolDir); end
-			toolBin = string.replace(toolBin, toolDir, ninja.escVarName(toolDirN))
-		    
 		    local toolVars = {}
 			
 	    	-- Extract command line args as build variables
@@ -728,13 +802,13 @@ local tmr = timer.start('ninja.writeToolsets')
 		    	if not ninja.notBuildVar[k] then
 		    		-- Register build variable
 		    		local varName = toolName .. '_'..k
-			    	toolDef[varName] = v
+			    	toolDef[k] = v
 			    	toolVars[k] = ninja.escVarName(varName)
 			    	
 			    	-- Write build variable default value
 			    	if v ~= '' then
 			    		-- Substitute $root
-		    			v = string.replace(v, repoRoot, '$root')
+		    			v = string.replace(v, repoRoot, ninja.rootVar)
 			    		
 				    	local varName,found = scope:set(varName, v)
 				    	if not found then
@@ -763,7 +837,7 @@ local tmr = timer.start('ninja.writeToolsets')
 			end
 		    
 			_pt('rule ' .. toolName)
-				local cmdLine = tool:getCommandLine(toolBin, toolVars)
+				local cmdLine = tool:getCommandLine(toolVars)
 				_pt('  command=' .. cmdLine )
 				if depfileName then
 				_pt('  depfile=' .. depfileName )
@@ -792,14 +866,14 @@ function ninja.generateDefaultBuild(sln, buildFileDir, scope)
 	_p('# Type "ninja help" for usage help')
 	_p('')
 	
-	ninja.writeHeader(false, buildFileDir)
+	ninja.writeRoot(buildFileDir)
 		
 	_p('# Main Build')
 	local mainBuildNinjaFile = path.join(ninja.builddir,'buildedges.ninja')
-	if _OPTIONS.relativepaths then
-		_p('subninja '..path.getrelative(buildFileDir, mainBuildNinjaFile) )
-	else
+	if _OPTIONS.absolutepaths then
 		_p('subninja '..mainBuildNinjaFile)
+	else
+		_p('subninja '..path.getrelative(buildFileDir, mainBuildNinjaFile) )
 	end
 	_p('')
 	

@@ -16,6 +16,8 @@
 	local slnDone = {}
 	local globalScope = {}
 	
+	ninja.rootVar = "$root/"
+	
 --
 -- The Ninja build action. Currently only tested with C++
 --
@@ -150,12 +152,9 @@
 
 	function ninja.setNinjaBuildDir(sln)
 		-- builddir is where the build log & main ninja file is placed
-		if not repoRoot then 
-			repoRoot = path.getabsolute(_WORKING_DIR)
-		end
 		if (not ninja.builddir) then
 			ninja.builddir = iif( sln.ninjaBuildDir, sln.ninjaBuildDir, repoRoot)
-			ninja.builddir = ninja.builddir:replace('$root',repoRoot)
+			ninja.builddir = ninja.builddir:replace(ninja.rootVar,repoRoot)
 			ninja.checkIgnoreFiles(ninja.builddir)
 		end
 		ninja.builddir = path.getabsolute(ninja.builddir)
@@ -171,7 +170,7 @@
 			end
 			
 			if os.isfile('build.ninja') then
-				print('Running ninja...')
+				print('Building with ninja...')
 			else
 
 				local dir = os.getcwd()
@@ -195,7 +194,7 @@
 			
 			local rv = os.executef(cmd)
 			if rv ~= 0 then
-				os.exit(1)
+				os.exit(rv)
 			end
 		elseif args:contains('print') then
 			local printAction = premake.action.get('print')
@@ -234,14 +233,15 @@
 					print('Did not find *.ninja in the '..sc.ignore..' file ('..dir..'). Do you want to add it? [Recommended] (Y/n)')
 					local key = io.input():read(1)
 					if key:lower() == 'y' then
+						local f
 						if os.isfile(ignoreFile) then
 							f = io.open(ignoreFile, "a")
 						else
 							f = io.open(ignoreFile, "w")
 						end
 						f:write('*.ninja\n')
+						io.close(f)				
 					end
-					io.close(f)				
 				end
 			end
 		end
@@ -305,7 +305,7 @@ timer.stop(tmr)
 			return result
 		else
 			-- handle simple replacements
-			result = value:gsub("$", "$$")
+			result = value:gsub("%$%(", "%$%$%(")
 			return result
 		end
 	end
@@ -318,6 +318,9 @@ timer.stop(tmr)
 	 
 	function ninja.escVarName(varName)
 		if string.sub(varName,1,1) == '$' then
+			return varName
+		end
+		if #varName == 0 then
 			return varName
 		end
     	if true or string.find(varName, ".", 1, true) then
@@ -335,14 +338,16 @@ timer.stop(tmr)
 	ninja.scope = {}
 	ninjaVar = {}
 	ninjaVar.nameToValue = {}
+	ninjaVar.findNameIdx = {}
 	ninjaVar.valueToName = {}
-	ninjaVar.valueSeen = {}
+	ninjaVar.valueToWeight = {}
 	
 	function ninja.newScope(scopeName)
 		local s = inheritFrom(ninjaVar)
 		
 		ninja.scope[scopeName] = s
 		
+		s:set('','')
 		s:set('builddir', ninja.builddir)
 		s:set('root', repoRoot)
 		s:set('tmp', '')
@@ -359,8 +364,8 @@ timer.stop(tmr)
 			return ninja.escVarName(existingVarName), false
 		end
 		
-		local count = (self.valueSeen[value] or 0) + 1
-		self.valueSeen[value] = count
+		local count = (self.valueToWeight[value] or 0) + 1
+		self.valueToWeight[value] = count
 		
 		if count > threshold then
 			-- Create a new var
@@ -385,7 +390,8 @@ timer.stop(tmr)
 				varNameM = alternateVarNames[1]
 				alternateVarNames = table.remove(alternateVarNames, 1)
 			else
-				i = i + 1
+				i = (self.findNameIdx[varName] or i) + 1
+				self.findNameIdx[varName] = i
 				varNameM = varName .. tostring(i)
 			end
 		end
@@ -428,7 +434,7 @@ timer.stop(tmr)
 		
 		local tmr = timer.start('ninja.getBest')
 		-- try $root first
-		v = string.replace(v, repoRoot, '$root')
+		v = string.replace(v, repoRoot, ninja.rootVar)
 		local bestV = self.valueToName[v]
 		--[[
 		local bestV = v
@@ -465,13 +471,23 @@ timer.stop(tmr)
 		end
 	end
 
-	function ninjaVar:getBuildVars(inputs, weight)
+	function ninjaVar:getBuildVars(inputs, weight, newVarPrefix)
+		newVarPrefix = newVarPrefix or 'tmp'
 		local rv = {}
-		local createNewVars = iif( weight > 5, 'tmp', nil)
 		for k,v in pairs(inputs or {}) do
-			if not v:startswith('$') then
+			if v ~= '' and not v:startswith('$') then
+			
+				if v:find(repoRoot,1,true) then
+					v = string.replace(v, repoRoot, ninja.rootVar)
+					inputs[k] = v
+				end
+			
+				local vWeight = (self.valueToWeight[v] or 0) + weight
+				self.valueToWeight[v] = vWeight
+				local createNewVars = iif( vWeight > 5, newVarPrefix, nil)
+			
 				local varName, alreadyExists = self:getName(v, createNewVars)
-				if varName then
+				if varName and k ~= varName then
 					inputs[k] = ninja.escVarName(varName)
 				end
 				if not alreadyExists then

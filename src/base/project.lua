@@ -528,7 +528,7 @@
 			end
 			local action = premake.action.current()
 			if action.valid_tools then
-				return premake[action.valid_tools.cc[1]]
+				return premake[action.valid_tools.cc[1] ]
 			end
 			return premake.gcc
 		else

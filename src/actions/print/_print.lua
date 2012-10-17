@@ -9,15 +9,19 @@
 	local config = premake5.config
 	local project = premake5.project
 	local solution = premake.solution
+	local globalContainer = premake5.globalContainer
 	local keyedblocks = premake.keyedblocks
 	Print.filterProj = nil
 	Print.level	= 5		-- Print everything
 	
 	Print.fieldLevel = {
 		uses = 1,
+		compiledepends = 1,
 		includedirs = 1,
 		linkAsStatic = 1,
 		linkAsShared = 1,
+		system = 99,
+		architecture = 99,
 	}
 	
 	newaction {
@@ -149,16 +153,18 @@
 		end
 		
 		indent(2)
+			globalContainer.bakeUsageProject(uProj)
+			project.bake(uProj)
 			local ucfg = project.getConfigs(uProj):first() or {}
 			for k,v in pairs(ucfg) do
-				if v and premake.fields[k] and premake.fields[k].usagefield then
+				if v and premake.fields[k] then
 					local level = Print.fieldLevel[k] or 5
 					if type(v) == 'table' then
 						if #v > 0 then
-							p(level, k..' = '..table.concat(v, ' '))
+							p(level, k, v)
 						end
 					else
-						p(level, k..' = '..tostring(v))
+						p(level, k, v)
 					end
 				end
 			end
@@ -170,14 +176,22 @@
 
 		p0('RealProject', prj.name)
 		indent(2)
+		p1('solution', prj.solution.name)
 		for cfg in project.eachconfig(prj) do
-			p5('kind', cfg.kind)
-			local cfg2, accessedBlocks = keyedblocks.getfield(prj, cfg.filter)
-			local usedBlockNames = Seq:new(accessedBlocks):selectKey(function(b) return b.__name end):except(nil)
-				:unique():toTable()
-			table.sort(usedBlockNames)
-			p1('uses', usedBlockNames)
-			p5('usesconfig', cfg.usesconfig)
+			p1('kind', cfg.kind)
+			local cfg2 = keyedblocks.getfield(prj, cfg.filter)
+			p1('uses', cfg.uses)
+			p1('alwaysuses', cfg.alwaysuses)
+			local usesconfig = {}
+			for k,v in pairs(cfg.usesconfig) do
+				if k == v then
+					table.insert( usesconfig, k )
+				else 
+					table.insert( usesconfig, k..'='..v )
+				end
+			end
+			p5('usesconfig', usesconfig)
+			p1('compiledepends', cfg.compiledepends)
 			
 			p0('config', cfg.shortname)
 			indent(2)
@@ -218,9 +232,11 @@
 					end
 					
 	--				p0('cfg          ', cfg)
+					p5('defines      ', cfg.defines)
 					p1('includedirs  ', cfg.includedirs)
 					p1('compiledepends', cfg.compiledepends)
 					p4('flags        ', cfg.flags)
+					p4('compilewrapper', cfg.compilewrapper)
 					if compileTool then
 						p5('compiler tool', compileTool.toolName)
 						p5('compiler bin ', compileTool:getBinary(cfg))
@@ -228,20 +244,25 @@
 						for k,v in pairs(compileCmdArgs) do
 						 p5(' .' .. tostring(k) ..' = '..v)
 						end				
-						p5('compile cmd  ', compileTool:getCommandLine(compileTool:getBinary(), compileCmdArgsFlat))
+						p5('compile cmd  ', compileTool:getCommandLine(compileCmdArgsFlat))
 					end
 					p5('objdir       ', cfg.objdir)
 					if linkTool then
-						p5('link cmd     ', linkTool:getCommandLine(linkTool:getBinary(), linkCmdArgsFlat))
+						p5('link cmd     ', linkTool:getCommandLine(linkCmdArgsFlat))
 						p5('link flags   ', linkTool:getsysflags(cfg), ' ')
 						for k,v in pairs(linkCmdArgs) do
 						 p5(' .' .. tostring(k) ..' = '..v)
 						end				
 					end
-					p5('link target  ', cfg.linktarget.directory .. '/' .. cfg.linktarget.name)
+					if (cfg.linktarget or {}).name then
+						p5('link target  ', cfg.linktarget.directory .. '/' .. cfg.linktarget.name)
+					end
 					p1('linkAsStatic ', cfg.linkAsStatic)
 					p1('linkAsShared ', cfg.linkAsShared)
-					p1('build target  ', cfg.buildtarget.directory .. '/' .. cfg.buildtarget.name)
+					p4('linkerwrapper', cfg.linkerwrapper)
+					if (cfg.buildtarget or {}).name then
+						p1('build target  ', cfg.buildtarget.directory .. '/' .. cfg.buildtarget.name)
+					end
 					p5('build targetdir', cfg.targetdir )
 					if cfg.prebuildcommands and 0 < #cfg.prebuildcommands then
 						p5('prebuild cmd ', table.concat(cfg.prebuildcommands, "\n" .. indentStr .. '                '))

@@ -12,6 +12,9 @@
 	-- List of all real & all usage projects
 	globalContainer.allUsage = {}
 	globalContainer.allReal = {}
+	
+	-- List of usage aliases
+	globalContainer.aliases = {}
 
 --
 -- Bake all the projects
@@ -29,26 +32,32 @@
 				print("Generating configurations : "..cfgNameList:mkstring(', ').." ...")
 			end
 		end
+		
+		local toBake = globalContainer.allReal
+		if _ACTION == 'print' then
+			local prjName = _ARGS[2]
+			toBake = { [prjName] = globalContainer.allReal[prjName] }
+		end
 				
 		-- Bake all real projects, but don't resolve usages		
 		local tmr = timer.start('Bake projects')
-		for prjName,prj in pairs(globalContainer.allReal) do
+		for prjName,prj in pairs(toBake) do
 			project.bake(prj)
 		end
 		timer.stop(tmr)
 		
 		-- Assign unique object directories to every project configurations
 		-- Note : objdir & targetdir can't be inherited from a usage for ordering reasons 
-		globalContainer.bakeobjdirs(globalContainer.allReal)
+		globalContainer.bakeobjdirs(toBake)
 		
 		-- Apply the usage requirements now we have resolved the objdirs
 		--  This function may recurse
-		for _,prj in pairs(globalContainer.allReal) do
+		for _,prj in pairs(toBake) do
 			globalContainer.applyUsageRequirements(prj)
 		end		
 				
 		-- expand all tokens (must come after baking objdirs)
-		for i,prj in pairs(globalContainer.allReal) do
+		for i,prj in pairs(toBake) do
 			oven.expandtokens(prj, "project")
 			for cfg in project.eachconfig(prj) do
 				oven.expandtokens(cfg, "config")
@@ -89,53 +98,49 @@
 				local realCfg = project.getconfig(realProj, buildcfg, platform)
 
 				local usageKB = keyedblocks.createblock(usageProj.keyedblocks, { buildcfg, platform })
-				usageKB.__values = usageKB.__values or {}
 
-				-- Copy in default build target from the real proj
+				-- To use a library project, you need to link to its target
+				--  Copy the build target from the real proj
 				if realCfg.buildtarget and realCfg.buildtarget.abspath then
 					local realTargetPath = realCfg.buildtarget.abspath
 					if realCfg.kind == 'SharedLib' then
 						-- link to the target as a shared library
-						oven.mergefield(usageKB.__values, "linkAsShared", { realTargetPath })
+						oven.mergefield(usageKB, "linkAsShared", { realTargetPath })
 					elseif realCfg.kind == 'StaticLib' then
 						-- link to the target as a static library
-						oven.mergefield(usageKB.__values, "linkAsStatic", { realTargetPath })
+						oven.mergefield(usageKB, "linkAsStatic", { realTargetPath })
+					elseif realCfg.kind == 'SourceGen' then
+						oven.mergefield(usageKB, "compiledepends", { realProj.name })
 					elseif not realCfg.kind then
 						error("Can't use target, missing cfg.kind")
 					end
 				end
 				
-				if realCfg.kind == 'Header' then
-					local outputs = {}
-					for _,b in ipairs(realCfg.buildrule) do
-						if b.absOutput then
-							table.insert( outputs, b.absOutput )
+				-- Propagate fields
+				for fieldName, field in pairs(premake.propagatedFields) do
+					local usagePropagate = field.usagePropagation
+					local value = realCfg[fieldName]
+					local propagateValue = false
+					
+					if realCfg[fieldName] then
+						if usagePropagate == "Always" then
+							propagateValue = value
+						elseif usagePropagate == "StaticLinkage" and realCfg.kind == "StaticLib" then
+							propagateValue = value
+						elseif usagePropagate == "SharedLinkage" and realCfg.kind == "StaticLib" or realCfg.kind == "SharedLib" then
+							propagateValue = value
+						elseif type(usagePropagate) == 'function' then
+							propagateValue = usagePropagate(realCfg, value)
 						end
-					end
-					oven.mergefield(usageKB.__values, "compiledepends", outputs )
-				end
-							
-				-- Copy across some flags
-				local function mergeflag(destFlags, srcFlags, flagName)
-					if srcFlags and srcFlags[flagName] and (not destFlags[flagName]) then
-						destFlags[flagName] = flagName
-					end
-				end
-				usageKB.__values.flags = usageKB.__values.flags or {}
-				mergeflag(usageKB.__values.flags, realCfg.flags, 'ThreadingMulti')
-				mergeflag(usageKB.__values.flags, realCfg.flags, 'StdlibShared')
-				mergeflag(usageKB.__values.flags, realCfg.flags, 'StdlibStatic')
-			
-				-- Resolve the links in to linkAsStatic, linkAsShared
-				if realCfg.kind == 'SharedLib' then
-					-- If you link to a shared library, you also need to link to any shared libraries that it uses
-					oven.mergefield(usageKB.__values, "linkAsShared", realCfg.linkAsShared )
-				elseif realCfg.kind == 'StaticLib' then
-					-- If you link to a static library, you also need to link to any libraries that it uses
-					oven.mergefield(usageKB.__values, "linkAsStatic", realCfg.linkAsStatic )
-					oven.mergefield(usageKB.__values, "linkAsShared", realCfg.linkAsShared )
-				end
 						
+						if propagateValue then
+							oven.mergefield(usageKB, fieldName, propagateValue )
+						end
+					end						
+				end
+				
+				keyedblocks.resolveUses(usageKB, usageProj)
+				
 			end
 		end -- realProj
 
@@ -143,7 +148,8 @@
 	
 	-- May recurse
 	function globalContainer.applyUsageRequirements(prj)
-	
+		return true
+--[[
 		if prj.isUsage or prj.hasBakedUsage then
 			return true
 		end
@@ -176,21 +182,13 @@
 				globalContainer.bakeUsageProject(useProj)
 			
 				-- Merge in the usage requirements from the usage project
-				--  .getfield may recurse in to globalContainer.bakeUsageProject if the usage project has unbaked "uses"
+				--  .getfield may recurse in to globalContainer.bakeUsageProject if the usage project has unbaked uses
 				keyedblocks.getfield(useProj, cfgFilterTerms, nil, cfg)
+
 			end -- each use
 			
-			-- Move any links in to linkAsStatic or linkAsShared
-			if cfg.links then
-				if cfg.kind == premake.STATICLIB then
-					oven.mergefield(cfg, 'linkAsStatic', cfg.links)
-				else
-					oven.mergefield(cfg, 'linkAsShared', cfg.links)
-				end
-				cfg.links = nil
-			end
 		end  -- each cfg			
-		
+]]		
 	end
 
 --
@@ -206,6 +204,18 @@
 --
 
 	function globalContainer.bakeobjdirs(allProjects)
+		
+		if premake.fullySpecifiedObjdirs then
+			-- Assume user has assiged unique objdirs
+			for _,prj in pairs(allProjects) do
+				for cfg in project.eachconfig(prj) do
+					-- expand any tokens contained in the field
+					oven.expandtokens(cfg, "config", nil, "objdir")
+				end
+			end
+			return
+		end
+		
 		-- function to compute the four options for a specific configuration
 		local function getobjdirs(cfg)
 			local dirs = {}

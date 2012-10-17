@@ -51,6 +51,26 @@
 			return curr
 		end	
 	end
+	
+--
+-- Find searching backwards. Plain only.
+--
+	function string.rfind(s, pattern, start)
+		local i = start
+		local pi = #pattern
+		while i > 0 do
+			if s[i] == pattern[pi] then
+				pi = pi - 1
+				if pi == 0 then
+					return i
+				end
+			else
+				pi = #pattern
+			end
+			i = i - 1
+		end
+		return nil
+	end
 
 --
 -- Returns true if the string has a match for the plain specified pattern

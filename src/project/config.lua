@@ -50,6 +50,10 @@
 --
 
 	local function buildtargetinfo(cfg, kind, field)
+		if kind == 'SourceGen' then
+			return {}
+		end
+	
 		local basedir = project.getlocation(cfg.project)
 
 		local directory = cfg[field.."dir"] or cfg.targetdir or basedir
@@ -182,7 +186,7 @@
 		-- if an import library is in use, switch the target kind
 		local kind = cfg.kind
 		local field = "target"
-		if premake.iscppproject(cfg.project) then
+		if project.iscppproject(cfg.project) then
 			if cfg.system == premake.WINDOWS and kind == premake.SHAREDLIB and not cfg.flags.NoImportLib then
 				kind = premake.STATICLIB
 				field = "implib"
@@ -240,10 +244,10 @@
 				return false
 			end
 			-- can't link managed and unmanaged projects
-			if premake.iscppproject(source.project) then
-				return premake.iscppproject(target.project)
-			elseif premake.isdotnetproject(source.project) then
-				return premake.isdotnetproject(target.project)
+			if project.iscppproject(source.project) then
+				return project.iscppproject(target.project)
+			elseif project.isdotnetproject(source.project) then
+				return project.isdotnetproject(target.project)
 			end
 		end	
 
@@ -286,9 +290,9 @@
 				elseif part == "fullpath" then
 					item = link
 					if cfg.system == premake.WINDOWS then
-						if premake.iscppproject(cfg.project) then
+						if project.iscppproject(cfg.project) then
 							item = path.appendextension(item, ".lib")
-						elseif premake.isdotnetproject(cfg.project) then
+						elseif project.isdotnetproject(cfg.project) then
 							item = path.appendextension(item, ".dll")
 						end
 					end

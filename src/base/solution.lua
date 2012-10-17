@@ -24,6 +24,7 @@
 
 	function solution.new(name)
 		local sln = { }
+		local prefix
 
 		-- add to master list keyed by both name and index
 		if name == '_GLOBAL_CONTAINER' then
@@ -32,11 +33,14 @@
 			table.insert(premake.solution.list, sln)
 			premake.solution.list[name] = sln
 			ptypeSet( sln, "solution" )
+			prefix = name .. '/' 
 		end
 			
 		sln.name           = name
 		sln.basedir        = os.getcwd()			
 		sln.projects       = { }		-- real projects, not usages
+		sln.projectprefix  = prefix		-- default prefix is solution name
+		sln.namespaces     = { name..'/' }
 
 		-- merge in global configuration
 		local slnTemplate = premake5.globalContainer.solution 
@@ -99,6 +103,11 @@
 		local result = oven.merge({}, sln)
 		result.isbaked = true
 		
+		-- Set the defaultconfiguration if there's only one configuration
+		if #sln.configurations == 1 and not sln.defaultconfiguration then 
+			sln.defaultconfiguration = sln.configurations[1]
+		end 
+		
 		-- keep a reference to the original configuration blocks, in
 		-- case additional filtering (i.e. for files) is needed later
 		result.blocks = sln.blocks
@@ -106,7 +115,12 @@
 		-- Resolve baked projects
 		local prjList = {}	
 		for i,prj in ipairs(result.projects) do
-			table.insert( prjList, project.getRealProject(prj.name) )
+			local realProj = project.getRealProject(prj.name)
+			
+			if realProj and not prjList[realProj.name] then
+				table.insert( prjList, realProj )
+				prjList[realProj.name] = realProj
+			end				
 		end
 		result.projects = prjList
 		

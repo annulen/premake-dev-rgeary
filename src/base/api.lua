@@ -7,6 +7,8 @@
 
 	premake.api = {}
 	local api = premake.api
+	
+	local globalContainer = premake5.globalContainer
 
 --
 -- Here I define all of the getter/setter functions as metadata. The actual
@@ -29,11 +31,22 @@
 --  object-list		A list of tables				append new elements to the list
 
 -- Modifiers :
---  overwrite		Multiple instances will overwrite. Used on string-list.
---  uniqueValues	The final list will contain only unique elements 
+--  overwrite				Multiple instances will overwrite. Used on string-list.
+--  uniqueValues			The final list will contain only unique elements
+--  splitOnSpace 			If the field value contains a space, treat it as an array of two values. eg "aaa bbb" => { "aaa", "bbb" }
+--  isConfigurationKeyword	The value to this field will automatically be added to the filter list when evaluating xxx in 'configuration "xxx"' statements
+--  expandtokens			The value can contain tokens, eg. %{cfg.shortname}
+--  usagePropagation		Possible values : StaticLinkage, SharedLinkage, always. 
+--							When project 'B' uses project 'A', anything in project A's usage requirements will be copied to project B
+--		StaticLinkage	This field is propagated automatically from a project 'A' to project A's usage if A has kind="StaticLib". Used for linkAsStatic
+--		SharedLinkage	This field is propagated automatically from a project 'A' to project A's usage if A has kind="StaticLib" or kind="SharedLib". Used for linkAsShared,  
+--		Always			This field will always be propagaged to the usage requirement. Used for implicit compile dependencies
+--		(function)		Propagates the return value of function(cfg, value), if not nil 
 	
 	premake.fields = {}
 	premake.defaultfields = nil
+	premake.propagatedFields = {}
+	premake.fieldAliases = {}
 
 
 --
@@ -77,6 +90,24 @@
 					return api.remove(field, value)
 				end
 			end
+			
+			-- all fields get a usage function, which allows you to quickly specify usage requirements
+			_G["usage" .. n] = function(value)
+				-- Activate a usage project of the same name & configuration as we currently have
+				--  then apply the callback 
+				local activePrjSln = api.scope.project or api.scope.solution
+				local prjName = activePrjSln.name
+				local cfgTerms = (api.scope.configuration or {}).terms
+				local rv
+				
+				api.scopepush()
+				usage(prjName)
+					configuration(cfgTerms)
+					rv = api.callback(field, value)
+				api.scopepop()
+				
+				return rv
+			end
 		end
 		
 		-- Pre-process the allowed list in to a lower-case set
@@ -118,6 +149,7 @@
 				k = k:lower()
 				v = v:lower()
 				aliases[k] = v				
+				premake.fieldAliases[k] = v
 			end
 			field.aliases = aliases
 		end
@@ -131,6 +163,9 @@
 		-- add this new field to my master list
 		premake.fields[field.name] = field
 		
+		if field.usagePropagation then
+			premake.propagatedFields[field.name] = field 
+		end
 	end
 
 
@@ -147,7 +182,7 @@
 		else
 			target = api.scope.configuration
 		end
-				
+		
 		if not target then
 			error("no " .. scope .. " in scope", 4)
 		end
@@ -200,20 +235,31 @@
 		
 		-- fields with this property will allow users to customise using "configuration <value>"
 		if field.isConfigurationKeyword then
+			local useValue
 			if type(value) == 'table' then
-				-- if you have a keyed table, convert it in to a list of literal strings "key=value"
-				local svalue = {}
+				-- if you have a keyed table, eg. flags, convert it in to a table in the form key = "key=value"
+				useValue = {}
 				for k,v in pairs(value) do
+					v = v:lower()
+					if premake.fieldAliases[v] then
+						v = premake.fieldAliases[v]
+					end
+					
 					if type(k) == 'number' then
-						table.insert(svalue, tostring(v))
+						table.insert(useValue, tostring(v))
 					else
-						table.insert(svalue, tostring(k)..'='..tostring(v))
+						k = k:lower()
+						useValue[k] = k..'='..tostring(v)
 					end
 				end
-				value = svalue
+			else
+				if premake.fieldAliases[value] then
+					value = premake.fieldAliases[value]
+				end
+				useValue = { [field.name] = value:lower() }
 			end
 			
-			api.callback(premake.fields['usesconfig'], value)
+			api.callback(premake.fields['usesconfig'], useValue)
 		end
 		
 		-- A keyed value is a table containing key-value pairs, where the
@@ -276,9 +322,16 @@
 				for _, v in ipairs(value) do
 					addvalue(v)
 				end
+
+			elseif field.splitOnSpace and type(value) == 'string' and value:contains(' ') then
+				local v = value:split(' ')
+				addvalue(v)
 			
 			-- insert simple values
 			else
+				if field.uniqueValues then
+					target[value] = nil
+				end			
 				remover(target, value)
 			end
 		end
@@ -296,6 +349,7 @@
 
 	function api.checkvalue(value, allowed, aliases)
 		local valueL = value:lower()
+		local errMsg
 		
 		if aliases then
 			if aliases[valueL] then
@@ -306,9 +360,12 @@
 		-- If allowed it set to nil, allow everything. 
 		-- But if allowed is a function and it returns nil, it's a failure
 		if allowed then
+			local allowedValues, errMsg
 			if type(allowed) == "function" then
-				local allowedValues = allowed(valueL)
-				if not allowedValues then return nil end
+				allowedValues,errMsg = allowed(value)
+				if not allowedValues then 
+					return nil, errMsg
+				end
 				
 				allowedValues = toSet(allowedValues, true)
 				if allowedValues[valueL] then
@@ -326,7 +383,7 @@
 				end
 			end
 			
-			local errMsg = "invalid value '" .. value .. "'."
+			errMsg = "invalid value '" .. value .. "'."
 			if allowedValues and type(allowedValues)=='table' then
 				errMsg = errMsg..' Allowed values are {'..table.concat(allowedValues, ' ')..'}'
 			end
@@ -407,7 +464,7 @@
 		else
 			local filename = path.getabsolute(value)
 			local dir = path.getdirectory(value)
-			if not os.isfile(filename) then
+			if not os.isfile(filename) and not filename:match("%.pb%..*") then
 				if not os.isdir(dir) then
 					print("Warning : \""..dir.."\" is not a directory, can't find "..filename)
 				else
@@ -468,6 +525,23 @@
 			end
 		end
 	end
+	
+	function api.setusesconfig(target, name, field, values)
+		target[name] = target[name] or {}
+		target = target[name]
+		
+		if type(values) == 'string' then
+			values = { values }
+		end
+		
+		for k,v in pairs(values) do
+			if type(k) == 'number' then
+				table.insert(target, v)
+			else
+				target[k] = v
+			end
+		end
+	end
 
 
 --
@@ -523,8 +597,17 @@
 		if name == 'buildrule' then
 			-- aliases
 			value.commands = value.commands or value.command or value.cmd
+			if type(value.commands) == 'string' then
+				value.commands = { value.commands }
+			end
 			value.outputs = value.outputs or value.output
-			local outputStr = Seq:new(value.outputs):select(function(p) return path.getabsolute(p) end):mkstring()
+			local outputStr = Seq:new(value.outputs):select(function(p) 
+				if not p:startswith('%') then
+					return path.getabsolute(p)
+				else
+					return p
+				end
+			end):mkstring()
 			value.absOutput = outputStr
 			for k,v in ipairs(value.dependencies or {}) do
 				value.dependencies[k] = path.getabsolute(v)
@@ -556,6 +639,7 @@
 			error("expected string; got table", 3)
 		end
 
+		local err
 		value, err = api.checkvalue(value, field.allowed, field.aliases)
 		if not value then
 			error(err, 3)
@@ -569,7 +653,7 @@
 --
 	function api.setflaglist(target, name, field, value)
 		if type(value) == 'table' then
-			for k,v in ipairs(value) do
+			for k,v in pairs(value) do
 				if type(k) == 'string' then v = k..'='..v end
 				api.setflaglist(target, name, field, v)
 			end
@@ -588,8 +672,10 @@
 		target = target[name]
 		
 		if key and v2 then
+			-- eg. flags.Optimize=On
 			target[key] = v2
 		else
+			-- eg flags.Symbols = "Symbols"
 			target[value] = value
 		end		
 	end
@@ -614,15 +700,6 @@
 		kind = "path"
 	}
 	
-	-- Wrap the compile tool with this command. The original compile command & flags will be
-	-- appended, or substituted in place of "$CMD" 
-	api.register {
-		name = "compilerwrapper",
-		scope = "config",
-		kind = "string",
-		expandtokens = true,
-	}
-
 	api.register {
 		name = "buildaction",
 		scope = "config",
@@ -642,9 +719,6 @@
 		kind = "string-list",
 		expandtokens = true,
 		namealiases = { "buildflags", "cflags" },
-		-- 'usagefield = true' means that the field can be a "usage requirement". It will copy this field's values
-		--   from the usage secton in to the destination project 
-		usagefield = true,							
 	}
 
 	-- buildrule takes a table parameter with the keys :  
@@ -663,13 +737,38 @@
 		kind = "object-list",
 		expandtokens = true,
 	}
-	
-	-- The compile depends on the specified project
+
+	-- buildwhen specifies when Premake should output the project in this configuration. Default is "always"
+	-- always 		Always output the project in this configuration and build it by default
+	-- used			Only output the project  in this configuration when it is used by another project
+	-- explicit		Always output the project in this configuration, but only build it when explicitly specified
+	api.register {
+		name = "buildwhen",
+		scope = "config",
+		kind = "string",
+		
+		allowed = { "always", "explicit", "used", }
+	}
+	premake.buildWhen = {}
+	premake.buildWhen['always'] = 1
+	premake.buildWhen['explicit'] = 2
+	premake.buildWhen['used'] = 3  
+
+	-- The compile implicitly depends on the specified project
 	api.register {
 		name = "compiledepends",
 		scope = "config",
 		kind = "string-list",
-		usagefield = true,
+		usagePropagation = "Always",
+	}
+	
+	-- Wrap the compile tool with this command. The original compile command & flags will be
+	-- appended, or substituted in place of "$CMD" 
+	api.register {
+		name = "compilerwrapper",
+		scope = "config",
+		kind = "string",
+		expandtokens = true,
 	}
 
 	api.register {
@@ -690,7 +789,6 @@
 		name = "cxxflags",
 		kind = "string-list",
 		scope = "config",
-		usagefield = true,
 	}
 	
 	api.register {
@@ -741,7 +839,7 @@
 		scope = "config",
 		kind = "string-list",
 		expandtokens = true,
-		usagefield = true,
+		splitOnSpace = true,
 		namealiases = { "define" },
 	}
 	
@@ -749,14 +847,6 @@
 		name = "deploymentoptions",
 		scope = "config",
 		kind = "string-list",
-		expandtokens = true,
-		usagefield = true,
-	}
-
-	api.register {
-		name = "excludes",
-		scope = "config",
-		kind = "file-list",
 		expandtokens = true,
 	}
 
@@ -771,7 +861,14 @@
 		name = "flags",
 		scope = "config",
 		kind  = "flaglist",
-		usagefield = true,
+		isConfigurationKeyword = true,
+		usagePropagation = function(cfg, flags)
+			local rv = {}
+			-- Propagate these flags from a project to a project's usage requirements 
+			rv.Threading = flags.Threading
+			rv.Stdlib = flags.Stdlib
+			return rv
+		end,
 		allowed = {
 			"AddPhonyHeaderDependency",		 -- for Makefiles, requires CreateDependencyFile
 			"CreateDependencyFile",
@@ -789,7 +886,10 @@
 			Inline = { "Disabled", "ExplicitOnly", "Anything", },
 			"Managed",
 			"MFC",
-			"ThreadingMulti",		-- Multithreaded system libs. Propagated to usage.
+			Threading = {
+				"Multi",		-- Multithreaded system libs. Always propagated to usage.
+				"Single",		-- Single threaded system libs. Always propagated to usage.
+			},
 			"NativeWChar",
 			"No64BitChecks",
 			"NoEditAndContinue",
@@ -806,12 +906,12 @@
 			"Profiling",			-- Enable profiling compiler flag
 			"SEH",
 			"StaticRuntime",
-			"StdlibShared",			-- Use shared standard libraries. Propagated to usage.
-			"StdlibStatic",			-- Use static standard libraries. Propagated to usage.
+			Stdlib = { "Static", "Shared" },			-- Use static/shared standard libraries. Propagated to usage.
 			"Symbols",
 			"Unicode",
 			"Unsafe",
 			Warnings = { 'On', 'Off', 'Extra' },
+			"WholeArchive",
 			"WinMain",
 		},
 		aliases = {
@@ -897,7 +997,6 @@
 		kind = "directory-list",
 		uniqueValues = true,				-- values in includedirs are unique. Duplicates are discarded 
 		expandtokens = true,
-		usagefield = true,
 		namealiases = { "includedir" },
 	}
 	
@@ -909,6 +1008,7 @@
 		uniqueValues = true,
 	}
 
+	-- Specifies the kind of project to output
 	api.register {
 		name = "kind",
 		scope = "config",
@@ -919,7 +1019,13 @@
 			"WindowedApp",
 			"StaticLib",
 			"SharedLib",
-			"SourceGen",					-- Ouput is a header or source file, usually a compile dependency for another project
+			
+			-- Ouput is a header or source file, usually a compile dependency for another project
+			--  This only gets built once for one configuration, as the output files are in the source tree
+			"SourceGen",
+			
+			-- Input files are script files to be executed
+			"Command",
 		},
 		aliases = {
 			Executable = 'ConsoleApp',
@@ -936,6 +1042,7 @@
 			"C++",
 			"C#",
 			"assembler",
+			"protobuf",
 		},
 	}
 
@@ -944,7 +1051,6 @@
 		name = "ldflags",
 		scope = "config",
 		kind = "string-list",
-		usagefield = true,
 	}
 
 	api.register {
@@ -952,7 +1058,7 @@
 		scope = "config",
 		kind = "directory-list",
 		expandtokens = true,
-		usagefield = true,
+		usagePropagation = "SharedLinkage",		-- Propagate to usage requirement if kind="StaticLib" or kind="SharedLib"
 		namealiases = { 'libdir' }
 	}
 
@@ -962,10 +1068,12 @@
 		scope = "config",
 		kind = "string-list",
 		expandtokens = true,
-		usagefield = true,
 		namealiases = { "linkflags" }
 	}
 	
+	-- if the value is a static lib project, link it as a static lib & propagate if the current project is StaticLib
+	-- if the value is a shared lib project, link it as a shared lib & propagate if the current project is StaticLib or SharedLib
+	-- if the value is neither, link it as a shared system lib & propagate if the current project is StaticLib or SharedLib
 	api.register {
 		name = "links",
 		scope = "config",
@@ -981,23 +1089,36 @@
 			return value
 		end,
 		expandtokens = true,
-		usagefield = true,
+		-- usage propagation is dealt with by converting it to linkAsShared / linkAsStatic once it's resolved
 	}
 	
+	-- Link to the shared lib version of a system library
+	--  If the same library is also defined with linkAsStatic, then linkAsShared will override it
 	api.register {
 		name = "linkAsShared",
 		scope = "config",
 		kind = "string-list",
 		expandtokens = true,
-		usagefield = true,
+		usagePropagation = "SharedLinkage",
 	}
 	
+	-- Link to the static lib version of a system library
+	--  If the same library is also defined with linkAsShared, then linkAsShared will override this  
 	api.register {
 		name = "linkAsStatic",
 		scope = "config",
 		kind = "string-list",
 		expandtokens = true,
-		usagefield = true,
+		usagePropagation = "StaticLinkage"
+	}
+	
+	-- Wrap the linker tool with this command. The original compile command & flags will be
+	-- appended, or substituted in place of "$CMD" 
+	api.register {
+		name = "linkerwrapper",
+		scope = "config",
+		kind = "string",
+		expandtokens = true,
 	}
 	
 	api.register {
@@ -1073,6 +1194,33 @@
 		expandtokens = true,
 	}
 	
+	-- Project full-names consist of namespace/shortname, where namespace can contain further / characters
+	-- Projects created after this statement will have their name prefixed by this value.
+	-- When using a project, you can refer to it by its shortname if you are in the same solution
+	-- The default prefix is the solution name
+	-- If the project name is equal to the prefix, the prefix is ignored.
+	--  eg :
+	--   solution "MySoln"
+	--   project "prjA"				-- this is equivalent to project "MySoln/prjA"
+	--	 projectprefix "base"
+	--	 project "prjA" ...			-- this is equivalent to project "base/prjA"
+	--   project "B/prjB" ...		-- this is equivalent to project "base/B/prjB"
+	--	 projectprefix "MySoln/client"
+	--	 project "prjA" ...			-- this is equivalent to project "MySoln/client/prjA"
+	--   project "MySoln/client"	-- special case, this is equivalent to project "MySoln/client"
+	api.register {
+		name = "projectprefix",
+		scope = "solution",
+		kind = "string",
+		allowed = function(value)
+			if not value:endswith("/") then
+				return nil, "projectprefix must end with / : "..value..' in '..path.getrelative(repoRoot or '',_SCRIPT)
+			end
+			return value
+		end,
+		namealiases = { "projectPrefix", }
+	}
+	
 	-- 
 	-- CPP = Directory which a protobuf project outputs C++ files to (optional) 
 	-- Directory which a protobuf project outputs Java files to (optional)
@@ -1081,7 +1229,6 @@
 		scope = "config",
 		kind = "key-path",
 		expandtokens = true,
-		usagefield = true,
 	}
 
 	api.register {
@@ -1089,7 +1236,6 @@
 		scope = "config",
 		kind = "string-list",
 		expandtokens = true,
-		usagefield = true,
 	}
 
 	api.register {
@@ -1097,7 +1243,6 @@
 		scope = "config",
 		kind = "directory-list",
 		expandtokens = true,
-		usagefield = true,
 	}
 
 	api.register {
@@ -1105,7 +1250,6 @@
 		scope = "config",
 		kind = "string-list",
 		expandtokens = true,
-		usagefield = true,
 	}
 	
 	-- Specify a [.so/.dll] search directory to hard-code in to the executable
@@ -1114,7 +1258,7 @@
 		scope = "config",
 		kind = "path-list",
 		expandtokens = true,
-		usagefield = true,
+		usagePropagation = "SharedLinkage",
 	}
 
 	api.register {
@@ -1175,13 +1319,25 @@
 		allowed = function() return getSubTableNames(premake.tools); end 
 	}
 	
+	-- Specifies a project/usage that this project configuration depends upon
 	api.register {
 		name = "uses",
 		scope = "config",
 		kind = "string-list",
-		namealiases = { "using" },
+		namealiases = { "using", "use" },
 		splitOnSpace = true,			-- "apple banana carrot" is equivalent to { "apple", "banana", "carrot" }
 	}
+
+	-- Like "uses", but is always propagated to all dependent projects, not just the first level real projects
+	api.register {
+		name = "alwaysuses",
+		scope = "config",
+		kind = "string-list",
+		namealiases = { "alwaysuse" },
+		splitOnSpace = true,			-- "apple banana carrot" is equivalent to { "apple", "banana", "carrot" }
+		usagePropagation = "Always",
+	}
+	
 	
 	-- Add a new keyword to the configuration filter
 	--  for any project we use which defines a configuration with this keyword will have that section applied
@@ -1191,30 +1347,10 @@
 	api.register {
 		name = "usesconfig",
 		scope = "config",
-		kind = "string-list",
+		kind = "usesconfig",
 		namealiases = { "useconfig" },
 	}
 
-	-- Sets an prefix that is prepended to any "uses" statements which don't resolve without it
-	-- The prefix always ends with a /
-	-- eg. project "ModuleWithALongName/base" ... project "ModuleWithALongName/test"; namePrefix "ModuleWithALongName"; uses "base"; ... 	
-	api.register {
-		name = "usesPrefix",
-		scope = "project",
-		kind = "string",
-		allowed = function(value)
-			-- Always append / to the prefix
-			if type(value) ~= 'string' then
-				return nil, "Expected string"
-			end
-			if value:endswith('/') then
-				return value
-			else
-				return value..'/'
-			end
-		end,
-	}
-	
 	api.register {
 		name = "uuid",
 		scope = "project",
@@ -1576,9 +1712,6 @@
 
 	function excludes(value)
 		removefiles(value)
-		-- remove this when switching to "ng" actions
-		-- also remove the api.register() call for excludes
-		return accessor("excludes", value)
 	end
 	
 
@@ -1606,7 +1739,15 @@
 		-- confusing: "terms" are what the user specifies in the script, "keywords" are
 		-- the Lua patterns that result. I'll refactor to better names.
 		cfg.keywords = { }
-		for _, word in ipairs(cfg.terms) do
+		local aliases = premake.fields['flags']
+		for i, word in ipairs(cfg.terms) do
+			
+			-- check if the word is an alias for something else
+			if aliases[word] then
+				word = aliases[word]
+				cfg.terms[i] = word
+			end
+			
 			table.insert(cfg.keywords, path.wildcards(word):lower())
 		end
 		
@@ -1632,12 +1773,18 @@
 		return cfg
 	end
 
+	-- Starts a usage project section
+	--  If a real project of the same name already exists, this section defines the usage requirements for the project
+	--  If a real project of the same name does not exist, this is a pure "usage project", a set of fields to copy to anything that uses it
 	function api.usage(name)
 		if (not name) then
 			--Only return usage projects.
 			if(ptype(premake.CurrentContainer) ~= "project") then return nil end
-			if(not premake.CurrentContainer.isUsage) then return nil end
-			return premake.CurrentContainer
+			if(premake.CurrentContainer.isUsage) then 
+				return premake.CurrentContainer
+			else
+				return api.usage(premake.CurrentContainer.name)
+			end
 		elseif type(name) ~= 'string' then
 			error('Invalid parameter for usage, must be a string')
 		elseif name == '_GLOBAL_CONTAINER' then
@@ -1706,7 +1853,7 @@
 --
 	function api.global()
 		local c = api.solution('_GLOBAL_CONTAINER')
-		premake5.globalContainer.solution = c
+		globalContainer.solution = c
 	end
 
 	function api.solution(name)
@@ -1718,22 +1865,30 @@
 			end
 		end
 		
+		local sln
 		if name == '_GLOBAL_CONTAINER' then	
-			premake.CurrentContainer = premake5.globalContainer.solution
+			sln = globalContainer.solution
 		else
-			premake.CurrentContainer = premake.solution.get(name)
+			sln = premake.solution.get(name)
 		end
 		
-		if (not premake.CurrentContainer) then
-			premake.CurrentContainer = premake.solution.new(name)
+		if (not sln) then
+			sln = premake.solution.new(name)
 		end
 
+		premake.CurrentContainer = sln
+		
 		-- add an empty, global configuration
 		configuration { }
 		
 		-- this is the new place for storing scoped objects
-		api.scope.solution = premake.CurrentContainer
+		api.scope.solution = sln
 		api.scope.project = nil
+		
+		-- set the default project prefix
+		if name ~= '_GLOBAL_CONTAINER' then	
+			sln.projectprefix = sln.projectprefix or (name..'/')
+		end
 		
 		return premake.CurrentContainer
 	end
@@ -1812,12 +1967,17 @@
 			end
 		end
 
+		if not protoPath then
+			error("protoPath is nil")
+		end
+
 		local inputFilePattern = toList(t.files or '*.proto')
 		local outputs = {}
 
-		-- Create a new project, append /protobuf on to the active project name
+		-- Create a new project, append /protobuf on to the active project name or directory name
 		local prj = api.scope.project or {}
-		local prjName = iif( prj.name, prj.name..'/protobuf', 'protobuf')
+		local prjName = prj.name or path.getbasename(os.getcwd())
+		prjName = prjName..'/protobuf'
 		
 		-- ** protoc's cpp/java/python_out is relative to the specified --proto_path **
 		  
@@ -1832,24 +1992,63 @@
 		
 		api.scopepush()
 		project(prjName)
+			language("protobuf")
 			toolset("protobuf")
 			kind("SourceGen")
 			files(inputFilePattern)
 			protobufout(outputs)
+			compiledepends(prjName)  -- if you use this project, it should be propagated as a compile dependency
+			alwaysuse("system/protobuf")	-- any derived project should always include the protobuf includes
+
+			-- add the protobuf project to the usage requirements for the active solution
+		solution(api.scope.solution.name)
+			uses(prjName)
+			
 		api.scopepop()
-		uses(prjName)
 	end
 
-	-- "export" explicitly lists which projects are included in a solution
-	function api.export(name)
+	-- "export" explicitly lists which projects are included in a solution, and gives it an alias
+	function api.export(aliasName, fullProjectName)
+		fullProjectName = fullProjectName or aliasName 
+
 		local sln = api.scope.solution
 		if not sln then
 			error("Can't export, no active solution to export to")
 		end
-		if type(name) ~= 'string' then
-			error("export expected string parameter, found "..type(name))
+		if type(aliasName) ~= 'string' then
+			error("export expected string parameter, found "..type(aliasName))
+		end
+		
+		if not aliasName:startswith(sln.name..'/') then
+			aliasName = sln.name .. '/' ..aliasName
+		end
+		if not fullProjectName:startswith(sln.name..'/') then
+			fullProjectName = sln.name .. '/' ..fullProjectName
+		end
+		
+		-- set up alias
+		if fullProjectName ~= aliasName then
+			globalContainer.aliases[aliasName] = fullProjectName
 		end
 		
 		sln.exports = sln.exports or {}
-		sln.exports[name] = name
+		sln.exports[aliasName] = fullProjectName
+		
+		-- solution's usage requirements include exported projects
+		api.scopepush()
+			usage(sln.name..'/'..sln.name)
+			uses(aliasName)
+		api.scopepop()
+	end
+
+	function api.explicitproject(prjName)
+		api.project(prjName)
+		api.explicit(prjName)
+	end
+	
+	function api.explicit(prjName)
+		local prj = premake5.project.getRealProject(prjName)
+		if prj then
+			prj.isExplicit = true
+		end
 	end

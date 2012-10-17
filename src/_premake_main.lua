@@ -5,7 +5,7 @@
 --
 
 
-	local scriptfile    = "premake4.lua"
+	local scriptfile    = "premake*.lua"
 	local shorthelp     = "Type 'premake4 --help' for help"
 	local versionhelp   = "premake4 (Premake Build Script Generator) %s"
 	
@@ -47,8 +47,19 @@
 	
 	local _HandlingError = 0
 	function _ErrorHandler ( errobj )
-		if( errobj and _HandlingError == 0 ) then
+		if _HandlingError == 0 then
+			local stack
+	    	if( type(errobj)=='thread' ) then
+	    		stack = debug.traceback(errobj)
+	    	else
+	    		stack = debug.traceback('',2)
+	    	end
+	    	
+	    	if stack:find("/debugger.lua",1,true) then
+	    		return false
+	    	end
 		 	_HandlingError = 1
+
 		    local errStr = tostring(errobj) or "("..type(errobj)..")"
 		    if( type(errobj)=='table' ) then
 		      errStr = ("Table: {" ..
@@ -56,12 +67,8 @@
 		      	, ',') .. "}"):sub(1,1500)
 		    end
 			print("Error: \"" .. errStr .. "\"")
+			print(stack)
 	    	--for k ,v in pairs(_G) do print("GLOBAL:" , k,v) end
-	    	if( type(errobj)=='thread' ) then
-	    		print(debug.traceback(errobj))
-	    	else
-	    		print(debug.traceback('',2))
-	    	end
 	    	print('')
 	    	_HandlingError = 0
 	    end
@@ -190,12 +197,16 @@
 			end
 		end
 		
-		if (os.isfile(fname)) then
+		-- 
+		local action = premake.action.current()
+		local ishelp = (action or {}).ishelp
+		local requirePremakeFile = (not ishelp) and (not _OPTIONS.interactive) 
+		
+		if (os.isfile(fname) and requirePremakeFile) then
 			timer.start('Load build script')
 			dofile(fname, true)
 			timer.stop()
 		end
-
 
 		-- Process special options
 		
@@ -217,31 +228,40 @@
 			return 1
 		end
 
+		-- Refetch action as file script may have altered it		
+		action = premake.action.current()
+		ishelp = (action or {}).ishelp
 		
-		-- If there wasn't a project script I've got to bail now
-		
-		if (not os.isfile(fname)) then
-			error("No Premake script ("..scriptfile..") found!", 2)
-		end
-
-		
-		-- Validate the command-line arguments. This has to happen after the
-		-- script has run to allow for project-specific options
-		
-		local action = premake.action.current()
 		if not action and premake.defaultaction then
 			-- retry with default action
 			_ACTION = premake.defaultaction
 			action = premake.action.current()
 		end
-		if (not action) then
-			error("Error: no such action '" .. _ACTION .. "'", 0)
-		end
 
+
+		-- Validate the command-line arguments. This has to happen after the
+		-- script has run to allow for project-specific options
 		ok, err = premake.option.validate(_OPTIONS)
 		if (not ok) then error("Error: " .. err, 0) end
 		
 
+		-- Run interactive mode
+		if _OPTIONS.interactive then
+			print("Premake interactive shell. Press Ctrl-C to exit.")
+			debug.dotty()
+			return 0
+		end
+		
+		-- If there wasn't a project script I've got to bail now
+		if (not os.isfile(fname) and not ishelp) then
+			error("No Premake script ("..scriptfile..") found!", 2)
+		end
+		
+		if (not action) then
+			error("Error: no such action '" .. _ACTION .. "'", 0)
+		end
+
+		
 		-- Sanity check the current project setup
 
 		ok, err = premake.checktools()
@@ -253,11 +273,12 @@
 		ok, err = injectplatform(_OPTIONS["platform"])
 		if (not ok) then error("Error: " .. err, 0) end
 
+		premake.spellCheckEnable(_G, "_G")
 		
 		-- Quick hack: disable the old configuration baking logic for the new
 		-- next-gen actions; this code will go away when everything has been
 		-- ported to the new API
-		if not action.ishelp then
+		if not ishelp then
 			timer.start('Bake configurations')
 			if not action.isnextgen then
 				print("Building configurations...")
@@ -270,6 +291,15 @@
 			timer.stop()
 		end
 			
+		premake.spellCheckDisable(_G)
+
+		-- Set the repoRoot if it's not already set		
+		if not repoRoot then 
+			repoRoot = path.getabsolute(_WORKING_DIR)
+		end
+		if not repoRoot:endswith('/') then
+			repoRoot = repoRoot ..'/'
+		end
 		
 		-- Hand over control to the action
 		printDebug("Running action '%s'...", action.trigger)

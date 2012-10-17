@@ -43,7 +43,7 @@ end
 
 		excludes
 		{
-			"src/host/lua-5.1.4/src/lua.c",
+			--"src/host/lua-5.1.4/src/lua.c",
 			"src/host/lua-5.1.4/src/luac.c",
 			"src/host/lua-5.1.4/src/print.c",
 			"src/host/lua-5.1.4/**.lua",
@@ -73,8 +73,8 @@ end
 			links { "ole32" }
 
 		configuration "linux"
-			defines     { "LUA_USE_POSIX", "LUA_USE_DLOPEN" }
-			links       { "m", "dl" } 
+			defines     { "LUA_USE_LINUX", }
+			links       { "m", "dl", "readline", "curses" } 
 
 		configuration "bsd"
 			defines     { "LUA_USE_POSIX", "LUA_USE_DLOPEN" }

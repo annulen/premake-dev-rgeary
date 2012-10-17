@@ -116,8 +116,9 @@
 		elseif premake.apiKeywords[key] then
 			return nil		-- allowed null values
 		else
-			local di = debug.getinfo(3, "S")
-			local fileLine = di.source:sub(2) .. ':' .. di.linedefined
+			local source = debug.getinfo(3, "S")
+			local line = debug.getinfo(3,"l")
+			local fileLine = source.source:sub(2) .. ':' .. line.currentline
 			error("Value not defined : "..tableName..'.'..key.." at "..fileLine, 2)
 		end
 	end
