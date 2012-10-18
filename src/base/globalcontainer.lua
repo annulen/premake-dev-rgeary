@@ -34,7 +34,7 @@
 		end
 		
 		local toBake = globalContainer.allReal
-		if _ACTION == 'print' then
+		if _ACTION == 'print' and _ARGS[2] then
 			local prjName = _ARGS[2]
 			toBake = { [prjName] = globalContainer.allReal[prjName] }
 		end

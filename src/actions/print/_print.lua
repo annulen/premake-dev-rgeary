@@ -179,7 +179,7 @@
 		p1('solution', prj.solution.name)
 		for cfg in project.eachconfig(prj) do
 			p1('kind', cfg.kind)
-			local cfg2 = keyedblocks.getfield(prj, cfg.filter)
+			local cfg2 = keyedblocks.getfield2(prj, cfg.filter, nil, {})
 			p1('uses', cfg.uses)
 			p1('alwaysuses', cfg.alwaysuses)
 			local usesconfig = {}
@@ -247,6 +247,11 @@
 						p5('compile cmd  ', compileTool:getCommandLine(compileCmdArgsFlat))
 					end
 					p5('objdir       ', cfg.objdir)
+					local files = {}
+					for _,v in ipairs(cfg.files) do
+						table.insert( files, path.getrelative(repoRoot, v) )
+					end
+					p5('compilewrapper', files)
 					if linkTool then
 						p5('link cmd     ', linkTool:getCommandLine(linkCmdArgsFlat))
 						p5('link flags   ', linkTool:getsysflags(cfg), ' ')
