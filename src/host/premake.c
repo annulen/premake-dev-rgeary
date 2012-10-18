@@ -67,7 +67,9 @@ static const luaL_Reg string_functions[] = {
 };
 
 static const luaL_Reg debug_functions[] = {
+#ifndef LUAJIT
 	{ "dotty", lua_dotty },
+#endif
 	{ NULL, NULL }
 };
 

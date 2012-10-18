@@ -36,3 +36,9 @@ Unix Worksheet.worksheet
 project.bbprojectdata
 Premake4.tmproj
 *~
+*.o
+*.dasc
+luajit
+.git/
+*.png
+.gitignore

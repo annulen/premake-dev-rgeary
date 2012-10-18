@@ -16,6 +16,12 @@ if premakeVersion <= 4.3 then
 	checkFn("toolset")
 end
 
+-- Enable JIT with --jit option
+newoption {
+	trigger = "jit",
+	description = "Build Premake to use LuaJIT",
+}
+
 --
 -- Define the project. Put the release configuration first so it will be the
 -- default when folks build using the makefile. That way they don't have to 
@@ -23,15 +29,19 @@ end
 --
 
 	solution "Premake4"
-		configurations { "Release", "Debug" }
+		if _OPTIONS['jit'] then
+			configurations { "DebugJIT", "ReleaseJIT" }
+		else
+			configurations { "Release", "Debug", }
+		end
+		
 		location ( _OPTIONS["to"] )
 	
 	project "Premake4"
 		targetname  "premake4"
 		language    "C"
 		kind        "ConsoleApp"
-		flags       { "No64BitChecks", "ExtraWarnings", "StaticRuntime" }	
-		includedirs { "src/host/lua-5.1.4/src" }
+		flags       { "No64BitChecks", "ExtraWarnings" }	
 		ninjaBuildDir "."
 
 		files 
@@ -51,12 +61,14 @@ end
 		}
 			
 		configuration "Debug"
+			includedirs { "src/host/lua-5.1.4/src" }
 			targetdir   "bin/debug"
 			objdir			"obj/debug"
 			defines     "_DEBUG"
 			flags       { "Symbols" }
 			
 		configuration "Release"
+			includedirs { "src/host/lua-5.1.4/src" }
 			targetdir   "bin/release"
 			objdir			"obj/release"
 			defines     "NDEBUG"
@@ -93,8 +105,49 @@ end
 			
 		configuration { "solaris" }
 			linkoptions { "-Wl,--export-dynamic" }
+			
+	  -- Non LuaJIT configurations
+	  configuration { "Debug or Release" }
+			excludes "src/host/luajit-2.0/**.*"
+			flags "StaticRuntime"
 
+		-- LuaJIT configurations
 
+		configuration { "DebugJIT or ReleaseJIT" }
+			excludes { "src/host/lua-5.1.4/lua.c" }
+			excludes { "src/host/lua-5.1.4/**.*" }
+			excludes { "src/host/luajit-2.0/**.*" }
+			includedirs { "src/host/luajit-2.0/src" }
+			libdirs { "src/host/luajit-2.0/src" }
+			links { "lua51" }			
+			define "LUAJIT"
+
+		configuration { "DebugJIT or ReleaseJIT", "vs*" }
+			prebuildcommands
+			{
+				"cd src\\host\\luajit-2.0\\src\\",
+				"msvcbuild.bat static"
+			}
+			
+		configuration { "DebugJIT or ReleaseJIT", "not vs*" }
+			prebuildcommands
+			{
+				"cd src\\host\\luajit-2.0\\",
+				"make"
+			}
+			
+		configuration "DebugJIT"
+			targetdir   "bin/debugJIT"
+			objdir			"obj/debugJIT"
+			defines     "_DEBUG"
+			flags       { "Symbols" }
+			
+		configuration "ReleaseJIT"
+			targetdir   "bin/releaseJIT"
+			objdir			"obj/releaseJIT"
+			defines     "NDEBUG"
+			flags       { "OptimizeSpeed", "Symbols" }
+			
 
 --
 -- A more thorough cleanup.
