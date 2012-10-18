@@ -7,7 +7,7 @@
 -- project, and can be retrieved by calling the getconfig() or eachconfig().
 --
 -- Copyright (c) 2008-2012 Jason Perkins and the Premake project
-
+--[[
 	premake.bake = { }
 	local bake = premake.bake
 
@@ -728,3 +728,4 @@
 			table.insert(cfg.__fileconfigs, fcfg)
 		end
 	end
+]]

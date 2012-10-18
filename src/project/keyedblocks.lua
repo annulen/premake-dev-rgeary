@@ -61,6 +61,10 @@ function keyedblocks.create(obj, parent)
 		return obj
 	end
 	
+	if parent == obj then
+		parent = nil
+	end
+	
 	local namespaces = obj.namespaces
 	
 	local tmr = timer.start('keyedblocks.create')
@@ -102,7 +106,7 @@ function keyedblocks.create(obj, parent)
 				-- Insert term in to keyedblocks
 				kbcfg[term] = kbcfg[term] or {}
 				if kb.__name then
-					kbcfg[term].__name = kb.__name ..':'.. term
+					kbcfg[term].__name = term ..':'.. kb.__name
 				end
 
 				-- recurse kb
@@ -227,10 +231,12 @@ function keyedblocks.getUsage(name, namespaces)
 end
 
 function keyedblocks.bake(usage)
-	if ptype(usage) == 'project' then
-		globalContainer.bakeUsageProject(usage)
-	else
-		keyedblocks.create(usage)
+	if not usage.keyedblocks then
+		if ptype(usage) == 'project' then
+			globalContainer.bakeUsageProject(usage)
+		else
+			keyedblocks.create(usage)
+		end
 	end
 end
 
@@ -339,93 +345,44 @@ function keyedblocks.getfield2(obj, filter, fieldName, dest)
 		return nil
 	end
 	local kbBase = obj.keyedblocks
-	
-	local filterStr = getKeys(filter)
-	table.sort(filterStr)
-	filterStr = table.concat(filterStr, ' ')
-	if fieldName then
-		filterStr = filterStr..':'..fieldName
-	end
-
-	local function insertBlockList(dest, src)
-		if src then
-			for _,block in ipairs(src.foundBlocks) do
-				table.insert(dest.foundBlocks, block)
-			end
-			for _,block in pairs(src.recursiveBlocks or {}) do
-				if block.__name then
-					dest.recursiveBlocks[block.__name] = block
-				else
-					table.insert( dest.recursiveBlocks, block )
-				end
-			end
-		end
-	end
-
-	--[[
-	local ignoreFields = toSet({ '__cache', '__config', '__name', '__parent', '__namespaces'  })
-	local function insertBlockList(dest, src)
-	if not fieldName then
-
-	for k,v in pairs(src or {}) do
-	if k == '__removes' then
-	dest[k] = dest[k] or {}
-	table.insert( dest[k], v )
-	elseif not ignoreFields[k] then
-	oven.mergefield(dest, k, v)
-	end
-	end
-
-	elseif src and src[fieldName] and not ignoreFields[fieldName] then
-	oven.mergefield(dest, fieldName, src[fieldName])
-	end
-	end
-	]]
 
 	-- Find the values & .removes structures which apply to 'keywords'
 	local accessedBlocks = {}
+	local foundBlocks = {}
 
 	local function findBlocks(kb)
-		local rv = {
-			foundBlocks = {},
-			recursiveBlocks = {},
-		}
-
+		
 		if not kb or table.isempty(kb) then
-			return rv
+			return nil
 		elseif accessedBlocks[kb] then
-			table.insert(rv.recursiveBlocks, kb)
-			return rv
+			return nil
 		end
 		accessedBlocks[kb] = kb
-
-		-- Check the cache
-		if false and (kb.__cache or {})[filterStr] then
-			local cachedResult = kb.__cache[filterStr]
-			-- apply cached found blocks & apply uncached/skipped recursive blocks
-			rv = findBlocks(cachedResult.recursiveBlocks)
-			insertBlockList(rv, cachedResult)
-
-			return rv
-		end
 
 		-- Apply parent before block
 		if kb.__parent then
 			keyedblocks.bake(kb.__parent)
-			local parentBlocks = findBlocks(kb.__parent.keyedblocks)
-			insertBlockList(rv, parentBlocks)
+			findBlocks(kb.__parent.keyedblocks)
+		end
+
+		-- New : Apply usages before block, so the block can override them
+		-- Old : Apply usages after block
+		if kb.__uses then
+			for useProjName, useProj in pairs(kb.__uses) do
+				keyedblocks.bake(useProj)
+				findBlocks(useProj.keyedblocks)
+			end
 		end
 
 		-- Found some values to add/remove
-		insertBlockList( rv, { foundBlocks = { kb } } )
+		table.insert( foundBlocks, kb )
 
 		-- Iterate through the filters and apply any blocks that match
 		if kb.__config then
 			for _,term in pairs(filter) do
 				-- check if this combination of terms has been specified
 				if kb.__config[term] then
-					local configBlocks = findBlocks(kb.__config[term])
-					insertBlockList(rv, configBlocks)
+					findBlocks(kb.__config[term])
 				end
 			end
 		end
@@ -442,37 +399,24 @@ function keyedblocks.getfield2(obj, filter, fieldName, dest)
 				end
 				if not match then
 					-- recurse
-					local notconfigBlocks = findBlocks(notTermKB)
-					insertBlockList(rv, notconfigBlocks)
+					findBlocks(notTermKB)
 				end
 			end
 		end
 
-		-- Apply usages after block
-		if kb.__uses then
-			for useProjName, useProj in pairs(kb.__uses) do
-				keyedblocks.bake(useProj)
-				local usesBlocks = findBlocks(useProj.keyedblocks)
-				insertBlockList(rv, usesBlocks)
-			end
-		end
-
-		if (kb.__cache or {})[filterStr] then
-			local cacheBlocks = kb.__cache[filterStr]
-			if not table.equals(cacheBlocks, rv.foundBlocks) then
-				local x =0
-			end
-		end
-
-		-- Add to cache
-		kb.__cache = kb.__cache or {}
-		kb.__cache[filterStr] = rv
-
-		return rv
-
 	end -- findBlocks
 
-	local foundBlocks = findBlocks(kbBase).foundBlocks
+	local filterStr = getKeys(filter)
+	table.sort(filterStr)
+	filterStr = table.concat(filterStr, ' ')
+	
+	kbBase.__cache = kbBase.__cache or {}
+	if kbBase.__cache[filterStr] then
+		foundBlocks = kbBase.__cache[filterStr]
+	else
+		findBlocks(kbBase)
+	end
+	kbBase.__cache[filterStr] = foundBlocks
 
 	if not fieldName then
 		rv.filter = table.deepcopy(filter)

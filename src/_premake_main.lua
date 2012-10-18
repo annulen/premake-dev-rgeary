@@ -185,22 +185,24 @@
 		
 		math.randomseed(os.time())
 		
+		local action = premake.action.current()
+		local ishelp = (action or {}).ishelp
+		local requirePremakeFile = (not ishelp) and (not _OPTIONS.interactive) 
 		
 		-- If there is a project script available, run it to get the
 		-- project information, available options and actions, etc.
 		
 		local fname = _OPTIONS["file"]
+		local premakeFiles = {}
 		if not fname then
-			local premakeFiles = os.matchfiles('premake*.lua')
+			premakeFiles = os.matchfiles(scriptfile)
 			if #premakeFiles == 1 then
 				fname = premakeFiles[1]
+			elseif table.contains(premakeFiles, 'premake4.lua') then
+				-- legacy support
+				fname = 'premake4.lua' 
 			end
 		end
-		
-		-- 
-		local action = premake.action.current()
-		local ishelp = (action or {}).ishelp
-		local requirePremakeFile = (not ishelp) and (not _OPTIONS.interactive) 
 		
 		if (os.isfile(fname) and requirePremakeFile) then
 			timer.start('Load build script')
@@ -254,7 +256,11 @@
 		
 		-- If there wasn't a project script I've got to bail now
 		if (not os.isfile(fname) and not ishelp) then
-			error("No Premake script ("..scriptfile..") found!", 2)
+			if #premakeFiles == 0 then
+				error("No Premake script ("..scriptfile..") found!", 2)
+			else
+				error("Multiple Premake scripts found : "..table.concat(premakeFiles, ' '), 2)
+			end
 		end
 		
 		if (not action) then

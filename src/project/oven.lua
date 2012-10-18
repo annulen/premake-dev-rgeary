@@ -446,10 +446,10 @@ timer.stop(tmr)
 		if not field then
 			cfg[name] = value
 		else
-			if field.kind:startswith("key-") then
-				oven.mergekeyvalue(cfg, name, field.kind, value)
+			if field.isKeyedTable then
+				oven.mergekeyvalue(cfg, name, field, value)
 			else
-				oven.mergevalue(cfg, name, field.kind, value)
+				oven.mergevalue(cfg, name, field, value)
 			end
 		end
 		timer.stop(tmr)
@@ -468,16 +468,13 @@ timer.stop(tmr)
 --    The object containing the key-value pairs.
 -- 
 
-	function oven.mergekeyvalue(target, fieldname, fieldkind, values)
+	function oven.mergekeyvalue(target, fieldname, field, values)
 		-- make sure I've got an object to hold the key-value pairs
 		target[fieldname] = target[fieldname] or {}
 		
-		-- get the data type of the values (remove the "key-" part)
-		fieldkind = fieldkind:sub(5)
-		
 		-- merge in the values
 		for key, value in pairs(values) do
-			oven.mergevalue(target[fieldname], key, fieldkind, value)
+			oven.mergevalue(target[fieldname], key, field, value)
 		end
 	end
 
@@ -494,13 +491,13 @@ timer.stop(tmr)
 --    The object containing the key-value pairs.
 -- 
 
-	function oven.mergevalue(target, fieldname, fieldkind, value)
+	function oven.mergevalue(target, fieldname, field, value)
 		-- list values get merged, others overwrite; note that if the 
 		-- values contain tokens they will be modified in the token 
 		-- expansion phase, so important to make copies of objects
-		if fieldkind == 'flaglist' or  fieldkind == 'usesconfig' then
+		if field.kind == 'flaglist' or  field.kind == 'usesconfig' then
 			target[fieldname] = oven.mergekeyedtables(target[fieldname] or {}, value)
-		elseif fieldkind:endswith("list") then
+		elseif field.isList then
 			target[fieldname] = oven.mergetables(target[fieldname] or {}, value)
 		else
 			target[fieldname] = table.deepcopy(value)
@@ -586,16 +583,25 @@ timer.stop(tmr)
 		local tmr = timer.start('oven.removefromfield')
 		if field and removes then
 			for key, pattern in ipairs(removes) do
-				pattern = path.wildcards(pattern):lower()
+				local wpattern = path.wildcards(pattern)
+				local found = true
+				if pattern == wpattern then
+					-- Quick check for the entry before searching for it
+					found = field[pattern]
+				end
 				
-				local i = 1
-				while i <= #field do
-					local value = field[i]:lower()
-					if value:match(pattern) == value then
-						field[field[i]] = nil
-						table.remove(field, i)
-					else
-						i = i + 1
+				if found then	
+					wpattern = wpattern:lower()
+					
+					local i = 1
+					while i <= #field do
+						local value = field[i]:lower()
+						if value:match(wpattern) == value then
+							field[ field[i] ] = nil
+							table.remove(field, i)
+						else
+							i = i + 1
+						end
 					end
 				end
 				
