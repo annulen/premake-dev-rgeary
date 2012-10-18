@@ -212,6 +212,7 @@
 --
 
 	local function domatch(result, mask, wantfiles)
+		local tmr = timer.start("os.domatch")
 		-- need to remove extraneous path info from the mask to ensure a match
 		-- against the paths returned by the OS. Haven't come up with a good
 		-- way to do it yet, so will handle cases as they come up
@@ -245,6 +246,7 @@
 					end
 				end
 				os.matchdone(m)
+				timer.stop(tmr)
 				return
 			end
 			local wildcard = path.join(basedir, "*")
@@ -276,6 +278,7 @@
 		end
 
 		matchwalker(basedir)
+		timer.stop(tmr)
 	end
 
 	function os.matchdirs(...)

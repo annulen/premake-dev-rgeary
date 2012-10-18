@@ -18,6 +18,10 @@
 -- and will be going away as soon as I have a chance to port them.
 --
 
+-- isList 			true if it's an list of objects (unordered, unless allowDuplicates=true) 
+-- allowDuplicates	Allow duplicate values, order dependent
+-- isKeyedTable 	Values are in a keyed table. Multiple tables with the same key will overwrite the value.
+
 --	kind			Description						Multiple instance behaviour			Comments
 ------------------------------------------------------------------------------------------------
 --  string			A single string value			overwrite
@@ -28,7 +32,6 @@
 --  file-list		A list of files					append new elements to the list		Can contain wildcards
 --  key-array		A keyed table					overwrite
 --  object			A table							overwrite
---  object-list		A list of tables				append new elements to the list
 
 -- Modifiers :
 --  overwrite				Multiple instances will overwrite. Used on string-list.
@@ -44,7 +47,6 @@
 --		(function)		Propagates the return value of function(cfg, value), if not nil 
 	
 	premake.fields = {}
-	premake.defaultfields = nil
 	premake.propagatedFields = {}
 	premake.fieldAliases = {}
 
@@ -73,6 +75,15 @@
 		if field.namealiases then
 			names = table.join(names, field.namealiases)
 		end
+		
+		if field.kind:startswith("key-") then
+			field.kind = field.kind:sub(5)
+			field.isKeyedTable = true
+		end
+		if field.kind:endswith("-list") then
+			field.kind = field.kind:sub(1, -6)
+			field.isList = true
+		end
 
 		for _,n in ipairs(names) do
 			if rawget(_G,n) then
@@ -85,7 +96,7 @@
 			end
 			
 			-- list values also get a removal function
-			if api.islistfield(field) and not api.iskeyedfield(field) then
+			if field.isList and not field.isKeyedTable then
 				_G["remove" .. n] = function(value)
 					return api.remove(field, value)
 				end
@@ -155,8 +166,7 @@
 		end
 
 		-- make sure there is a handler available for this kind of value
-		local kind = api.getbasekind(field)
-		if not api["set" .. kind] then
+		if not api["set" .. field.kind] then
 			error("invalid kind '" .. kind .. "'", 2)
 		end
 					
@@ -261,19 +271,19 @@
 			
 			api.callback(premake.fields['usesconfig'], useValue)
 		end
-		
+
+		-- Custom field setter		
+		if field.setter then
+			field.setter(target, field.name, field, value)
+			
 		-- A keyed value is a table containing key-value pairs, where the
 		-- type of the value is defined by the field. 
-		if api.iskeyedfield(field) then
+		elseif field.isKeyedTable then
 			target[field.name] = target[field.name] or {}
 			api.setkeyvalue(target[field.name], field, value)
 		
-		-- Object lists dealt with separately, don't want to flatten the tables
-		elseif field.kind == 'object-list' then
-			api.setobjectlist(target, field.name, field, value)
-			
 		-- Lists is an array containing values of another type
-		elseif api.islistfield(field) then
+		elseif field.isList then
 			api.setlist(target, field.name, field, value)
 			
 		-- Otherwise, it is a "simple" value defined by the field
@@ -312,7 +322,7 @@
 		target = target.removes[field.name]
 
 		-- some field kinds have a removal function to process the value
-		local kind = api.getbasekind(field)
+		local kind = field.kind
 		local remover = api["remove" .. kind] or table.insert
 
 		-- iterate the list of values and add them all to the list
@@ -417,11 +427,13 @@
 --
 
 	function api.iskeyedfield(field)
-		return field.kind:startswith("key-")
+		--return field.kind:endswith("key-")
+		return field.isKeyedTable
 	end
 	
 	function api.islistfield(field)
-		return field.kind:endswith("-list")
+		--return field.kind:endswith("-list")
+		return field.isList
 	end
 
 
@@ -511,10 +523,9 @@
 			error("value must be a table of key-value pairs", 4)
 		end
 		
-		-- remove the "key-" prefix from the field kind
-		local kind = api.getbasekind(field)
+		local kind = field.kind
 		
-		if api.islistfield(field) then
+		if field.isList then
 			for key, value in pairs(values) do
 				api.setlist(target, key, field, value)
 			end
@@ -555,7 +566,7 @@
 		target = target[name]
 		
 		-- find the contained data type
-		local kind = api.getbasekind(field)
+		local kind = field.kind
 		local setter = api["set" .. kind]
 		
 		-- function to add values
@@ -591,33 +602,6 @@
 
 	function api.setobject(target, name, field, value)
 		target[name] = value
-	end
-	
-	function api.setobjectlist(target, name, field, value)
-		if name == 'buildrule' then
-			-- aliases
-			value.commands = value.commands or value.command or value.cmd
-			if type(value.commands) == 'string' then
-				value.commands = { value.commands }
-			end
-			value.outputs = value.outputs or value.output
-			local outputStr = Seq:new(value.outputs):select(function(p) 
-				if not p:startswith('%') then
-					return path.getabsolute(p)
-				else
-					return p
-				end
-			end):mkstring()
-			value.absOutput = outputStr
-			for k,v in ipairs(value.dependencies or {}) do
-				value.dependencies[k] = path.getabsolute(v)
-			end
-			for k,v in ipairs(value.commands) do
-				value.commands[k] = v:replace('$in','%{cfg.files}'):replace('$out',outputStr)
-			end
-		end
-		target[name] = target[name] or {}
-		table.insert( target[name], value )
 	end
 
 --
@@ -716,7 +700,8 @@
 	api.register {
 		name = "buildoptions",
 		scope = "config",
-		kind = "string-list",
+		kind = "string",
+		isList = true,
 		expandtokens = true,
 		namealiases = { "buildflags", "cflags" },
 	}
@@ -734,8 +719,34 @@
 	api.register {
 		name = "buildrule",
 		scope = "config",
-		kind = "object-list",
+		kind = "object",
+		isList = true,
 		expandtokens = true,
+		setter = function(target, name, field, value)
+			-- aliases
+			value.commands = value.commands or value.command or value.cmd
+			if type(value.commands) == 'string' then
+				value.commands = { value.commands }
+			end
+			value.outputs = value.outputs or value.output
+			local outputStr = Seq:new(value.outputs):select(function(p) 
+				if not p:startswith('%') then
+					return path.getabsolute(p)
+				else
+					return p
+				end
+			end):mkstring()
+			value.absOutput = outputStr
+			for k,v in ipairs(value.dependencies or {}) do
+				value.dependencies[k] = path.getabsolute(v)
+			end
+			for k,v in ipairs(value.commands) do
+				value.commands[k] = v:replace('$in','%{cfg.files}'):replace('$out',outputStr)
+			end
+			
+			target[name] = target[name] or {}
+			table.insert( target[name], value )
+		end
 	}
 
 	-- buildwhen specifies when Premake should output the project in this configuration. Default is "always"
@@ -758,7 +769,8 @@
 	api.register {
 		name = "compiledepends",
 		scope = "config",
-		kind = "string-list",
+		kind = "string",
+		isList = true,
 		usagePropagation = "Always",
 	}
 	
@@ -774,27 +786,31 @@
 	api.register {
 		name = "configmap",
 		scope = "project",
-		kind = "key-array"
+		kind = "array",
+		isKeyedTable = true,
 	}
 
 	api.register {
 		name = "configurations",
 		scope = "project",
-		kind = "string-list",
+		kind = "string",
+		isList = true,
 		overwrite = true,			-- don't merge multiple configurations sections
 	}
 	
 	-- Flags only passed to the C++ compiler
 	api.register {
 		name = "cxxflags",
-		kind = "string-list",
+		kind = "string",
+		isList = true,
 		scope = "config",
 	}
 	
 	api.register {
 		name = "debugargs",
 		scope = "config",
-		kind = "string-list",
+		kind = "string",
+		isList = true,
 		expandtokens = true,
 	}
 
@@ -815,7 +831,8 @@
 	api.register {
 		name = "debugenvs",
 		scope = "config",
-		kind = "string-list",
+		kind = "string",
+		isList = true,
 		expandtokens = true,
 	}
 
@@ -837,7 +854,8 @@
 	api.register {
 		name = "defines",
 		scope = "config",
-		kind = "string-list",
+		kind = "string",
+		isList = true,
 		expandtokens = true,
 		splitOnSpace = true,
 		namealiases = { "define" },
@@ -846,14 +864,16 @@
 	api.register {
 		name = "deploymentoptions",
 		scope = "config",
-		kind = "string-list",
+		kind = "string",
+		isList = true,
 		expandtokens = true,
 	}
 
 	api.register {
 		name = "files",
 		scope = "config",
-		kind = "file-list",
+		kind = "file",
+		isList = true,
 		expandtokens = true,
 	}
 
@@ -945,7 +965,8 @@
 	api.register {
 		name = "imageoptions",
 		scope = "config",
-		kind = "string-list",
+		kind = "string",
+		isList = true,
 		expandtokens = true,		
 	}
 	
@@ -994,7 +1015,8 @@
 	api.register {
 		name = "includedirs",
 		scope = "config",
-		kind = "directory-list",
+		kind = "directory",
+		isList = true,
 		uniqueValues = true,				-- values in includedirs are unique. Duplicates are discarded 
 		expandtokens = true,
 		namealiases = { "includedir" },
@@ -1004,7 +1026,8 @@
 	api.register {
 		name = "includesolution",
 		scope = "solution",
-		kind = "string-list",
+		kind = "string",
+		isList = true,
 		uniqueValues = true,
 	}
 
@@ -1050,13 +1073,15 @@
 	api.register {
 		name = "ldflags",
 		scope = "config",
-		kind = "string-list",
+		kind = "string",
+		isList = true,
 	}
 
 	api.register {
 		name = "libdirs",
 		scope = "config",
-		kind = "directory-list",
+		kind = "directory",
+		isList = true,
 		expandtokens = true,
 		usagePropagation = "SharedLinkage",		-- Propagate to usage requirement if kind="StaticLib" or kind="SharedLib"
 		namealiases = { 'libdir' }
@@ -1066,7 +1091,8 @@
 	api.register {
 		name = "linkoptions",
 		scope = "config",
-		kind = "string-list",
+		kind = "string",
+		isList = true,
 		expandtokens = true,
 		namealiases = { "linkflags" }
 	}
@@ -1077,7 +1103,8 @@
 	api.register {
 		name = "links",
 		scope = "config",
-		kind = "string-list",
+		kind = "string",
+		isList = true,
 		allowed = function(value)
 			-- if library name contains a '/' then treat it as a path to a local file
 			if value:find('/', nil, true) then
@@ -1097,7 +1124,8 @@
 	api.register {
 		name = "linkAsShared",
 		scope = "config",
-		kind = "string-list",
+		kind = "string",
+		isList = true,
 		expandtokens = true,
 		usagePropagation = "SharedLinkage",
 	}
@@ -1107,7 +1135,8 @@
 	api.register {
 		name = "linkAsStatic",
 		scope = "config",
-		kind = "string-list",
+		kind = "string",
+		isList = true,
 		expandtokens = true,
 		usagePropagation = "StaticLinkage"
 	}
@@ -1131,7 +1160,8 @@
 	api.register {
 		name = "makesettings",
 		scope = "config",
-		kind = "string-list",
+		kind = "string",
+		isList = true,
 		expandtokens = true,
 	}
 
@@ -1168,13 +1198,15 @@
 	api.register {
 		name = "platforms",
 		scope = "project",
-		kind = "string-list",
+		kind = "string",
+		isList = true,
 	}
 
 	api.register {
 		name = "postbuildcommands",
 		scope = "config",
-		kind = "string-list",
+		kind = "string",
+		isList = true,
 		expandtokens = true,
 		namealiases = { 'postbuildcommand' },
 	}
@@ -1182,7 +1214,8 @@
 	api.register {
 		name = "prebuildcommands",
 		scope = "config",
-		kind = "string-list",
+		kind = "string",
+		isList = true,
 		expandtokens = true,
 		namealiases = { 'prebuildcommand' },
 	}
@@ -1190,7 +1223,8 @@
 	api.register {
 		name = "prelinkcommands",
 		scope = "config",
-		kind = "string-list",
+		kind = "string",
+		isList = true,
 		expandtokens = true,
 	}
 	
@@ -1227,28 +1261,32 @@
 	api.register {
 		name = "protobufout",
 		scope = "config",
-		kind = "key-path",
+		kind = "path",
+		isKeyedTable = true,
 		expandtokens = true,
 	}
 
 	api.register {
 		name = "resdefines",
 		scope = "config",
-		kind = "string-list",
+		kind = "string",
+		isList = true,
 		expandtokens = true,
 	}
 
 	api.register {
 		name = "resincludedirs",
 		scope = "config",
-		kind = "directory-list",
+		kind = "directory",
+		isList = true,
 		expandtokens = true,
 	}
 
 	api.register {
 		name = "resoptions",
 		scope = "config",
-		kind = "string-list",
+		kind = "string",
+		isList = true,
 		expandtokens = true,
 	}
 	
@@ -1256,7 +1294,8 @@
 	api.register {
 		name = "rpath",
 		scope = "config",
-		kind = "path-list",
+		kind = "path",
+		isList = true,
 		expandtokens = true,
 		usagePropagation = "SharedLinkage",
 	}
@@ -1323,7 +1362,8 @@
 	api.register {
 		name = "uses",
 		scope = "config",
-		kind = "string-list",
+		kind = "string",
+		isList = true,
 		namealiases = { "using", "use" },
 		splitOnSpace = true,			-- "apple banana carrot" is equivalent to { "apple", "banana", "carrot" }
 	}
@@ -1332,7 +1372,8 @@
 	api.register {
 		name = "alwaysuses",
 		scope = "config",
-		kind = "string-list",
+		kind = "string",
+		isList = true,
 		namealiases = { "alwaysuse" },
 		splitOnSpace = true,			-- "apple banana carrot" is equivalent to { "apple", "banana", "carrot" }
 		usagePropagation = "Always",
@@ -1376,7 +1417,9 @@
 	api.register {
 		name = "vpaths",
 		scope = "project",
-		kind = "key-path-list",
+		kind = "path",
+		isKeyedTable = true,
+		isList = true,
 	}
 
 
@@ -1484,72 +1527,6 @@
 		
 		return obj[fieldname]
 	end
-
-	
-
---
--- Adds values to an array-of-directories field of a solution/project/configuration. 
--- `ctype` specifies the container type (see premake.getobject) for the field. All
--- values are converted to absolute paths before being stored.
---
-
-	local function domatchedarray(obj, fieldname, value, matchfunc)
-		local result = { }
-		
-		function makeabsolute(value, depth)
-			if (type(value) == "table") then
-				for _, item in ipairs(value) do
-					makeabsolute(item, depth + 1)
-				end
-			elseif type(value) == "string" then
-				if value:find("*") then
-					makeabsolute(matchfunc(value), depth + 1)
-				else
-					table.insert(result, path.getabsolute(value))
-				end
-			else
-				error("Invalid value in list: expected string, got " .. type(value), depth)
-			end
-		end
-		
-		makeabsolute(value, 3)
-		return premake.setarray(obj, fieldname, result)
-	end
-	
-	function premake.setdirarray(obj, fieldname, value)
-		function set(value)
-			if value:find("*") then
-				value = os.matchdirs(value)
-			end
-			return path.getabsolute(value)
-		end
-		return premake.setarray(obj, fieldname, value, set)
-	end
-	
-	function premake.setfilearray(obj, fieldname, value)
-		function set(value)
-			if value:find("*") then
-				value = os.matchfiles(value)
-			end
-			local filename = path.getabsolute(value)
-			local dir = path.getdirectory(value)
-			if not os.isfile(filename) then
-				if not os.isdir(dir) then
-					print("Warning : \""..dir.."\" is not a directory, can't find "..filename)
-				else
-					print("Warning : \""..filename.."\" is not a file")
-				
-					local allFiles = os.matchfiles(dir..'/*')
-					local spell = premake.spelling.new(allFiles)
-					local suggestions,str = spell:getSuggestions(value)
-					print(str)
-				end
-			end
-			return file
-		end
-		return premake.setarray(obj, fieldname, value, set)
-	end
-	
 	
 --
 -- Adds values to a key-value field of a solution/project/configuration. `ctype`
@@ -1603,109 +1580,6 @@
 		return container[fieldname]	
 	end
 	
-	
-	
---
--- The getter/setter implemention.
---
-
-	local function accessor(name, value)
-		local field   = premake.fields[name]
-		local kind    = field.kind
-		local scope   = field.scope
-		local allowed = field.allowed
-		local aliases = field.aliases
-		
-		if (kind == "string" or kind == "path") and value then
-			if type(value) ~= "string" then
-				error("string value expected", 3)
-			end
-		end
-
-		-- find the container for the value	
-		local container, err = premake.getobject(scope)
-		if (not container) then
-			error(err, 3)
-		end
-	
-		if kind == "string" then
-			return premake.setstring(scope, name, value, allowed, aliases)
-		elseif kind == "path" then
-			if value then value = path.getabsolute(value) end
-			return premake.setstring(scope, name, value)
-		elseif kind == "list" then
-			return premake.setarray(container, name, value, allowed, aliases)
-		elseif kind == "dirlist" then
-			return premake.setdirarray(container, name, value)
-		elseif kind == "filelist" then
-			return premake.setfilearray(container, name, value)
-		elseif kind == "key-value" or kind == "key-pathlist" then
-			return premake.setkeyvalue(scope, name, value)
-		elseif kind == "object" then
-			return premake.setobject(container, name, value)
-		end
-	end
-
-
---
--- The remover: adds values to be removed to the field "removes" on
--- current configuration. Removes are keyed by the associated field,
--- so the call `removedefines("X")` will add the entry:
---  cfg.removes["defines"] = { "X" }
---
-
-	function premake.remove(fieldname, value)
-		local field = premake.fields[fieldname]
-		local kind = field.kind
-		
-		function set(value)
-			if kind ~= "list" and not value:startswith("**") then
-				return path.getabsolute(value)
-			else
-				return value
-			end
-		end
-		
-		if field.scope == "config" then
-			api.configuration(api.scope.configuration.terms)
-		end
-		
-		local cfg = premake.getobject(field.scope)
-		cfg.removes = cfg.removes or {}
-		cfg.removes[fieldname] = premake.setarray(cfg.removes, fieldname, value, set)
-	end
-
-	
---
--- Build all of the getter/setter functions from the metadata above.
---
-	
-	for name, info in pairs(premake.fields) do
-		-- skip my new register() fields
-		if not info.name then
-			_G[name] = function(value)
-				return accessor(name, value)
-			end
-			
-			for _,alias in pairs(info.namealiases or {}) do
-				_G[alias] = function(value)
-					return accessor(name, value)
-				end
-			end
-			
-			-- list value types get a remove() call too
-			if info.kind == "list" or 
-			   info.kind == "dirlist" or 
-			   info.kind == "filelist" 
-			then
-				_G["remove"..name] = function(value)
-					premake.remove(name, value)
-				end
-			end
-		end
-	end
-
-
 --
 -- For backward compatibility, excludes() is becoming an alias for removefiles().
 --
@@ -1752,20 +1626,6 @@
 		end
 		
 		local isUsageProj = container.isUsage
-
-		-- initialize list-type fields to empty tables
-		if not premake.defaultfields then
-			premake.defaultfields = {}
-			for name, field in pairs(premake.fields) do
-				if field.getDefaultValue then
-					premake.defaultfields[name] = field
-				end
-			end
-		end
-		for name, field in pairs(premake.defaultfields) do
-			cfg[name] = field.getDefaultValue()
-		end
-		
 		
 		-- this is the new place for storing scoped objects
 		api.scope.configuration = cfg

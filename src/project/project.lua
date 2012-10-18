@@ -109,21 +109,7 @@ local tmr1 = timer.start('bakeconfig1')
 		cfg.isUsage = prj.isUsage
 		cfg.platform = cfg.platform or ''		-- should supply '' as you could ask for %{cfg.platform} in a token
 		cfg.flags = cfg.flags or {}
-
-		-- add back any missing default values		
-		for name,field in pairs(premake.defaultfields) do
-			cfg[name] = cfg[name] or field.getDefaultValue()
-		end
-		
-		-- for usage filters
-		cfg.usesconfig = cfg.usesconfig or {}
-		cfg.usesconfig.buildcfg = cfg.buildcfg
-		cfg.usesconfig.platform = cfg.platform
-		cfg.usesconfig.system = cfg.system
-		cfg.usesconfig.architecture = cfg.architecture
-		cfg.usesconfig.kind = cfg.kind
-		cfg.usesconfig.toolset = cfg.toolset
-		
+				
 		-- Move any links in to linkAsStatic or linkAsShared
 		if cfg.links then
 			for _,linkName in ipairs(cfg.links) do
