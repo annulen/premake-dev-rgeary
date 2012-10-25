@@ -53,6 +53,7 @@ int do_isfile(const char* filename);
 /* Built-in functions */
 int path_isabsolute(lua_State* L);
 int os_chdir(lua_State* L);
+int os_chmod(lua_State* L);
 int os_copyfile(lua_State* L);
 int os_getcwd(lua_State* L);
 int os_getversion(lua_State* L);
