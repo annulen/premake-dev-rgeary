@@ -30,6 +30,20 @@
 		
 		return p
 	end
+	
+	-- Sets the global var repoRoot, the directory of the root repository
+	-- You can use "$root/aaa" in paths to imply to directories relative to this path
+	-- This is useful if you have a large code base containing multiple solutions  
+	function path.setRepoRoot(p)
+		if p then
+			p = path.getabsolute(p)
+			if not p:endswith('/') then
+				p = p..'/'
+			end
+			repoRoot = p
+		end
+		return repoRoot
+	end
 
 --
 -- Get the absolute file path from a relative path. The requested
@@ -37,7 +51,7 @@
 --
 local absPathCache = {}
 
-	function path.getabsolute(p)
+	function path.getabsolute(p, cwd)
 		local result
 
 		if absPathCache[p] then 
@@ -57,6 +71,10 @@ local absPathCache = {}
 			return result
 		end
 		
+		if p:startswith('$root/') then
+			p = p:replace('$root/', repoRoot)
+		end
+		
 		-- normalize the target path
 		p = path.translate(p, "/")
 		if (p == "") then p = "." end
@@ -65,7 +83,8 @@ local absPathCache = {}
 		
 		if (not isabsolute) or (p:find('/.',1,true) or p:find('$',1,true)) then
 local tmr=timer.start('path.getabsolute')
-			result = iif (isabsolute, nil, os.getcwd())
+			cwd = cwd or os.getcwd()
+			result = iif (isabsolute, nil, cwd)
 			
 			-- split up the supplied relative path and tackle it bit by bit
 			for n, part in ipairs(p:explode("/", true)) do

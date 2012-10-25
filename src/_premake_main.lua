@@ -100,12 +100,7 @@
 				print('Connected to debugger')
 			end
 		end
-		
-		-- Set reporoot
-		if _OPTIONS['reporoot'] then
-			_G.repoRoot = _OPTIONS.reporoot
-		end
-		
+
 		-- if running off the disk (in debug mode), load everything 
 		-- listed in _manifest.lua; the list divisions make sure
 		-- everything gets initialized in the proper order.
@@ -117,11 +112,13 @@
 			end
 		end
 
+		path.setRepoRoot(_OPTIONS['reporoot'] or _WORKING_DIR)
+
 		-- Start profiling
 		if (_OPTIONS['profile']) then
 			timer.enable()
 		end
-		
+				
 		-- Make it easier to test for build args
 		for _,v in ipairs(_ARGS) do
 			_ARGS[v] = v
@@ -299,14 +296,6 @@
 			
 		premake.spellCheckDisable(_G)
 
-		-- Set the repoRoot if it's not already set		
-		if not repoRoot then 
-			repoRoot = path.getabsolute(_WORKING_DIR)
-		end
-		if not repoRoot:endswith('/') then
-			repoRoot = repoRoot ..'/'
-		end
-		
 		-- Hand over control to the action
 		printDebug("Running action '%s'...", action.trigger)
 		timer.start('Run action ' .. action.trigger)

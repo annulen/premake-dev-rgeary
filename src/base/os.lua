@@ -10,7 +10,7 @@
 
 	function os.executef(cmd, ...)
 		if repoRoot then
-			cmd = cmd:replace('$root', repoRoot)
+			cmd = cmd:replace('$root/', repoRoot)
 		end
 		cmd = string.format(cmd, unpack(arg))
 		if( _OPTIONS['dryrun'] ) then	
@@ -30,7 +30,7 @@
 			return false 
 		end
 		if repoRoot then
-			s = s:replace('$root', repoRoot)
+			s = s:replace('$root/', repoRoot)
 		end
 		return builtin_isfile(s)
 	end
@@ -349,7 +349,7 @@
 	local builtin_rmdir = os.rmdir
 	function os.rmdir(p)
 		if repoRoot then
-			p = p:replace('$root', repoRoot)
+			p = p:replace('$root/', repoRoot)
 		end
 		if( _OPTIONS['dryrun'] ) then
 			if (os.isfile(p)	or os.isdir(p)) and (not removeList[p]) then
@@ -381,7 +381,7 @@
 
 	function os.rmdirParentsIfEmpty(p)
 		if repoRoot then
-			p = p:replace('$root', repoRoot)
+			p = p:replace('$root/', repoRoot)
 		end
 
 		local dirs = os.matchdirs(p .. "/*")
