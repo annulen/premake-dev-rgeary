@@ -260,7 +260,7 @@
 					for _,v in ipairs(cfg.files) do
 						table.insert( files, path.getrelative(repoRoot, v) )
 					end
-					p5('compilewrapper', files)
+					p5('files', files)
 					if linkTool then
 						p5('link cmd     ', linkTool:getCommandLine(linkCmdArgsFlat))
 						p5('link flags   ', linkTool:getsysflags(cfg), ' ')
