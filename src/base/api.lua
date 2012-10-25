@@ -613,7 +613,11 @@
 			value = value:replace("$root/", repoRoot)
 		end
 		api.setstring(target, name, field, value)
-		target[name] = path.getabsolute(target[name])
+		
+		-- don't convert in to absolute if it's tokenised
+		if not target[name]:startswith('%') then
+			target[name] = path.getabsolute(target[name])
+		end 
 	end
 
 
