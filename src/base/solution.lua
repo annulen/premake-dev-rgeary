@@ -8,11 +8,12 @@
 	local solution = premake.solution
 	local oven = premake5.oven
 	local project = premake5.project
+	local targets = premake5.targets
 
 
 -- The list of defined solutions (which contain projects, etc.)
 
-	premake.solution.list = { }
+	targets.solution = { }
 
 
 --
@@ -30,8 +31,8 @@
 		if name == '_GLOBAL_CONTAINER' then
 			ptypeSet( sln, "globalcontainer" )
 		else
-			table.insert(premake.solution.list, sln)
-			premake.solution.list[name] = sln
+			table.insert(targets.solution, sln)
+			targets.solution[name] = sln
 			ptypeSet( sln, "solution" )
 			prefix = name .. '/' 
 		end
@@ -74,13 +75,13 @@
 
 	function solution.bakeall()
 		local result = {}
-		for i, sln in ipairs(solution.list) do
+		for i, sln in ipairs(targets.solution) do
 			local bakedSln = solution.bake(sln)
 			
 			result[i] = bakedSln
 			result[sln.name] = bakedSln
 		end
-		solution.list = result
+		targets.solution = result
 	end
 
 
@@ -135,7 +136,7 @@
 			local includeList = {}
 			for _,child in ipairs(sln.includesolution) do
 				if child == '*' then
-					for _,s in ipairs(solution.list) do
+					for _,s in ipairs(targets.solution) do
 						if s.name ~= sln.name then
 							table.insert( includeList, s.name )
 						end
@@ -190,8 +191,8 @@
 		local i = 0
 		return function ()
 			i = i + 1
-			if i <= #premake.solution.list then
-				return premake.solution.list[i]
+			if i <= #targets.solution then
+				return targets.solution[i]
 			end
 		end
 	end
@@ -325,7 +326,7 @@
 --
 
 	function solution.get(key)
-		return premake.solution.list[key]
+		return targets.solution[key]
 	end
 
 

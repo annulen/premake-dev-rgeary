@@ -441,7 +441,6 @@ function ninja.writeProjectTargets(prj, scope)
 			table.insert( implicitDeps, fileFullpath )
 		end
 		local libs = Seq:ipairs(cfg.linkAsStatic):concat(Seq:ipairs(cfg.linkAsShared))
-			:select(function(v) return scope:getBest(v); end)
 		for _,lib in libs:each() do
 			if path.containsSlash(lib) then
 				table.insert( implicitDeps, lib )
@@ -457,9 +456,8 @@ function ninja.writeProjectTargets(prj, scope)
 		if #allLinkInputs > 0 then
 		
 			local extraTargets = ninja.writeBuildRule(cfg, 'link', allLinkInputs, scope)
-			table.insertflat(implicitDeps, extraTargets)
 			
-			makeShorterBuildVars(scope, implicitDeps, 1)
+			table.insertflat(implicitDeps, extraTargets)
 			
 			local linkToolRuleName
 		
@@ -503,6 +501,8 @@ function ninja.writeProjectTargets(prj, scope)
 				local implicitDepStr = nil
 				if #implicitDeps > 0 then
 					implicitDepStr = table.concat(implicitDeps, ' ')
+					implicitDepStr = implicitDepStr:replace(repoRoot, ninja.rootVar)
+
 					if ninjaVarLevel >= 2 then
 						local varName, alreadyExists = scope:getName(implicitDepStr, 'deps')
 						if not alreadyExists then
@@ -894,7 +894,7 @@ function ninja.generateDefaultBuild(sln, buildFileDir, scope)
 	_p('# Solution includes')
 	if sln.includesolution then
 		for _,slnName in ipairs(sln.includesolution) do
-			local extSln = solution.list[slnName]
+			local extSln = targets.solution[slnName]
 			if extSln then
 				_p('subninja '..scope:getBest(ninja.getSolutionBuildFilename(extSln)))
 			end 

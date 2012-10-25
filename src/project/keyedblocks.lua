@@ -6,6 +6,7 @@ premake.keyedblocks = {}
 local keyedblocks = premake.keyedblocks
 
 local globalContainer = premake5.globalContainer
+local targets = premake5.targets
 local project = premake5.project
 local oven = premake5.oven
 
@@ -187,7 +188,7 @@ function keyedblocks.resolveUses(kb, obj)
 end
 
 function keyedblocks.getUsage(name, namespaces)
-	local suggestionStr
+	local suggestions, suggestionStr
 
 	local usage = project.getUsageProject(name, namespaces)
 	if not usage then
@@ -196,35 +197,7 @@ function keyedblocks.getUsage(name, namespaces)
 	end
 
 	if not usage then
-		-- Find hints
-		local namespaces,shortname,fullname = project.getNameParts(name, namespaces)
-
-		-- Check for wrong namespace
-		local suggestions = {}
-		for prjName,prj in Seq:new(globalContainer.aliases):concat(globalContainer.allUsage):each() do
-			if prj.shortname == shortname then
-				table.insert(suggestions, prj.name)
-			end
-		end
-		local usage = project.getUsageProject(name, namespaces)
-		if #suggestions == 0 then
-			-- check for misspellings
-			local allUsageNames = Seq:new(globalContainer.aliases):concat(globalContainer.allUsage):getKeys():toTable()
-			local spell = premake.spelling.new(allUsageNames)
-
-			suggestions = spell:getSuggestions(name)
-			if #suggestions == 0 then
-				suggestions = spell:getSuggestions(fullname)
-			end
-		end
-
-		if #suggestions > 0 then
-			suggestionStr = Seq:new(suggestions):take(20):mkstring(', ')
-			if #suggestions > 20 then
-				suggestionStr = suggestionStr .. '...'
-			end
-			suggestionStr = ' Did you mean ' .. suggestionStr .. '?'
-		end
+		suggestions, suggestionStr = project.getProjectNameSuggestions(name, namespaces)
 	end
 
 	return usage, suggestionStr
@@ -428,10 +401,13 @@ function keyedblocks.getfield2(obj, filter, fieldName, dest)
 	--insertBlockList(rv, foundBlocks)
 
 	local removes = {}
+	local ignore = toSet({ '__config', '__name', '__parent', '__uses', '__cache' })
 	for _,block in ipairs(foundBlocks) do
 		if not fieldName then
 			for k,v in pairs(block) do
-				if k == '__removes' then
+				if ignore[k] then
+					-- do nothing
+				elseif k == '__removes' then
 					table.insert(removes, v)
 				else
 					oven.mergefield(rv, k, v)
@@ -517,9 +493,9 @@ function keyedblocks.test()
 	
 	local gc = premake5.globalContainer
 	local Print = premake.actions.Print
-	local testUsage = keyedblocks.create(gc.allUsage["testUsage"])
-	local testRecursion = keyedblocks.create(gc.allUsage["testRecursion"])
-	local testBase = keyedblocks.create(gc.allUsage["testBase"])
+	local testUsage = keyedblocks.create(targets.allUsage["testUsage"])
+	local testRecursion = keyedblocks.create(targets.allUsage["testRecursion"])
+	local testBase = keyedblocks.create(targets.allUsage["testBase"])
 	local xU = keyedblocks.getfield(testUsage, { 'release', 'debug' }, nil)
 	local xB = keyedblocks.getfield(testBase, { 'release', 'debug' }, nil)
 	local xR = keyedblocks.getfield(testRecursion, { 'release', 'debug' }, nil)

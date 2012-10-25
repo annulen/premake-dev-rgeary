@@ -351,6 +351,11 @@
 	function prepend(a,b)
 		return concat(b,a)
 	end
+
+	-- str(a, b, c) == a..b..c
+	function str(...)
+		return table.concat(arg, '')
+	end
 	
 	function concat(a,b)
 		local atype = type(a)

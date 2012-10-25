@@ -7,8 +7,8 @@
 
 	premake.api = {}
 	local api = premake.api
-	
 	local globalContainer = premake5.globalContainer
+	local targets = premake5.targets
 
 --
 -- Here I define all of the getter/setter functions as metadata. The actual
@@ -185,7 +185,9 @@
 
 	function api.gettarget(scope)
 		local target
-		if scope == "solution" then
+		if scope == "global" then
+			target = globalContainer.solution
+		elseif scope == "solution" then
 			target = api.scope.solution
 		elseif scope == "project" then
 			target = api.scope.project or api.scope.solution
@@ -610,8 +612,8 @@
 
 	function api.setpath(target, name, field, value)
 		if repoRoot then
-			value = value:replace("$root/", repoRoot)
-		end
+			value = value:replace('$root/', repoRoot)
+		end	
 		api.setstring(target, name, field, value)
 		
 		-- don't convert in to absolute if it's tokenised
@@ -1272,6 +1274,18 @@
 		isKeyedTable = true,
 		expandtokens = true,
 	}
+	
+	-- Sets the directory to put the release files/symlinks in
+	-- Relative paths are relative to --releaseDir, which defaults to repoRoot/release
+	--  Example : releasedir { bin = '.', scripts = './scripts', installbin='/usr/bin/ }
+	--
+	api.register {
+		name = "releasedir",
+		scope = "global",
+		kind = "string",			-- string not path, to keep the paths as relative
+		isKeyedTable = true,
+		expandtokens = true,
+	}
 
 	api.register {
 		name = "resdefines",
@@ -1895,7 +1909,7 @@
 		
 		-- set up alias
 		if fullProjectName ~= aliasName then
-			globalContainer.aliases[aliasName] = fullProjectName
+			targets.aliases[aliasName] = fullProjectName
 		end
 		
 		sln.exports = sln.exports or {}
@@ -1919,3 +1933,75 @@
 			prj.isExplicit = true
 		end
 	end
+
+--*************************************************************************************
+-- Releases
+--
+-- Example usage :
+--  releasedir { name = "bin", path = "/usr/bin", perms = "755" }
+--  release {
+--   name = "MyRelease",
+--   bin = "file-to-put-in-bin-dir.ext someProject",
+--   rootBin = { "putInUsrBin", perms = 755 },
+--   conf = "someConf.conf"
+--  }
+-- or
+--  release("MyRelease", "projA projB")	 -- default output to bin
+-- or
+--  release( { name = "prjA-scripts", bin = { "$root/prjA/scripts/dump.pl", rootdir='$root/prjA' } } ) 
+--*************************************************************************************
+
+function release(t, t2)
+	local sln = api.scope.solution
+	if not sln then
+		error("No active solution")
+	end
+	
+	-- alias for quick one-line entry method
+	if t2 then
+		if type(t) ~= 'string' then
+			error("Unexpected syntax for release command, expected release(<table>) or release(<name>, <bin release files>)")
+		end
+		t = { 
+			name = t,
+			bin = t2
+		}
+		t2 = nil
+	end
+	
+	if not t.name then
+		error("release nas no name field")
+	end
+	local name = t.name
+	
+	local releases = targets.releases
+	releases[name] = releases[name] or {}
+	
+	local rel = releases[name]
+	rel.name = name
+	rel.prefix = sln.projectprefix
+	rel.path = os.getcwd()
+	
+	rel.destinations = rel.destinations or {}
+	for destName,v in pairs(t) do
+		if type(destName) == 'number' then
+			destName = 'bin'
+		end
+		if destName ~= 'name' then
+			local src = { destName = destName, sources = {} }
+			
+			if type(v) == 'string' then src.sources = v:split(' ') 
+			elseif type(v) == 'table' then
+				for k,v in pairs(v) do
+					if type(k) == 'number' then
+						table.insert( src.sources, v )
+					else
+						src[k] = v
+					end
+				end
+			end
+			table.insert( rel.destinations, src ) 
+		end
+	end
+end
+

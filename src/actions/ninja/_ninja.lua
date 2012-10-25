@@ -8,6 +8,7 @@
 	local ninja = premake.actions.ninja
 	local ninjaVar = premake.abstract.ninjaVar
 
+	local targets = premake5.targets
 	local solution = premake.solution
 	local project = premake5.project
 	local clean = premake.actions.clean
@@ -40,7 +41,7 @@
 		buildFileHandle = nil,
 		
 		onStart = function()
-			local slnList = Seq:ipairs(solution.list)
+			local slnList = Seq:ipairs(targets.solution)
 			if slnList:count() > 1 then
 				printDebug('Building solutions : '..slnList:select('name'):mkstring(', '))
 			else 
@@ -70,7 +71,7 @@
 	}
 	
 	function ninja.onSolution(slnName)
-		local sln = solution.list[slnName]
+		local sln = targets.solution[slnName]
 		if not sln then
 			print('Could not find solution '..slnName)
 			return
@@ -163,7 +164,7 @@
 	function ninja.onExecute()
 		local args = Seq:new(_ARGS) 
 		
-		if not args:contains('nobuild') then
+		if not _OPTIONS['nobuild'] then
 			local cmd = 'ninja'
 			if _OPTIONS['threads'] then
 				cmd = cmd .. ' -j'..tostring(_OPTIONS['threads'])
@@ -192,6 +193,11 @@
 				cmd = cmd .. ' -q -C ' .. dir
 			end
 			
+			if _OS == 'windows' then
+				cmd = "IS_RUNNING_PREMAKE=TRUE && "..cmd
+			else
+				cmd = "export IS_RUNNING_PREMAKE=TRUE && "..cmd
+			end
 			local rv = os.executef(cmd)
 			if rv ~= 0 then
 				os.exit(rv)

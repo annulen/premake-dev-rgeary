@@ -20,12 +20,21 @@
  	premake.libSearchPath = { }
 
 	premake5.globalContainer = { }
+	
+	premake5.targets = {}	
+	premake5.targets.allUsage = {}
+	premake5.targets.allReal = {}
+	premake5.targets.releases = {}
+	premake5.targets.aliases = {}
+
 	premake5.project = { }
 	premake5.oven = { }
 	premake.solution = { }
 	premake.keyedblocks = { }
 	
 	premake.cache = {}
+	
+	premake.releases = {}
 	
 -- Global defualt settings, override this in the system script
 	premake.clearActiveProjectOnNewFile = false

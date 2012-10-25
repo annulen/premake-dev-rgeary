@@ -7,7 +7,7 @@
 	premake5.project = premake5.project or { }
 	local project = premake5.project
 	local oven = premake5.oven
-	local globalContainer = premake5.globalContainer
+	local targets = premake5.targets
 	local keyedblocks = premake.keyedblocks
 		
 --
@@ -30,10 +30,18 @@
 		
 		-- bake the project's "root" configuration, which are all of the
 		-- values that aren't part of a more specific configuration
-		local result = oven.merge({}, sln)
-		result = oven.merge(result, prj)
+		local result = oven.merge({}, prj)
 		result.solution = sln
-		result.platforms = result.platforms or {}
+		
+		-- merge in the "project" level fields from the solution object 
+		for k,v in pairs(sln) do
+			if k ~= 'block' then
+				if not prj[k] then
+					result[k] = v
+				end
+			end
+		end
+		result.platforms = prj.platforms or {}
 		result.blocks = prj.blocks
 		result.isbaked = true
 		
@@ -239,8 +247,8 @@ timer.stop(tmr3)
 		if not prj then
 			local tryName = name
 			local i = 0
-			while globalContainer.aliases[tryName] do
-				tryName = globalContainer.aliases[tryName]
+			while targets.aliases[tryName] do
+				tryName = targets.aliases[tryName]
 				i = i + 1
 				if i > 100 then
 					error("Recursive project alias : "..tryName)
@@ -257,8 +265,8 @@ timer.stop(tmr3)
 				-- Try prepending the namespace
 				local tryName = namespace..name
 				local i = 0
-				while globalContainer.aliases[tryName] do
-					tryName = globalContainer.aliases[tryName]
+				while targets.aliases[tryName] do
+					tryName = targets.aliases[tryName]
 					i = i + 1
 					if i > 100 then
 						error("Recursive project alias : "..tryName)
@@ -281,18 +289,54 @@ timer.stop(tmr3)
 
 -- Get a real project. Namespaces is an optional list of prefixes to try to prepend to "name"
 	function project.getRealProject(name, namespaces)
-		return getProject(globalContainer.allReal, name, namespaces)
+		return getProject(targets.allReal, name, namespaces)
 	end
 	
 -- Get a usage project. Namespaces is an optional list of prefixes to try to prepend to "name"
 	function project.getUsageProject(name, namespaces)
-		return getProject(globalContainer.allUsage, name, namespaces)
+		return getProject(targets.allUsage, name, namespaces)
 	end
 
+-- If a project isn't found, this returns some alternatives
+	function project.getProjectNameSuggestions(name, namespaces)
+		local suggestions = {}
+		local suggestionStr
+		
+		-- Find hints
+		local namespaces,shortname,fullname = project.getNameParts(name, namespaces)
+
+		-- Check for wrong namespace
+		for prjName,prj in Seq:new(targets.aliases):concat(targets.allUsage):each() do
+			if prj.shortname == shortname then
+				table.insert(suggestions, prj.name)
+			end
+		end
+		local usage = project.getUsageProject(name, namespaces)
+		if #suggestions == 0 then
+			-- check for misspellings
+			local allUsageNames = Seq:new(targets.aliases):concat(targets.allUsage):getKeys():toTable()
+			local spell = premake.spelling.new(allUsageNames)
+
+			suggestions = spell:getSuggestions(name)
+			if #suggestions == 0 then
+				suggestions = spell:getSuggestions(fullname)
+			end
+		end
+
+		if #suggestions > 0 then
+			suggestionStr = Seq:new(suggestions):take(20):mkstring(', ')
+			if #suggestions > 20 then
+				suggestionStr = suggestionStr .. '...'
+			end
+			suggestionStr = ' Did you mean ' .. suggestionStr .. '?'
+		end
+
+		return suggestions, suggestionStr
+	end
 	
 -- Iterate over all real projects
 	function project.eachproject()
-		local iter,t,k,v = ipairs(globalContainer.allReal)
+		local iter,t,k,v = ipairs(targets.allReal)
 		return function()
 			k,v = iter(t,k)
 			return v
@@ -341,15 +385,20 @@ timer.stop(tmr3)
 	function project.createproject(name, sln, isUsage)
 	
 		-- Project full name is MySolution/MyProject, shortname is MyProject
-		local projectprefix = iif(isUsage, nil, sln.projectprefix)
-		local namespaces,shortname,fullname = project.getNameParts(name, projectprefix)
+		local namespaces,shortname,fullname = project.getNameParts(name, sln.projectprefix)
 				
 		-- Now we have the fullname, check if this is already a project
 		if isUsage then
-			local existing = globalContainer.allUsage[fullname]
+			-- If it's not an existing project, assume name is the fullname & don't prepend the solution prefix
+			if not targets.allReal[fullname] then
+				fullname = name
+			end
+		
+			local existing = targets.allUsage[fullname]
 			if existing then return existing end
+			
 		else
-			local existing = globalContainer.allReal[fullname]
+			local existing = targets.allReal[fullname]
 			if existing then return existing end
 		end
 					
@@ -360,9 +409,9 @@ timer.stop(tmr3)
 		
 		-- add to global list keyed by name
 		if isUsage then
-			globalContainer.allUsage[fullname] = prj
+			targets.allUsage[fullname] = prj
 		else
-			globalContainer.allReal[fullname] = prj
+			targets.allReal[fullname] = prj
 		end
 		
 		-- add to solution list keyed by both name and index

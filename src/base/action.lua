@@ -5,6 +5,8 @@
 --
 
 	premake.action = { }
+	
+	local targets = premake5.targets
 
 
 --
@@ -62,16 +64,24 @@
 				if a.onStart then
 					a.onStart()
 				end
+
+				local onsolution = a.onSolution or a.onsolution
+				local onproject = a.onProject or a.onproject
 				
-				for sln in premake.solution.each() do
-					if a.onSolution then a.onSolution(sln) end
-					if a.onsolution then a.onsolution(sln) end
-					
-					for prj in premake.solution.eachproject_ng(sln) do
-						if a.onProject then a.onProject(prj) end
-						if a.onproject then a.onproject(prj) end
+				if #targets.slnToBuild > 0 then
+					for _,sln in ipairs(targets.slnToBuild) do
+						if onsolution then onsolution(sln) end
+						
+						for prj in premake.solution.eachproject_ng(sln) do
+							if onproject then onproject(prj) end
+						end
+					end
+				else
+					for _,prj in ipairs(targets.prjToBuild) do
+						if onproject then onproject(prj) end
 					end
 				end
+				
 				if a.onEnd then
 					a.onEnd()
 				end
@@ -119,7 +129,29 @@
 	function premake.action.get(name)
 		return premake.action.list[name]
 	end
+	
+	function premake.action.execute(action, args)
+		local old = {
+			action = _ACTION,
+			args = _ARGS,
+		}
+		if not premake.action.get(action) then
+			error("Unknown action \""..action.."\"")
+		end 
 
+		-- set new action state
+		premake.action.set(action)
+		if args then
+			_ARGS = args
+		end
+		
+		-- execute action
+		premake.action.call(action)
+
+		-- restore old state
+		premake.action.set(old.action)
+		_ARGS = old.args		
+	end
 
 --
 -- Iterator for the list of actions.

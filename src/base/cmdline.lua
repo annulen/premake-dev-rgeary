@@ -26,7 +26,7 @@
 	{
 		trigger     = "scripts",
 		value       = "path",
-		description = "Search for additional scripts on the given path"
+		description = "Search for premake scripts on the given path"
 	}
 	
 	newoption
@@ -59,7 +59,6 @@
 	{
 		trigger		= "dryrun",
 		description	= "Print the files which would be modified, but do not execute commands or make any changes to the file system",
-		aliases		= { 'n' },
 	}
 	
 	newoption
@@ -98,7 +97,7 @@
 	newoption
 	{
 		trigger     = "systemScript",
-		description = "Run a system script before the build script. Default filename is premake-system.lua. Overridden by $PREMAKE_PATH.",
+		description = "Run a system script before the build script. Default filename is premake-system.lua.",
 	}
 	
 	newoption {
@@ -121,5 +120,11 @@
 		trigger		= "exportonly",
 		description = "Only build the projects specified with export",
 		aliases		= { "e" },
+	}
+	
+	newoption {
+		trigger		= "nobuild",
+		description = "Don't build the project, just generate the build scripts",
+		aliases		= { "n" },
 	}
 	

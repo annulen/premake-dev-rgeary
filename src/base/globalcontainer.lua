@@ -8,13 +8,38 @@
 	local oven 		= premake5.oven
 	local solution	= premake.solution  
 	local keyedblocks = premake.keyedblocks  
-
-	-- List of all real & all usage projects
-	globalContainer.allUsage = {}
-	globalContainer.allReal = {}
+	local targets = premake5.targets
+	targets.prjToBuild = {}
+	targets.slnToBuild = {}
 	
-	-- List of usage aliases
-	globalContainer.aliases = {}
+--
+-- Apply any command line target filters
+--
+	function globalContainer.filterTargets()
+		local prjToBuild = targets.prjToBuild
+		local slnToBuild = targets.slnToBuild
+		for _,v in ipairs(_ARGS) do
+			if v:endswith('/') then v = v:sub(1,#v-1) end 
+			if not premake.action.get(v) then
+				local sln = targets.solution[v] 
+				if sln then
+					table.insert( slnToBuild, sln )
+					for _,v2 in ipairs(sln.projects) do
+						table.insert( prjToBuild, v2 )
+					end
+				end
+				local prj = project.getRealProject(v)
+				if prj then
+					table.insert( prjToBuild, prj )
+				end
+			end
+		end
+		
+		if #targets.slnToBuild == 0 and #targets.prjToBuild == 0 then
+			targets.slnToBuild = targets.solution
+			targets.prjToBuild = targets.allReal
+		end		
+	end
 
 --
 -- Bake all the projects
@@ -23,7 +48,7 @@
 	
 		-- Message
 		if _ACTION ~= 'clean' then
-			local cfgNameList = Seq:new(solution.list):select('configurations'):flatten():unique()
+			local cfgNameList = Seq:new(targets.solution):select('configurations'):flatten():unique()
 			if cfgNameList:count() == 0 then
 				error("No configurations to build")
 			elseif cfgNameList:count() == 1 then
@@ -33,11 +58,10 @@
 			end
 		end
 		
-		local toBake = globalContainer.allReal
-		if _ACTION == 'print' and _ARGS[2] then
-			local prjName = _ARGS[2]
-			toBake = { [prjName] = globalContainer.allReal[prjName] }
-		end
+		-- Filter targets to bake
+		globalContainer.filterTargets()
+		
+		local toBake = targets.prjToBuild
 				
 		-- Bake all real projects, but don't resolve usages		
 		local tmr = timer.start('Bake projects')
