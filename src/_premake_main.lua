@@ -240,7 +240,7 @@
 
 		-- Validate the command-line arguments. This has to happen after the
 		-- script has run to allow for project-specific options
-		ok, err = premake.option.validate(_OPTIONS)
+		ok, err = premake.option.validate()
 		if (not ok) then error("Error: " .. err, 0) end
 		
 

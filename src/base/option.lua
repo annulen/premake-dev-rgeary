@@ -37,7 +37,9 @@
 		
 		-- add it to the master list
 		premake.option.list[opt.trigger] = opt
+		premake.option.list[opt.trigger:lower()] = opt
 
+		-- one letter aliases
 		if opt.aliases then		
 			for _,a in ipairs(opt.aliases) do
 				premake.option.aliases[a] = opt
@@ -83,23 +85,30 @@
 --
 -- Validate a list of user supplied key/value pairs against the list of registered options.
 --
--- @param values
---    The list of user supplied key/value pairs.
 -- @returns
 ---   True if the list of pairs are valid, false and an error message otherwise.
 --
 
-	function premake.option.validate(values)
-		for key, value in pairs(values) do
+	function premake.option.validate()
+		local newOptions = {}
+		local opts = _OPTIONS
+
+		for key, value in pairs(_OPTIONS) do
 			-- does this option exist
 			local opt = premake.option.get(key)
 			if (not opt) then
 				return false, "invalid option '" .. key .. "'"
-			else
-				-- reregister .trigger in the table in case the option is an alias
-				values[opt.trigger] = values[opt.trigger] or values[key]
 			end
-			
+			-- also register lower case trigger
+			newOptions[key] = _OPTIONS[key]
+			newOptions[key:lower()] = newOptions[key]
+			-- reregister .trigger in the table in case the option is an alias
+			newOptions[opt.trigger] = _OPTIONS[opt.trigger] or _OPTIONS[key]
+		end
+		_OPTIONS = newOptions
+		
+		for key, value in pairs(_OPTIONS) do
+			local opt = premake.option.get(key)
 			-- does it need a value?
 			if (opt.value and string.sub(opt.value,1,1) ~= '[' and value == "") then
 				return false, "no value specified for option '" .. key .. "'"
