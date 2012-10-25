@@ -204,7 +204,7 @@ timer.stop(tmr3)
 		-- to make testing a little easier, allow this function to
 		-- accept an unbaked project, and fix it on the fly
 		if not prj.isbaked then
-			error("Project not baked")
+			error('Project "'..prj.name..'" is not baked')
 			--prj = project.bake(prj)
 		end
 

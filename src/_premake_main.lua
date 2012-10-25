@@ -62,9 +62,13 @@
 
 		    local errStr = tostring(errobj) or "("..type(errobj)..")"
 		    if( type(errobj)=='table' ) then
-		      errStr = ("Table: {" ..
-		      	table.concat(map(errobj, function (k,v) return '[' .. tostring(k) .. '] = ' .. tostring(v); end)
-		      	, ',') .. "}"):sub(1,1500)
+		    	local errMsg = {}
+				for k,v in pairs(errobj) do
+					table.insert(errMsg, '[' .. tostring(k) .. '] = ' .. tostring(v))
+				end
+		      errStr = ("Table: {"..
+		      	table.concat(errMsg, ',') 
+		      	.. "}"):sub(1,1500)
 		    end
 			print("Error: \"" .. errStr .. "\"")
 			print(stack)
@@ -284,10 +288,7 @@
 		if not ishelp then
 			timer.start('Bake configurations')
 			if not action.isnextgen then
-				print("Building configurations...")
-				premake.bake.buildconfigs()		
-				ok, err = premake.checkprojects()
-				if (not ok) then error("Error: " .. err, 0) end
+				error("Action \""..action.trigger.."\" not implemented")
 			else
 				premake5.globalContainer.bakeall()
 			end

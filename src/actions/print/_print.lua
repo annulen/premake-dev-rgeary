@@ -128,7 +128,16 @@
 				Print.onProject(prj)
 			end
 			if not prj and not sln then
-				error("Could not find "..name)
+				local suggestions, suggestionStr = project.getProjectNameSuggestions(name, namespaces)
+				if #suggestions == 1 then
+					name = suggestions[1]
+					print(name)
+					local prj = project.getRealProject(name) or project.getUsageProject(name)
+					Print.onProject(prj)
+				else
+					print("Could not find "..name)
+					error(suggestionStr)
+				end
 			end
 		end
 	end	
@@ -149,7 +158,7 @@
 			p0('Usage', prj.name)
 		else
 			uProj = project.getUsageProject(prj.name)
-			p0('Usage Project', uProj.name)
+			p0('Usage Requirements', uProj.name)
 		end
 		
 		indent(2)

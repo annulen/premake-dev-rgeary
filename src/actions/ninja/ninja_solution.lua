@@ -231,15 +231,15 @@ function ninja.writeProjectTargets(prj, scope)
 	
 	-- Validate
 	for cfg in project.eachconfig(prj) do
-		if not cfg.kind then
-			--error("Malformed project '"..prj.name.."', has no kind specified")
-		end 
 		if not cfg.toolset then
 			error("Malformed project '"..prj.name.."', has no toolset specified for kind "..cfg.kind)
 		end
 		
 		local linkTool,linkOverrides = ninja.getLinkTool(cfg, scope)
 		if linkTool and not isSourceGen then 
+			if not cfg.kind then
+				error("Malformed project '"..prj.name.."', has no kind specified")
+			end 
 			if not cfg.buildtarget then
 				error("Malformed project '"..prj.name.."', toolset "..cfg.toolset.." requires buildtarget but none specified")
 			end
