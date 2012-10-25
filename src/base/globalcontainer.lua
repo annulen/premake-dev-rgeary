@@ -133,11 +133,12 @@
 					elseif realCfg.kind == 'StaticLib' then
 						-- link to the target as a static library
 						oven.mergefield(usageKB, "linkAsStatic", { realTargetPath })
-					elseif realCfg.kind == 'SourceGen' then
-						oven.mergefield(usageKB, "compiledepends", { realProj.name })
-					elseif not realCfg.kind then
-						error("Can't use target, missing cfg.kind")
 					end
+				end
+				if realCfg.kind == 'SourceGen' then
+					oven.mergefield(usageKB, "compiledepends", { realProj.name })
+				elseif not realCfg.kind then
+					error("Can't use target, missing cfg.kind")
 				end
 				
 				-- Propagate fields

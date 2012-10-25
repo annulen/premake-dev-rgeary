@@ -645,6 +645,7 @@ function ninja.writeBuildRule(cfg, stage, inputs, scope)
 					-- Write the command to a file, and execute it
 					local script = cmd:replace(ninja.rootVar, repoRoot)
 					local scriptFilename = cfg.targetdir..'/'..buildTarget..'.'..buildrule.language
+					scriptFilename = scriptFilename:replace(repoRoot, ninja.rootVar)
 					local scriptFilenameFull = scriptFilename:replace(ninja.rootVar, repoRoot)
 					
 					-- Test if contents are different before writing
