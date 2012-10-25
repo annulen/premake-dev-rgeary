@@ -9,9 +9,12 @@
 -- Prepare to capture the output from all subsequent calls to io.printf(), 
 -- used for automated testing of the generators.
 --
-
+	local builtin_write = io.write
 	function io.capture()
-		io.captured = ''
+		io.captured = {}
+		io.write = function(v)
+			table.insert( io.captured, v )
+		end
 	end
 	
 	
@@ -21,8 +24,9 @@
 --
 
 	function io.endcapture()
-		local captured = io.captured
+		local captured = table.concat( io.captured, '')
 		io.captured = nil
+		io.write = builtin_write
 		return captured
 	end
 	
@@ -84,12 +88,8 @@
 			s = string.format(msg, unpack(arg))
 		end
 		
-		if io.captured then
-			io.captured = io.captured .. s .. io.eol
-		else
-			io.write(s)
-			io.write(io.eol)
-		end
+		io.write(s)
+		io.write(io.eol)
 	end
 
 	function io.close(fileHandle)
