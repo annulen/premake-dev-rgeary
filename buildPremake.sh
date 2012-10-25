@@ -1,5 +1,10 @@
 #!/bin/bash
 
+##DEBUG
+if [[ "$PREMAKE_PRERUN" != "" ]]; then
+        eval "$PREMAKE_PRERUN"
+fi
+
 which readlink 2>&1 > /dev/null
 if [[ $? == 0 ]]; then
 	premakeDir=$(readlink -f $(dirname $0) )
