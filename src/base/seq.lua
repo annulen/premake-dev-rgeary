@@ -286,6 +286,28 @@ function Seq:skip(n)
 end
 
 --
+-- Skip until condition is true
+--
+function Seq:skipuntil(cond)
+	local s = Seq:new(self)
+	s.iterate = function()
+		-- setup
+		local iter = self.iterate()
+		-- moveNext
+		return function()
+			while true do
+				local k,v = iter()
+				if (not k) or (not cond(v)) then
+					break
+				end
+			end
+			return k,v
+		end
+	end
+	return s
+end
+
+--
 -- Returns the first n values
 --
 function Seq:take(n)
@@ -310,10 +332,14 @@ end
 --
 -- Returns the first value
 --
-function Seq:first()
-	local iter = self.iterate()
-	local k,v = iter()
-	return v
+function Seq:first(cond)
+	if not cond then
+		local iter = self.iterate()
+		local k,v = iter()
+		return v
+	else
+		return self:where(cond):first()
+	end
 end
 
 --
