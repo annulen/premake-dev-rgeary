@@ -13,11 +13,16 @@
 			cmd = cmd:replace('$root/', repoRoot)
 		end
 		cmd = string.format(cmd, unpack(arg))
+		return os.execute(cmd)
+	end
+	
+	local builtin_execute = os.execute
+	function os.execute(cmd)
 		if( _OPTIONS['dryrun'] ) then	
 			print("Execute : " ..cmd)
 			return 0 
 		else
-			return os.execute(cmd)
+			return builtin_execute(cmd)
 		end
 	end
 	
@@ -253,10 +258,11 @@
 
 			-- retrieve files from OS and test against mask
 			local m = os.matchstart(wildcard)
+			local parentDir = iif( #basedir == 0, '', basedir..'/')
 			while (os.matchnext(m)) do
 				local isfile = os.matchisfile(m)
 				if ((wantfiles and isfile) or (not wantfiles and not isfile)) then
-					local fname = path.join(basedir, os.matchname(m))
+					local fname = parentDir..os.matchname(m)
 					if fname:match(mask) == fname then
 						table.insert(result, fname)
 					end
@@ -270,7 +276,7 @@
 				while (os.matchnext(m)) do
 					if not os.matchisfile(m) then
 						local dirname = os.matchname(m)
-						matchwalker(path.join(basedir, dirname))
+						matchwalker(parentDir .. dirname)
 					end
 				end
 				os.matchdone(m)
@@ -337,6 +343,9 @@
 		local pipe = io.popen(cmd)
 		local result = pipe:read('*a')
 		pipe:close()
+		if result:endswith('\n') then
+			result = result:sub(1,#result-1)
+		end
 		return result
 	end
 
@@ -403,4 +412,36 @@
 			return true
 		end
 		return false
+	end
+
+	local builtin_remove = os.remove
+	function os.remove(filename)
+		if _OPTIONS['dryrun'] then
+			print("rm -f "..filename)
+		else
+			return builtin_remove(filename)
+		end
+	end
+	
+	function os.createsymlink(sourceFile, linkTarget)
+		if type(sourceFile) ~= 'string' or type(linkTarget) ~= 'string' then
+			error("Expected string argument")
+		end
+		if _OS == "windows" then
+			local cmd = "mklink "..sourceFile.." "..linkTarget
+			os.execute(cmd)
+		else
+			local cmd = "ln -s "..sourceFile.." "..linkTarget
+			os.execute(cmd)
+		end			
+	end
+	
+	function os.copy(src, dest)
+		if _OS == 'windows' then
+			local cmd = 'copy /Y '..src..' '..dest
+			return os.execute(cmd)
+		else
+			local cmd = 'scp -q '..src..' ' ..dest
+			return os.execute(cmd)
+		end
 	end
