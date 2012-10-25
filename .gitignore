@@ -1,7 +1,8 @@
 syntax: glob
 
 .DS_Store
-
+.buildpath
+.cproject
 *.orig
 *~
 
@@ -27,9 +28,17 @@ Makefile
 *.project
 *.tags
 
+*.ninja
+.ninja_log
+
 *.bbprojectsettings
 Scratchpad.txt
 Unix Worksheet.worksheet
 project.bbprojectdata
 Premake4.tmproj
-*.ninja
+*~
+*.o
+*.dasc
+luajit
+.git/
+*.png

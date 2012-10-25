@@ -4,6 +4,7 @@ syntax: glob
 .buildpath
 .cproject
 *.orig
+*~
 
 build
 bin
@@ -41,4 +42,3 @@ Premake4.tmproj
 luajit
 .git/
 *.png
-.gitignore
