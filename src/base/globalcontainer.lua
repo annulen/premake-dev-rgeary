@@ -9,6 +9,7 @@
 	local solution	= premake.solution  
 	local keyedblocks = premake.keyedblocks  
 	local targets = premake5.targets
+	local config = premake5.config
 	targets.prjToBuild = {}
 	targets.slnToBuild = {}
 	
@@ -72,21 +73,16 @@
 		
 		-- Assign unique object directories to every project configurations
 		-- Note : objdir & targetdir can't be inherited from a usage for ordering reasons 
-		globalContainer.bakeobjdirs(toBake)
+		--globalContainer.bakeobjdirs(toBake)
 		
-		-- Apply the usage requirements now we have resolved the objdirs
-		--  This function may recurse
-		for _,prj in pairs(toBake) do
-			globalContainer.applyUsageRequirements(prj)
-		end		
-				
 		-- expand all tokens (must come after baking objdirs)
+		--[[
 		for i,prj in pairs(toBake) do
 			oven.expandtokens(prj, "project")
 			for cfg in project.eachconfig(prj) do
 				oven.expandtokens(cfg, "config")
 			end
-		end
+		end]]
 		
 		-- Bake all solutions
 		solution.bakeall()
@@ -112,108 +108,15 @@
 		
 			-- Bake the real project (RP) first, and apply RP's usages to RP
 			project.bake(realProj)
-			globalContainer.applyUsageRequirements(realProj)
 			
 			-- Set up the usage target defaults from RP
-			for _,cfgPairing in ipairs(realProj.cfglist) do
-				
-				local buildcfg = cfgPairing[1]
-				local platform = cfgPairing[2]
-				local realCfg = project.getconfig(realProj, buildcfg, platform)
+			for _,buildFeatures in ipairs(realProj.buildFeaturesList) do
 
-				local usageKB = keyedblocks.createblock(usageProj.keyedblocks, { buildcfg, platform })
+				config.addUsageConfig(realProj, usageProj, buildFeatures)
 
-				-- To use a library project, you need to link to its target
-				--  Copy the build target from the real proj
-				if realCfg.buildtarget and realCfg.buildtarget.abspath then
-					local realTargetPath = realCfg.buildtarget.abspath
-					if realCfg.kind == 'SharedLib' then
-						-- link to the target as a shared library
-						oven.mergefield(usageKB, "linkAsShared", { realTargetPath })
-					elseif realCfg.kind == 'StaticLib' then
-						-- link to the target as a static library
-						oven.mergefield(usageKB, "linkAsStatic", { realTargetPath })
-					end
-				end
-				if realCfg.kind == 'SourceGen' then
-					oven.mergefield(usageKB, "compiledepends", { realProj.name })
-				elseif not realCfg.kind then
-					error("Can't use target, missing cfg.kind")
-				end
-				
-				-- Propagate fields
-				for fieldName, field in pairs(premake.propagatedFields) do
-					local usagePropagate = field.usagePropagation
-					local value = realCfg[fieldName]
-					local propagateValue = false
-					
-					if realCfg[fieldName] then
-						if usagePropagate == "Always" then
-							propagateValue = value
-						elseif usagePropagate == "StaticLinkage" and realCfg.kind == "StaticLib" then
-							propagateValue = value
-						elseif usagePropagate == "SharedLinkage" and realCfg.kind == "StaticLib" or realCfg.kind == "SharedLib" then
-							propagateValue = value
-						elseif type(usagePropagate) == 'function' then
-							propagateValue = usagePropagate(realCfg, value)
-						end
-						
-						if propagateValue then
-							oven.mergefield(usageKB, fieldName, propagateValue )
-						end
-					end						
-				end
-				
-				keyedblocks.resolveUses(usageKB, usageProj)
-				
 			end
 		end -- realProj
 
-	end
-	
-	-- May recurse
-	function globalContainer.applyUsageRequirements(prj)
-		return true
---[[
-		if prj.isUsage or prj.hasBakedUsage then
-			return true
-		end
-		prj.hasBakedUsage = true
-		
-		-- Bake the project's configs if we haven't already
-		project.bake(prj)
-	
-		-- Resolve "uses" for each config, and apply
-		for cfg in project.eachconfig(prj) do
-
-			for _,useProjName in ipairs(cfg.uses or {}) do
-				local useProj = project.getUsageProject( useProjName, prj.namespaces )
-				local cfgFilterTerms = getValues(cfg.usesconfig)
-				
-				if not useProj then
-					-- can't find the project, perhaps we've specified configuration filters also
-					local parts = useProjName:split('.|')
-					useProj = project.getUsageProject( parts[1], prj.namespaces )
-					if not useProj then
-						error("Could not find project/usage "..useProjName..' in project '..prj.name)
-					end
-					cfgFilterTerms = parts
-				end
-			
-				cfg.linkAsStatic = cfg.linkAsStatic or {}
-				cfg.linkAsShared = cfg.linkAsShared or {}
-				
-				-- make sure the usage project is also baked
-				globalContainer.bakeUsageProject(useProj)
-			
-				-- Merge in the usage requirements from the usage project
-				--  .getfield may recurse in to globalContainer.bakeUsageProject if the usage project has unbaked uses
-				keyedblocks.getfield(useProj, cfgFilterTerms, nil, cfg)
-
-			end -- each use
-			
-		end  -- each cfg			
-]]		
 	end
 
 --

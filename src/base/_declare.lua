@@ -31,6 +31,7 @@
 	premake5.oven = { }
 	premake.solution = { }
 	premake.keyedblocks = { }
+	premake5.config = { }
 	
 	premake.cache = {}
 	

@@ -4,11 +4,11 @@
 -- Copyright (c) 2002-2012 Jason Perkins and the Premake project
 --
 
-	premake.solution = premake.solution or { }
 	local solution = premake.solution
 	local oven = premake5.oven
 	local project = premake5.project
 	local targets = premake5.targets
+	local config = premake5.config
 
 
 -- The list of defined solutions (which contain projects, etc.)
@@ -172,7 +172,7 @@
 
 		-- fill in any calculated values
 		for _, cfg in ipairs(configs) do
-			premake5.config.bake(cfg)
+			config.bake(cfg)
 			ptypeSet( cfg, 'configs' )
 		end
 		oven.expandtokens(sln, "solution", nil, "ninjaBuildDir", false)

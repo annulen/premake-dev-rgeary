@@ -4,11 +4,11 @@
 -- Copyright (c) 2011-2012 Jason Perkins and the Premake project
 --
 
-	premake5.project = premake5.project or { }
 	local project = premake5.project
 	local oven = premake5.oven
 	local targets = premake5.targets
 	local keyedblocks = premake.keyedblocks
+	local config = premake5.config
 		
 --
 -- Flatten out a project and all of its configurations, merging all of the
@@ -49,23 +49,17 @@
 		result.system = nil
 		
 		-- apply any mappings to the project's configuration set
-		result.cfglist = project.bakeconfigmap(result)
+		result.buildFeaturesList = {}
 
-		-- bake all configurations contained by the project
-		local configs = {}
-		for _, pairing in ipairs(result.cfglist) do
-			local buildcfg = pairing[1]
-			local platform = pairing[2]
-			local cfg = project.bakeconfig(result, buildcfg, platform)
-			
-			-- make sure this config is supported by the action; skip if not
-			if premake.action.supportsconfig(cfg) then
-				configs[(buildcfg or "*") .. (platform or "")] = cfg
-			end
+		local cfglist = project.bakeconfigmap(result)
+		for _,cfgpair in ipairs(cfglist) do
+			local buildFeatures = {
+				buildcfg = cfgpair[1],
+				platform = cfgpair[2],				
+			}
+			project.addconfig(result, buildFeatures)
 		end
-		
-		result.configs = configs
-		
+				
 		-- Replace prj's contents with result. Ugly, but we don't want to accidentally reference the non-baked project later.
 		for k,v in pairs(prj) do
 			prj[k] = nil
@@ -77,16 +71,52 @@
 		timer.stop(tmr)
 		return result
 	end
-
+	
+--
+-- Add a baked configuration to the project.
+--  buildFeatures is a keyed table of keywords (buildcfg, platform, <featureName> = <featureName>) 
+--   describing the config
+-- 
+	function project.addconfig(prj, buildFeatures)
+		if prj and prj.isUsage then
+			prj = project.getRealProject(prj.name)
+		end		
+		if not prj then return end
+		
+		prj.configs = prj.configs or {}
+		prj.buildFeaturesList = prj.buildFeaturesList or {}
+		
+		local cfgName = config.getBuildName(buildFeatures)
+		if prj.configs[cfgName] then
+			return prj.configs[cfgName]
+		end
+		local cfg = project.bakeconfig(prj, buildFeatures)
+				
+		-- make sure this config is supported by the action; skip if not
+		if cfg and premake.action.supportsconfig(cfg) then
+			prj.configs[cfgName] = cfg
+		end
+		
+		table.insert( prj.buildFeaturesList, buildFeatures )
+		
+		-- Add usage requirements for the new configuration
+		config.addUsageConfig(prj, project.getUsageProject(prj.name), buildFeatures)
+		
+		return cfg
+	end
+	
 --
 -- Flattens out the build settings for a particular build configuration and
 -- platform pairing, and returns the result.
 --
 
-	function project.bakeconfig(prj, buildcfg, platform)
+	function project.bakeconfig(prj, buildFeatures)
 		local system
 		local architecture
 local tmr1 = timer.start('bakeconfig1')
+		local buildcfg = buildFeatures.buildcfg
+		local platform = buildFeatures.platform
+
 		-- for backward compatibility with the old platforms API, use platform
 		-- as the default system or architecture if it would be a valid value.
 		if platform then
@@ -101,14 +131,24 @@ local tmr1 = timer.start('bakeconfig1')
 		local filter, cfg
 		
 		system = system or premake.action.current().os or os.get()
-		filter = { buildcfg, _ACTION, system, architecture }
-		if platform then table.insert(filter, platform) end
+		filter = { 
+			buildcfg = buildcfg,
+			action = _ACTION, 
+			system = system, 
+			architecture = architecture,
+		}
+		
+		-- Insert platform & features in to filter
+		for k,v in pairs(buildFeatures) do
+			filter[k] = v
+		end		
+		
 		cfg = keyedblocks.getfield(prj, filter)
 		cfg.system = cfg.system or system
 	
-		--local cfgold = oven.bake(prj, prj.solution, filter); cfg = cfgold
 		cfg.buildcfg = buildcfg
 		cfg.platform = platform
+		cfg.buildFeatures = table.shallowcopy(buildFeatures)
 		cfg.action = _ACTION
 		cfg.solution = prj.solution
 		cfg.project = prj
@@ -147,7 +187,7 @@ local tmr1 = timer.start('bakeconfig1')
 timer.stop(tmr1)
 local tmr3 = timer.start('bakeconfig3')
 		-- fill in any calculated values
-		premake5.config.bake(cfg)
+		config.bake(cfg)
 timer.stop(tmr3)
 		return cfg
 	end
@@ -216,14 +256,14 @@ timer.stop(tmr3)
 			--prj = project.bake(prj)
 		end
 
-		local configs = prj.cfglist
-		local count = #configs
+		local buildFeaturesList = prj.buildFeaturesList
+		local count = #buildFeaturesList
 		
 		local i = 0
 		return function ()
 			i = i + 1
 			if i <= count then
-				return project.getconfig(prj, configs[i][1], configs[i][2])
+				return project.getconfig2(prj, buildFeaturesList[i])
 			end
 		end
 	end
@@ -458,6 +498,15 @@ timer.stop(tmr3)
 --
 	
 	function project.getconfig(prj, buildcfg, platform)
+		if type(buildcfg) == 'table' then
+			-- alias
+			local buildFeatures = buildcfg
+			return project.getconfig2(prj, buildFeatures)
+		end
+		return project.getconfig(prj, { buildcfg = buildcfg, platform = platform })
+	end
+	
+	function project.getconfig2(prj, buildFeatures)
 		-- to make testing a little easier, allow this function to
 		-- accept an unbaked project, and fix it on the fly
 		if not prj.isbaked then
@@ -467,17 +516,18 @@ timer.stop(tmr3)
 		-- if no build configuration is specified, return the "root" project
 		-- configurations, which includes all configuration values that
 		-- weren't set with a specific configuration filter
-		if not buildcfg then
+		if not buildFeatures.buildcfg then
 			return prj
 		end
 		
-		-- apply any configuration mappings
-		local pairing = project.mapconfig(prj, buildcfg, platform)
-		buildcfg = pairing[1]
-		platform = pairing[2]
+		-- apply any configuration mappings. TODO : Improve to support features
+		local pairing = project.mapconfig(prj, buildFeatures.buildcfg, buildFeatures.platform)
+		buildFeatures.buildcfg = pairing[1]
+		buildFeatures.platform = pairing[2]
 
 		-- look up and return the associated config		
-		local key = (buildcfg or "*") .. (platform or "")
+		--local key = (buildcfg or "*") .. (platform or "")
+		local key = config.getBuildName(buildFeatures)
 		return prj.configs[key]
 	end
 

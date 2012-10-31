@@ -760,20 +760,16 @@
 
 	-- buildwhen specifies when Premake should output the project in this configuration. Default is "always"
 	-- always 		Always output the project in this configuration and build it by default
-	-- used			Only output the project  in this configuration when it is used by another project
+	-- used			Only output the project in this configuration when it is used by another project
 	-- explicit		Always output the project in this configuration, but only build it when explicitly specified
 	api.register {
 		name = "buildwhen",
 		scope = "config",
 		kind = "string",
 		
-		allowed = { "always", "explicit", "used", }
+		allowed = { "always", "explicit", "used", },
 	}
-	premake.buildWhen = {}
-	premake.buildWhen['always'] = 1
-	premake.buildWhen['explicit'] = 2
-	premake.buildWhen['used'] = 3  
-
+	
 	-- The compile implicitly depends on the specified project
 	api.register {
 		name = "compiledepends",
@@ -1856,7 +1852,10 @@
 		local outputs = {}
 
 		-- Create a new project, append /protobuf on to the active project name or directory name
-		local prj = api.scope.project or {}
+		local prj = api.scope.project
+		if not prj then
+			error("Must use protobuf statement within a project")
+		end
 		local prjName = prj.name or path.getbasename(os.getcwd())
 		prjName = prjName..'/protobuf'
 		
@@ -1870,6 +1869,14 @@
 		if (not outputs.cppRoot) and (not outputs.javaRoot) and (not outputs.pythonRoot) then
 			outputs.cppRoot = protoPath
 		end
+
+		local protoFiles = {}
+		api.setlist(protoFiles, 'files', premake.fields['files'], inputFilePattern)
+		local protoCPPFiles = Seq:new(protoFiles.files):select(function(v) return v:gsub('%.proto$','%.pb%.cc') end):toTable()
+		
+		if #protoCPPFiles == 0 then
+			error("Could not find any *.proto files")
+		end
 		
 		api.scopepush()
 		project(prjName)
@@ -1880,12 +1887,14 @@
 			protobufout(outputs)
 			compiledepends(prjName)  -- if you use this project, it should be propagated as a compile dependency
 			alwaysuse("system/protobuf")	-- any derived project should always include the protobuf includes
-
+			
 			-- add the protobuf project to the usage requirements for the active solution
 		solution(api.scope.solution.name)
 			uses(prjName)
 			
 		api.scopepop()
+		-- add files to outer project
+		files(protoCPPFiles)
 	end
 
 	-- "export" explicitly lists which projects are included in a solution, and gives it an alias

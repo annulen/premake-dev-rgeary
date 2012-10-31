@@ -4,23 +4,102 @@
 -- Copyright (c) 2011-2012 Jason Perkins and the Premake project
 --
 
-	premake5.config = {}
 	local project = premake5.project
 	local config = premake5.config
 	local oven = premake5.oven
 	local keyedblocks = premake.keyedblocks
+	local globalContainer = premake5.globalContainer
 
+--
+-- Create a unique name from the build configuration / platform / features
+--
+	function config.getBuildName(buildFeatures, platformSeparator)
+		platformSeparator = platformSeparator or '_'
+		local cfgName = (buildFeatures.buildcfg or "*")
+		if buildFeatures.platform and buildFeatures.platform ~= '' then
+			cfgName = cfgName .. platformSeparator .. buildFeatures.platform
+		end
+		for k,v in pairs(buildFeatures) do
+			if k ~= 'buildcfg' and k ~= 'platform' then
+				cfgName = cfgName..'.'..v
+			end
+		end
+		return cfgName
+	end
 
+--
+-- Add a configuration to a usage project, propagate fields from the real project
+--
+	function config.addUsageConfig(realProj, usageProj, buildFeatures)
+		local buildcfg = buildFeatures.buildcfg
+		local platform = buildFeatures.platform
+		local realCfg = project.getconfig2(realProj, buildFeatures)
+		
+		if not usageProj.hasBakedUsage then
+			globalContainer.bakeUsageProject(usageProj)
+		end
+
+		local usageKB = keyedblocks.createblock(usageProj.keyedblocks, buildFeatures)
+
+		-- To use a library project, you need to link to its target
+		--  Copy the build target from the real proj
+		if realCfg.buildtarget and realCfg.buildtarget.abspath then
+			local realTargetPath = realCfg.buildtarget.abspath
+			if realCfg.kind == 'SharedLib' then
+				-- link to the target as a shared library
+				oven.mergefield(usageKB, "linkAsShared", { realTargetPath })
+			elseif realCfg.kind == 'StaticLib' then
+				-- link to the target as a static library
+				oven.mergefield(usageKB, "linkAsStatic", { realTargetPath })
+			end
+		end
+		if realCfg.kind == 'SourceGen' then
+			oven.mergefield(usageKB, "compiledepends", { realProj.name })
+		elseif not realCfg.kind then
+			error("Can't use target, missing cfg.kind")
+		end
+		
+		-- Propagate fields
+		for fieldName, field in pairs(premake.propagatedFields) do
+			local usagePropagate = field.usagePropagation
+			local value = realCfg[fieldName]
+			local propagateValue = false
+			
+			if realCfg[fieldName] then
+				if usagePropagate == "Always" then
+					propagateValue = value
+				elseif usagePropagate == "StaticLinkage" and realCfg.kind == "StaticLib" then
+					propagateValue = value
+				elseif usagePropagate == "SharedLinkage" and realCfg.kind == "StaticLib" or realCfg.kind == "SharedLib" then
+					propagateValue = value
+				elseif type(usagePropagate) == 'function' then
+					propagateValue = usagePropagate(realCfg, value)
+				end
+				
+				if propagateValue then
+					oven.mergefield(usageKB, fieldName, propagateValue )
+				end
+			end						
+		end
+		
+		keyedblocks.resolveUses(usageKB, usageProj)
+	end 
 --
 -- Finish the baking process for a solution or project level configurations.
 -- Doesn't bake per se, just fills in some calculated values.
 --
 
-	function config.bake(cfg)		
+	function config.bake(cfg)
+		if not cfg.buildFeatures then
+			cfg.buildFeatures = {
+				buildcfg = cfg.buildcfg,
+				platform = cfg.platform,
+			}
+		end
+		
 		-- assign human-readable names
-		local platform = iif( cfg.platform == '', nil, cfg.platform )
-		cfg.longname = table.concat({ cfg.buildcfg, platform }, "|")
-		cfg.shortname = table.concat({ cfg.buildcfg, platform }, " ")
+		cfg.longname = config.getBuildName(cfg.buildFeatures, '|')
+		cfg.shortname = config.getBuildName(cfg.buildFeatures, '_')
 		cfg.shortname = cfg.shortname:gsub(" ", "_"):lower()
 
 		if cfg.project and cfg.kind and cfg.kind ~= 'None' then
@@ -29,6 +108,8 @@
 			cfg.linktarget = config.getlinkinfo(cfg)
 			oven.expandtokens(cfg, nil, nil, "linktarget", true)
 		end
+		
+		oven.expandtokens(cfg, "config")
 		
 	end
 
