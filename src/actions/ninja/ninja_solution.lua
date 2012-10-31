@@ -589,11 +589,11 @@ function ninja.writeProjectTargets(prj, scope)
 timer.stop(tmr)
 	
 	local defaultTarget = 'donothing'
-	if prj.defaultconfiguration and prj.configs[prj.defaultconfiguration] then
+	if prj.defaultconfiguration and prj.configs and prj.configs[prj.defaultconfiguration] then
 		
 		local cfg = prj.configs[prj.defaultconfiguration]
 		if cfg.buildwhen ~= 'explicit' then
-			defaultTarget = prj.name..'.'..prj.defaultconfiguration
+			defaultTarget = prj.name..'.'..prj.defaultconfiguration:lower()
 			prjTargets[''] = { prj.name }
 		end
 	end
