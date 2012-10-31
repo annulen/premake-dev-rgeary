@@ -80,10 +80,14 @@ local absPathCache = {}
 		if (p == "") then p = "." end
 		
 		local result
+
+		cwd = cwd or os.getcwd()
+		while cwd:endswith('/') do
+			cwd = cwd:sub(1,#cwd-1)
+		end
 		
 		if (not isabsolute) or (p:find('/.',1,true) or p:find('$',1,true)) then
 local tmr=timer.start('path.getabsolute')
-			cwd = cwd or os.getcwd()
 			result = iif (isabsolute, nil, cwd)
 			
 			-- split up the supplied relative path and tackle it bit by bit
