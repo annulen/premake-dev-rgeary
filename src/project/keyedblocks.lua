@@ -170,6 +170,14 @@ function keyedblocks.resolveUses(kb, obj)
 		end
 
 		for _,useProjName in ipairs(uses) do
+			
+			local usefeature = {}
+			for v in useProjName:gmatch(':([^:]*)') do
+				table.insert( usefeature, v )
+			end
+			if #usefeature == 0 then usefeature = nil end
+			useProjName = useProjName:match("[^:]*")
+			
 			local useProj = kb.__uses[useProjName]
 
 			if type(useProj) ~= 'table' then
@@ -183,7 +191,7 @@ function keyedblocks.resolveUses(kb, obj)
 					end
 					error(errMsg)
 				end
-				kb.__uses[useProjName] = useProj
+				kb.__uses[useProjName] = { prj = useProj, usefeature = usefeature }
 			end
 		end
 	end
@@ -237,7 +245,7 @@ end
 
 --
 -- Returns a field from the keyedblocks
---   eg. keyedblocks.getfield(cfg, { "debug" }, 'kind')
+--   eg. keyedblocks.getfield(cfg, { buildcfg="debug"}, 'kind')
 -- May have to create the usage & bake the project if it's not already created 
 --
 function keyedblocks.getfield(obj, keywords, fieldName, dest)
@@ -266,7 +274,7 @@ function keyedblocks.getfield(obj, keywords, fieldName, dest)
 					local k,v = config.getkeyvalue(v)
 					rv[k] = v
 				else
-					rv[k] = v
+					rv[k:lower()] = v
 				end
 			end
 		end
@@ -363,8 +371,27 @@ function keyedblocks.getfield2(obj, filter, fieldName, dest)
 		-- Old : Apply usages after block
 		if kb.__uses then
 			for useProjName, p in pairs(kb.__uses) do
-				keyedblocks.bake(p, kbFilter)
-				findBlocks(p.keyedblocks, kbFilter)
+			
+				if p.usefeature then
+					-- Add the build feature to the target project's config list
+					local oldFilter = kbFilter
+					filter = table.shallowcopy(kbFilter)
+					for _,feature in ipairs(p.usefeature) do
+						local k,v = config.getkeyvalue(feature) 
+						kbFilter[k] = v
+						kbFilter.usefeature[k] = v
+					end
+					
+					-- evaluate the usage requirements of the target project, with the feature(s) enabled
+					keyedblocks.bake(p, kbFilter)
+					findBlocks(p.prj.keyedblocks, kbFilter)
+					
+					kbFilter = oldFilter
+				else
+					keyedblocks.bake(p, kbFilter)
+					findBlocks(p.keyedblocks, kbFilter)
+				end
+				
 			end
 		end
 

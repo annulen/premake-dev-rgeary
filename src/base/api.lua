@@ -9,6 +9,7 @@
 	local api = premake.api
 	local globalContainer = premake5.globalContainer
 	local targets = premake5.targets
+	local config = premake5.config
 
 --
 -- Here I define all of the getter/setter functions as metadata. The actual
