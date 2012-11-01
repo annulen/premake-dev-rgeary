@@ -167,14 +167,6 @@ function keyedblocks.resolveUses(kb, obj)
 		end
 
 		for _,useProjName in ipairs(uses) do
-			
-			local usesfeature = {}
-			for v in useProjName:gmatch(':([^:]*)') do
-				table.insert( usesfeature, v )
-			end
-			if #usesfeature == 0 then usesfeature = nil end
-			useProjName = useProjName:match("[^:]*")
-			
 			local useProj = kb.__uses[useProjName]
 
 			if type(useProj) ~= 'table' then
@@ -188,7 +180,7 @@ function keyedblocks.resolveUses(kb, obj)
 					end
 					error(errMsg)
 				end
-				kb.__uses[useProjName] = { prj = useProj, usesfeature = usesfeature }
+				kb.__uses[useProjName] = useProj
 			end
 		end
 	end
@@ -239,7 +231,7 @@ end
 
 --
 -- Returns a field from the keyedblocks
---   eg. keyedblocks.getfield(cfg, { buildcfg="debug"}, 'kind')
+--   eg. keyedblocks.getfield(cfg, { "debug" }, 'kind')
 -- May have to create the usage & bake the project if it's not already created 
 --
 function keyedblocks.getfield(obj, keywords, fieldName, dest)
@@ -250,10 +242,12 @@ function keyedblocks.getfield(obj, keywords, fieldName, dest)
 	
 	local function getKeywordSet(ws)
 		local rv = {}
-		for k,v in pairs(ws) do
+		for _,v in ipairs(ws) do
 
-			-- convert flags to hash set, eg. { "Threading=Multi" } -> { Threading = "Multi" }
-			if type(k) == 'number' and v and type(v) == 'string' and v ~= '' then
+			-- convert flags to hash set, eg. { "Threading=Multi" } -> { Threading = "Threading=Multi" }
+			if v and type(v) == 'string' and v ~= '' then
+				v = v:lower()
+				
 				if v:find('not ') then
 					error("keyword 'not' not supported as a filter")
 				end
@@ -263,12 +257,10 @@ function keyedblocks.getfield(obj, keywords, fieldName, dest)
 				
 				if v:contains("=") then
 					local k = v:match("[^=]*")
-					rv[k] = v:match(".*=(.*)"):lower()
+					rv[k] = v
 				else
-					rv[v] = v:lower()
+					rv[v] = v
 				end
-			else
-				rv[k] = v:lower()
 			end
 		end
 		return rv
@@ -294,15 +286,8 @@ function keyedblocks.getfield(obj, keywords, fieldName, dest)
 			for k,v in Seq:new(filter):concat(usesconfig):each() do
 				-- .usesconfig & filter is of the form { Debug, "Threading=Multi", }
 				-- ie. set the filter on the key, match blocks on the value
-				if type(k) == 'number' then
-					k = v
-					if v:contains("=") then 
-						k = v:match("[^=]*")
-						v = v:match(".*=(.*)")
-					end 
-				end
 				v = v:lower()
-				filter2[k] = v
+				filter2[v] = v
 			end
 			filter = filter2
 		end
@@ -359,30 +344,8 @@ function keyedblocks.getfield2(obj, filter, fieldName, dest)
 		-- Old : Apply usages after block
 		if kb.__uses then
 			for useProjName, p in pairs(kb.__uses) do
-				keyedblocks.bake(p.prj)
-				local buildFeature = {
-					buildcfg = filter.buildcfg,
-					platform = filter.platform,
-				}
-
-				if p.usesfeature then
-					-- Add the build feature to the target project's config list
-					local oldFilter = filter
-					filter = table.shallowcopy(filter)
-					for _,v in ipairs(p.usesfeature) do
-						v = v:lower()
-						buildFeature[v] = v
-						filter[v] = v
-					end
-					project.addconfig(p.prj, buildFeature)
-					
-					-- evaluate the usage requirements of the target project, with the feature(s) enabled
-					findBlocks(p.prj.keyedblocks)
-					
-					filter = oldFilter
-				else
-					findBlocks(p.prj.keyedblocks)
-				end
+				keyedblocks.bake(p)
+				findBlocks(p.keyedblocks)
 			end
 		end
 
@@ -484,8 +447,8 @@ function keyedblocks.getfield2(obj, filter, fieldName, dest)
 end
 
 -- return or create the nested keyedblock for the given term
-function keyedblocks.createblock(kb, buildFeatures)
-	for k,v in pairs(buildFeatures) do
+function keyedblocks.createblock(kb, terms)
+	for _,v in ipairs(terms) do
 		v = v:lower()
 		if v:find('not ') then
 			error("keyword 'not' not supported as a filter")
