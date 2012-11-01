@@ -9,6 +9,7 @@ local globalContainer = premake5.globalContainer
 local targets = premake5.targets
 local project = premake5.project
 local oven = premake5.oven
+local config = premake5.config
 
 --
 -- Expand any 'a or b' statements, and sort each term within the term set 
@@ -57,7 +58,7 @@ end
 function keyedblocks.create(obj, parent)
 	local kbBase = {}
 	
-	-- No need to bake twice
+	-- No need to create twice
 	if obj.keyedblocks then
 		return obj
 	end
@@ -86,7 +87,8 @@ function keyedblocks.create(obj, parent)
 				if premake.fieldAliases[term] then
 					term = premake.fieldAliases[term]
 				end
-				-- if it's of the form key=value, matchy on the value
+				
+				-- if it's of the form key=value, match on the value. This allows you to match on flag values.
 				if term:contains('=') then
 					term = term:match(".*=(.*)")
 				end
@@ -143,6 +145,7 @@ function keyedblocks.create(obj, parent)
 	end
 
 	if parent then
+		keyedblocks.create(parent)
 		kbBase.__parent = parent
 	end
 	kbBase.__name = obj.name
@@ -202,7 +205,10 @@ function keyedblocks.getUsage(name, namespaces)
 	return usage, suggestionStr
 end
 
-function keyedblocks.bake(usage)
+function keyedblocks.bake(usage, kbFilter)
+	if kbFilter and kbFilter.usefeature then
+		project.addconfig(usage, kbFilter)
+	end
 	if not usage.keyedblocks then
 		if ptype(usage) == 'project' then
 			globalContainer.bakeUsageProject(usage)
@@ -242,9 +248,10 @@ function keyedblocks.getfield(obj, keywords, fieldName, dest)
 	
 	local function getKeywordSet(ws)
 		local rv = {}
-		for _,v in ipairs(ws) do
+		for k,v in pairs(ws) do
 
-			-- convert flags to hash set, eg. { "Threading=Multi" } -> { Threading = "Threading=Multi" }
+			-- convert flags to hash set, eg. { "Threading=Multi" } -> { Threading = "Multi" }
+			--  eg : configuration "flags=Symbols" will be aliased to configuration "Symbols", useconfig "flags=symbols" will be aliased to "symbols"
 			if v and type(v) == 'string' and v ~= '' then
 				v = v:lower()
 				
@@ -255,11 +262,11 @@ function keyedblocks.getfield(obj, keywords, fieldName, dest)
 					error("keyword 'or' not supported as a filter")
 				end
 				
-				if v:contains("=") then
-					local k = v:match("[^=]*")
+				if type(k) == 'number' then
+					local k,v = config.getkeyvalue(v)
 					rv[k] = v
 				else
-					rv[v] = v
+					rv[k] = v
 				end
 			end
 		end
@@ -284,10 +291,12 @@ function keyedblocks.getfield(obj, keywords, fieldName, dest)
 		if usesconfig then
 			local filter2 = {}
 			for k,v in Seq:new(filter):concat(usesconfig):each() do
-				-- .usesconfig & filter is of the form { Debug, "Threading=Multi", }
+				-- .usesconfig & filter is of the form { debug, "threading=multi", }
 				-- ie. set the filter on the key, match blocks on the value
-				v = v:lower()
-				filter2[v] = v
+				if type(k) ~= 'number' then
+					v = v:lower()
+					filter2[k:lower()] = v
+				end
 			end
 			filter = filter2
 		end
@@ -325,7 +334,7 @@ function keyedblocks.getfield2(obj, filter, fieldName, dest)
 	local accessedBlocks = {}
 	local foundBlocks = {}
 
-	local function findBlocks(kb)
+	local function findBlocks(kb, kbFilter)
 		
 		if not kb or table.isempty(kb) then
 			return nil
@@ -333,19 +342,29 @@ function keyedblocks.getfield2(obj, filter, fieldName, dest)
 			return nil
 		end
 		accessedBlocks[kb] = kb
+		
+		if kb.usefeature then
+			kbFilter = table.shallowcopy(kbFilter)
+			kbFilter.usefeature = kbFilter.usefeature or {}
+			for _,feature in ipairs(kb.usefeature) do
+				local k,v = config.getkeyvalue(feature) 
+				kbFilter[k] = v
+				kbFilter.usefeature[k] = v
+			end 
+		end			
 
 		-- Apply parent before block
 		if kb.__parent then
-			keyedblocks.bake(kb.__parent)
-			findBlocks(kb.__parent.keyedblocks)
+			keyedblocks.bake(kb.__parent, kbFilter.usefeature)
+			findBlocks(kb.__parent.keyedblocks, kbFilter)
 		end
 
 		-- New : Apply usages before block, so the block can override them
 		-- Old : Apply usages after block
 		if kb.__uses then
 			for useProjName, p in pairs(kb.__uses) do
-				keyedblocks.bake(p)
-				findBlocks(p.keyedblocks)
+				keyedblocks.bake(p, kbFilter)
+				findBlocks(p.keyedblocks, kbFilter)
 			end
 		end
 
@@ -354,10 +373,10 @@ function keyedblocks.getfield2(obj, filter, fieldName, dest)
 
 		-- Iterate through the filters and apply any blocks that match
 		if kb.__config then
-			for _,term in pairs(filter) do
+			for _,term in pairs(kbFilter) do
 				-- check if this combination of terms has been specified
 				if kb.__config[term] then
-					findBlocks(kb.__config[term])
+					findBlocks(kb.__config[term], kbFilter)
 				end
 			end
 		end
@@ -366,7 +385,7 @@ function keyedblocks.getfield2(obj, filter, fieldName, dest)
 		if kb.__notconfig then
 			for notTerm,notTermKB in pairs(kb.__notconfig) do
 				local match = false
-				for _,term in pairs(filter) do
+				for _,term in pairs(kbFilter) do
 					if term == notTerm then
 						match = true
 						break
@@ -374,7 +393,7 @@ function keyedblocks.getfield2(obj, filter, fieldName, dest)
 				end
 				if not match then
 					-- recurse
-					findBlocks(notTermKB)
+					findBlocks(notTermKB, kbFilter)
 				end
 			end
 		end
@@ -389,7 +408,7 @@ function keyedblocks.getfield2(obj, filter, fieldName, dest)
 	if kbBase.__cache[filterStr] then
 		foundBlocks = kbBase.__cache[filterStr]
 	else
-		findBlocks(kbBase)
+		findBlocks(kbBase, filter)
 	end
 	kbBase.__cache[filterStr] = foundBlocks
 

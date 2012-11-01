@@ -22,27 +22,24 @@
 -- allowDuplicates	Allow duplicate values, order dependent
 -- isKeyedTable 	Values are in a keyed table. Multiple tables with the same key will overwrite the value.
 
---	kind			Description						Multiple instance behaviour			Comments
-------------------------------------------------------------------------------------------------
---  string			A single string value			overwrite
---  string-list		A list of strings				append new elements to the list
---  path			A single path 					overwrite							Paths are converted to absolute
---  path-list		A list of paths					append new elements to the list		Paths are converted to absolute
---  directory-list	A list of paths					append new elements to the list		Can contain wildcards
---  file-list		A list of files					append new elements to the list		Can contain wildcards
---  key-array		A keyed table					overwrite
---  object			A table							overwrite
+--	kind			Description						Comments
+---------------------------------------------------------
+--  string			A string value		
+--  path			A single path 					Paths are converted to absolute
+--  directory		A list of paths					Can contain wildcards
+--  file			A list of files					Can contain wildcards
+--  key-array		A keyed table					
+--  object			A table							overwrite on multiple instances
 
 -- Modifiers :
---  overwrite				Multiple instances will overwrite. Used on string-list.
 --  uniqueValues			The final list will contain only unique elements
 --  splitOnSpace 			If the field value contains a space, treat it as an array of two values. eg "aaa bbb" => { "aaa", "bbb" }
 --  isConfigurationKeyword	The value to this field will automatically be added to the filter list when evaluating xxx in 'configuration "xxx"' statements
 --  expandtokens			The value can contain tokens, eg. %{cfg.shortname}
---  usagePropagation		Possible values : StaticLinkage, SharedLinkage, always. 
+--  usagePropagation		Possible values : WhenStaticLib, WhenSharedOrStaticLib, Always, (function) 
 --							When project 'B' uses project 'A', anything in project A's usage requirements will be copied to project B
---		StaticLinkage	This field is propagated automatically from a project 'A' to project A's usage if A has kind="StaticLib". Used for linkAsStatic
---		SharedLinkage	This field is propagated automatically from a project 'A' to project A's usage if A has kind="StaticLib" or kind="SharedLib". Used for linkAsShared,  
+--		WhenStaticLib			This field is propagated automatically from a project 'A' to project A's usage if A has kind="StaticLib". Used for linkAsStatic
+--		WhenSharedOrStaticLib	This field is propagated automatically from a project 'A' to project A's usage if A has kind="StaticLib" or kind="SharedLib". Used for linkAsShared  
 --		Always			This field will always be propagaged to the usage requirement. Used for implicit compile dependencies
 --		(function)		Propagates the return value of function(cfg, value), if not nil 
 	
@@ -564,7 +561,7 @@
 
 	function api.setlist(target, name, field, value)
 		-- start with the existing list, or an empty one
-		target[name] = iif(field.overwrite, {}, target[name] or {})
+		target[name] = target[name] or {}
 		target = target[name]
 		
 		-- find the contained data type
@@ -800,7 +797,11 @@
 		scope = "project",
 		kind = "string",
 		isList = true,
-		overwrite = true,			-- don't merge multiple configurations sections
+		setter = function(target, name, field, value)
+			config.registerkey("buildcfg", value)
+			-- always overwrite
+			target[name] = value
+		end
 	}
 	
 	-- Flags only passed to the C++ compiler
@@ -1088,7 +1089,7 @@
 		kind = "directory",
 		isList = true,
 		expandtokens = true,
-		usagePropagation = "SharedLinkage",		-- Propagate to usage requirement if kind="StaticLib" or kind="SharedLib"
+		usagePropagation = "WhenSharedOrStaticLib",		-- Propagate to usage requirement if kind="StaticLib" or kind="SharedLib"
 		namealiases = { 'libdir' }
 	}
 
@@ -1132,7 +1133,7 @@
 		kind = "string",
 		isList = true,
 		expandtokens = true,
-		usagePropagation = "SharedLinkage",
+		usagePropagation = "WhenSharedOrStaticLib",
 	}
 	
 	-- Link to the static lib version of a system library
@@ -1143,7 +1144,7 @@
 		kind = "string",
 		isList = true,
 		expandtokens = true,
-		usagePropagation = "StaticLinkage"
+		usagePropagation = "WhenStaticLib"
 	}
 	
 	-- Wrap the linker tool with this command. The original compile command & flags will be
@@ -1205,6 +1206,11 @@
 		scope = "project",
 		kind = "string",
 		isList = true,
+		setter = function(target, name, field, value)
+			config.registerkey("platform", value)
+			-- always overwrite
+			target[name] = value
+		end
 	}
 
 	api.register {
@@ -1314,7 +1320,17 @@
 		kind = "path",
 		isList = true,
 		expandtokens = true,
-		usagePropagation = "SharedLinkage",
+		usagePropagation = "WhenSharedOrStaticLib",
+	}
+	
+	-- list of all features supported by the project
+	-- This is set by the api.feature command 
+	api.register {
+		name = "supportedfeatures",
+		scope = "project",
+		kind = "string",
+		isList = true,
+		usagePropagation = "Always",
 	}
 
 	api.register {
@@ -1373,6 +1389,14 @@
 		isConfigurationKeyword = true,		-- use this as a keyword for configurations
 		-- set allowed to a function so it will be evaluated later when all the toolsets have been loaded
 		allowed = function() return getSubTableNames(premake.tools); end 
+	}
+	
+	-- Enable a feature declared with "feature" 
+	api.register {
+		name = "usefeature",
+		scope = "config",
+		kind = "string",
+		isList = true,
 	}
 	
 	-- Specifies a project/usage that this project configuration depends upon
@@ -2014,3 +2038,29 @@ function release(t, t2)
 	end
 end
 
+--*************************************************************************************
+-- Features
+--  Features are build configurations which are enabled by a dependent project 
+--  So you can define a feature in your common project, and enable that feature if you 
+--  use it in a derived project
+--*************************************************************************************
+
+function api.feature(featureName)
+	if not featureName or featureName == '' then
+		-- exit the feature block
+		configuration {} 
+		return
+	end
+	if type(featureName) ~= 'string' then
+		error("Expected feature <featureName>")
+	end
+	
+	-- Keeping track of supported features is necessary in order to decide if 
+	-- we need to add a separate build configuration for a requested feature
+	--  supportedfeatures is always propagated to the usage requirements 
+	supportedfeatures(featureName)
+	
+	-- Start a new configuration block for this feature
+	configuration(featureName)
+		buildwhen "used"
+end

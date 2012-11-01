@@ -20,7 +20,6 @@
 		prj = prj.project or prj
 		local sln = prj.solution
 		
-		keyedblocks.create(sln)
 		keyedblocks.create(prj, sln)
 		
 		if prj.isbaked then
@@ -30,46 +29,27 @@
 		
 		-- bake the project's "root" configuration, which are all of the
 		-- values that aren't part of a more specific configuration
-		local result = oven.merge({}, prj)
-		result.solution = sln
-		
-		-- merge in the "project" level fields from the solution object 
-		for k,v in pairs(sln) do
-			if k ~= 'block' then
-				if not prj[k] then
-					result[k] = v
-				end
-			end
-		end
-		result.platforms = prj.platforms or {}
-		result.blocks = prj.blocks
-		result.isbaked = true
+		prj.solution = sln
+		prj.platforms = prj.platforms or {}
+		prj.isbaked = true
 		
 		-- prevent any default system setting from influencing configurations
-		result.system = nil
+		prj.system = nil
 		
 		-- apply any mappings to the project's configuration set
-		result.buildFeaturesList = {}
+		prj.buildFeaturesList = {}
 
-		local cfglist = project.bakeconfigmap(result)
+		local cfglist = project.bakeconfigmap(prj)
 		for _,cfgpair in ipairs(cfglist) do
 			local buildFeatures = {
 				buildcfg = cfgpair[1],
 				platform = cfgpair[2],				
 			}
-			project.addconfig(result, buildFeatures)
+			project.addconfig(prj, buildFeatures)
 		end
 				
-		-- Replace prj's contents with result. Ugly, but we don't want to accidentally reference the non-baked project later.
-		for k,v in pairs(prj) do
-			prj[k] = nil
-		end
-		for k,v in pairs(result) do
-			prj[k] = v
-		end
-		
 		timer.stop(tmr)
-		return result
+		return prj
 	end
 	
 --
@@ -77,11 +57,17 @@
 --  buildFeatures is a keyed table of keywords (buildcfg, platform, <featureName> = <featureName>) 
 --   describing the config
 -- 
+	local inProgress = {}
 	function project.addconfig(prj, buildFeatures)
-		if prj and prj.isUsage then
-			prj = project.getRealProject(prj.name)
+		if not prj or ptype(prj) == 'solution' then return end
+		if prj.isUsage then
+			prj = project.getRealProject(prj.name, prj.namespaces)
 		end		
 		if not prj then return end
+		
+		if not prj.isbaked then
+			project.bake(prj)
+		end
 		
 		prj.configs = prj.configs or {}
 		prj.buildFeaturesList = prj.buildFeaturesList or {}
@@ -90,6 +76,16 @@
 		if prj.configs[cfgName] then
 			return prj.configs[cfgName]
 		end
+		
+if inProgress[prj] then
+	error("Recursive dependency with "..prj.name.." : "..table.concat(inProgress, (' ')))
+end 
+inProgress[prj] = prj
+table.insert(inProgress, prj.name)
+		
+		-- Add null configuration to avoid re-adding if there is a circular dependency
+		prj.configs[cfgName] = {}
+		
 		local cfg = project.bakeconfig(prj, buildFeatures)
 				
 		-- make sure this config is supported by the action; skip if not
@@ -100,8 +96,11 @@
 		table.insert( prj.buildFeaturesList, buildFeatures )
 		
 		-- Add usage requirements for the new configuration
-		config.addUsageConfig(prj, project.getUsageProject(prj.name), buildFeatures)
+		local uProj = project.getUsageProject(prj.name)
+		config.addUsageConfig(prj, uProj, buildFeatures)
 		
+inProgress[prj] = nil
+table.remove(inProgress, table.indexof(inProgress, prj.name))
 		return cfg
 	end
 	
@@ -209,7 +208,8 @@ timer.stop(tmr3)
 		-- Apply any mapping tables to the project's initial configuration set,
 		-- which includes configurations inherited from the solution. These rules
 		-- may cause configurations to be added ore removed from the project.
-		local configs = table.fold(prj.configurations or {}, prj.platforms or {})
+		local sln = prj.solution
+		local configs = table.fold(sln.configurations or {}, sln.platforms or {})
 		for i, cfg in ipairs(configs) do
 			configs[i] = project.mapconfig(prj, cfg[1], cfg[2])
 		end
@@ -323,7 +323,7 @@ timer.stop(tmr3)
 			end
 			
 		end
-				
+		
 		return prj
 	end
 
@@ -470,6 +470,22 @@ timer.stop(tmr3)
 		prj.uuid           = os.uuid()
 		prj.blocks         = { }
 		prj.isUsage		   = isUsage;
+		
+		if isUsage then
+			prj.getRealProject = function(self) 
+				local realProj = project.getRealProject(self.name, self.namespaces)
+				self.getRealProject = function(s) return realProj end
+				return realProj 
+			end
+			prj.getUsageProject = function(self) return self end
+		else
+			prj.getRealProject = function(self) return self end 
+			prj.getUsageProject = function(self) 
+				local uProj = project.getUsageProject(self.name, self.namespaces)
+				self.getUsageProject = function(s) return uProj end
+				return uProj 
+			end
+		end
 		
 		-- Create a default usage project if there isn't one
 		if (not isUsage) and (not project.getUsageProject(prj.name, namespaces)) then

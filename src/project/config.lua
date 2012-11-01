@@ -13,18 +13,19 @@
 --
 -- Create a unique name from the build configuration / platform / features
 --
+	local ignoreKey = toSet({ 'buildcfg', 'platform', 'action', 'system', 'architecture', 'kind' })
 	function config.getBuildName(buildFeatures, platformSeparator)
 		platformSeparator = platformSeparator or '_'
 		local cfgName = (buildFeatures.buildcfg or "*")
 		if buildFeatures.platform and buildFeatures.platform ~= '' then
 			cfgName = cfgName .. platformSeparator .. buildFeatures.platform
 		end
-		for k,v in pairs(buildFeatures) do
-			if k ~= 'buildcfg' and k ~= 'platform' then
+		for k,v in pairs(buildFeatures.usefeature or {}) do
+			if not ignoreKey[k] then
 				cfgName = cfgName..'.'..v
 			end
 		end
-		return cfgName
+		return cfgName:lower()
 	end
 
 --
@@ -68,9 +69,9 @@
 			if realCfg[fieldName] then
 				if usagePropagate == "Always" then
 					propagateValue = value
-				elseif usagePropagate == "StaticLinkage" and realCfg.kind == "StaticLib" then
+				elseif usagePropagate == "WhenStaticLib" and realCfg.kind == "StaticLib" then
 					propagateValue = value
-				elseif usagePropagate == "SharedLinkage" and realCfg.kind == "StaticLib" or realCfg.kind == "SharedLib" then
+				elseif usagePropagate == "WhenSharedOrStaticLib" and (realCfg.kind == "StaticLib" or realCfg.kind == "SharedLib") then
 					propagateValue = value
 				elseif type(usagePropagate) == 'function' then
 					propagateValue = usagePropagate(realCfg, value)
@@ -424,5 +425,30 @@
 		return cfg.flags.AddPhonyHeaderDependency or
 			cfg.flags.CreateDependencyFile or
 			cfg.flags.CreateDependencyFileIncludeSystem 
+	end
+	
+--
+-- Register a key/value pair, eg. buildcfg=Debug
+--
+	config.cfgValueToKey = {}
+	function config.registerkey(cfgKey, cfgValues)
+		if type(cfgValues) == 'string' then cfgValues = { cfgValues } end
+		
+		for _,v in ipairs(cfgValues) do 
+			config.cfgValueToKey[v] = cfgKey
+		end
+	end
+	
+--
+-- Given a value (eg. "Release"), find the category (ie. buildcfg)
+--
+	function config.getkeyvalue(cfgValue)
+		cfgValue = cfgValue:lower()
+		if cfgValue:contains("=") then
+			local key = cfgValue:match("[^=]*")
+			local value = cfgValue:match(".*=(.*)")
+			return key,value
+		end
+		return (config.cfgValueToKey[cfgValue] or cfgValue), cfgValue
 	end
 	
