@@ -1,5 +1,7 @@
 #!/bin/bash
 
+trap "exit 2" SIGINT
+
 ##DEBUG
 if [[ "$PREMAKE_PRERUN" != "" ]]; then
         eval "$PREMAKE_PRERUN"
