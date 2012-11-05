@@ -79,13 +79,9 @@
     	return false
 	end
 	
---
--- Script-side program entry point.
---
 
-	function _premake_main(scriptpath)
+	function attachDebugger()
 
-		-- Attach Debugger
 		local ok,err
 		if(_OPTIONS["attach"] ) then
 			local debuggerIP = _OPTIONS["attach"]
@@ -104,6 +100,17 @@
 				print('Connected to debugger')
 			end
 		end
+			
+	end	
+	
+--
+-- Script-side program entry point.
+--
+
+	function _premake_main(scriptpath)
+
+		-- Attach Debugger
+		attachDebugger()
 
 		-- if running off the disk (in debug mode), load everything 
 		-- listed in _manifest.lua; the list divisions make sure
@@ -259,7 +266,7 @@
 
 		-- Validate the command-line arguments. This has to happen after the
 		-- script has run to allow for project-specific options
-		ok, err = premake.option.validate()
+		local ok, err = premake.option.validate()
 		if (not ok) then error("Error: " .. err, 0) end
 		
 

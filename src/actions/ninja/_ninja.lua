@@ -39,11 +39,11 @@
 		buildFileHandle = nil,
 		
 		onStart = function()
-			local slnList = Seq:ipairs(targets.solution)
+			local slnList = Seq:new(targets.slnToBuild)
 			if slnList:count() > 1 then
 				printDebug('Building solutions : '..slnList:select('name'):mkstring(', '))
 			else 
-				printDebug('Building solution : '..slnList:first().name)
+				printDebug('Building solution : '..slnList:select('name'):mkstring(', '))
 			end
 		end,
 		
@@ -64,11 +64,12 @@
 		end,
 		
 		oncleansolution = function(sln)
-			--clean.file(sln, ninja.getSolutionBuildFilename(sln))
+			clean.file(sln, ninja.getSolutionBuildFilename(sln))
 			clean.file(sln, path.join(sln.basedir, 'build.ninja'))
 			ninja.setNinjaBuildDir(sln)
 			clean.file(sln, path.join(ninja.builddir, 'buildedges.ninja'))
 			clean.file(sln, path.join(ninja.builddir, '.ninja_log'))
+			clean.file(sln, path.join(repoRoot, 'build.ninja'))
 		end,
 	}
 	
@@ -119,7 +120,7 @@
 		-- Write a default build for the repoRoot		
 		if repoRoot ~= ninja.builddir and (not ninja.scope[repoRoot]) then
 			ninja.checkIgnoreFiles(repoRoot)
-			--ninja.generateDefaultBuild(nil, repoRoot, globalScope)
+			ninja.generateDefaultBuild(nil, repoRoot, globalScope)
 		end 
 		
 		slnDone = {}
