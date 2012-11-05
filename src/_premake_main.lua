@@ -160,6 +160,16 @@
 			print = function() end
 		end
 		
+		-- Add any command line define variants
+		if _OPTIONS['define'] then
+			local defines = _OPTIONS['define']:split(' ')
+			for _,v in ipairs(defines) do
+				configuration(v)
+					define(v)
+			end
+			configuration {}
+		end		
+		
 		-- Search for a system-level premake4-system.lua file
 		local systemScript
 		if os.getenv('PREMAKE_PATH') then
@@ -207,7 +217,12 @@
 		
 		if (os.isfile(fname) and requirePremakeFile) then
 			timer.start('Load build script')
+			
+			-- Setup state & load the build script
+			global()
+			configuration {}
 			dofile(fname, true)
+			
 			timer.stop()
 		end
 

@@ -68,8 +68,8 @@
 				local onsolution = a.onSolution or a.onsolution
 				local onproject = a.onProject or a.onproject
 				
-				if #targets.slnToBuild > 0 then
-					for _,sln in ipairs(targets.slnToBuild) do
+				if not table.isempty(targets.slnToBuild) then
+					for _,sln in pairs(targets.slnToBuild) do
 						if onsolution then onsolution(sln) end
 						
 						for prj in premake.solution.eachproject_ng(sln) do
@@ -77,7 +77,7 @@
 						end
 					end
 				else
-					for _,prj in ipairs(targets.prjToBuild) do
+					for _,prj in pairs(targets.prjToBuild) do
 						if onproject then onproject(prj) end
 					end
 				end

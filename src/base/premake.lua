@@ -15,6 +15,7 @@
 	configuration 	= api.configuration
 	protobuf 		= api.protobuf
 	export 			= api.export
+	buildfeature	= api.buildfeature
 
 --
 -- Define some commonly used symbols, for future-proofing.

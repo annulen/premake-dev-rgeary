@@ -213,9 +213,10 @@ function keyedblocks.getUsage(name, namespaces)
 	return usage, suggestionStr
 end
 
-function keyedblocks.bake(usage, kbFilter)
-	if kbFilter and kbFilter.usefeature then
-		project.addconfig(usage, kbFilter)
+function keyedblocks.bake(usage, filter)
+	local usefeatures = config.getPropagated(filter)
+	if not table.isempty(usefeatures) then
+		project.addconfig(usage, usefeatures)
 	end
 	if not usage.keyedblocks then
 		if ptype(usage) == 'project' then
@@ -342,7 +343,7 @@ function keyedblocks.getfield2(obj, filter, fieldName, dest)
 	local accessedBlocks = {}
 	local foundBlocks = {}
 
-	local function findBlocks(kb, kbFilter)
+	local function findBlocks(kb)
 		
 		if not kb or table.isempty(kb) then
 			return nil
@@ -352,19 +353,17 @@ function keyedblocks.getfield2(obj, filter, fieldName, dest)
 		accessedBlocks[kb] = kb
 		
 		if kb.usefeature then
-			kbFilter = table.shallowcopy(kbFilter)
-			kbFilter.usefeature = kbFilter.usefeature or {}
+			filter = table.shallowcopy(filter)
 			for _,feature in ipairs(kb.usefeature) do
 				local k,v = config.getkeyvalue(feature) 
-				kbFilter[k] = v
-				kbFilter.usefeature[k] = v
+				filter[k] = v
 			end 
-		end			
-
+		end
+		
 		-- Apply parent before block
 		if kb.__parent then
-			keyedblocks.bake(kb.__parent, kbFilter.usefeature)
-			findBlocks(kb.__parent.keyedblocks, kbFilter)
+			keyedblocks.bake(kb.__parent, filter)
+			findBlocks(kb.__parent.keyedblocks)
 		end
 
 		-- New : Apply usages before block, so the block can override them
@@ -372,25 +371,24 @@ function keyedblocks.getfield2(obj, filter, fieldName, dest)
 		if kb.__uses then
 			for useProjName, p in pairs(kb.__uses) do
 			
+				local oldFilter = filter
 				if p.usefeature then
 					-- Add the build feature to the target project's config list
-					local oldFilter = kbFilter
-					filter = table.shallowcopy(kbFilter)
+					filter = table.shallowcopy(filter)
 					for _,feature in ipairs(p.usefeature) do
 						local k,v = config.getkeyvalue(feature) 
-						kbFilter[k] = v
-						kbFilter.usefeature[k] = v
+						filter[k] = v
 					end
 					
 					-- evaluate the usage requirements of the target project, with the feature(s) enabled
-					keyedblocks.bake(p, kbFilter)
-					findBlocks(p.prj.keyedblocks, kbFilter)
+					keyedblocks.bake(p.prj, filter)
+					findBlocks(p.prj.keyedblocks)
 					
-					kbFilter = oldFilter
 				else
-					keyedblocks.bake(p, kbFilter)
-					findBlocks(p.keyedblocks, kbFilter)
+					keyedblocks.bake(p.prj, filter)
+					findBlocks(p.prj.keyedblocks)
 				end
+				filter = oldFilter
 				
 			end
 		end
@@ -400,10 +398,10 @@ function keyedblocks.getfield2(obj, filter, fieldName, dest)
 
 		-- Iterate through the filters and apply any blocks that match
 		if kb.__config then
-			for _,term in pairs(kbFilter) do
+			for _,term in pairs(filter) do
 				-- check if this combination of terms has been specified
 				if kb.__config[term] then
-					findBlocks(kb.__config[term], kbFilter)
+					findBlocks(kb.__config[term], filter)
 				end
 			end
 		end
@@ -412,7 +410,7 @@ function keyedblocks.getfield2(obj, filter, fieldName, dest)
 		if kb.__notconfig then
 			for notTerm,notTermKB in pairs(kb.__notconfig) do
 				local match = false
-				for _,term in pairs(kbFilter) do
+				for _,term in pairs(filter) do
 					if term == notTerm then
 						match = true
 						break
@@ -420,7 +418,7 @@ function keyedblocks.getfield2(obj, filter, fieldName, dest)
 				end
 				if not match then
 					-- recurse
-					findBlocks(notTermKB, kbFilter)
+					findBlocks(notTermKB, filter)
 				end
 			end
 		end
@@ -481,6 +479,15 @@ function keyedblocks.getfield2(obj, filter, fieldName, dest)
 			end
 		end
 	end
+	
+	if rv.compiledepends then
+		local usefeatures = config.getPropagated(filter)
+		for _,v in ipairs(rv.compiledepends) do
+			local prj = project.getRealProject(v)
+			project.addconfig(prj, usefeatures)
+		end
+	end
+			
 	timer.stop()
 	
 	if isEmpty then
@@ -494,7 +501,7 @@ end
 
 -- return or create the nested keyedblock for the given term
 function keyedblocks.createblock(kb, terms)
-	for _,v in ipairs(terms) do
+	for _,v in pairs(terms) do
 		v = v:lower()
 		if v:find('not ') then
 			error("keyword 'not' not supported as a filter")

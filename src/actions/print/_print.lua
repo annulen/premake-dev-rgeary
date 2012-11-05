@@ -164,18 +164,22 @@
 		indent(2)
 			globalContainer.bakeUsageProject(uProj)
 			project.bake(uProj)
-			local ucfg = project.getConfigs(uProj):first() or {}
-			for k,v in pairs(ucfg) do
-				if v and premake.fields[k] then
-					local level = Print.fieldLevel[k] or 5
-					if type(v) == 'table' then
-						if #v > 0 then
+			for ucfg in project.eachconfig(uProj) do
+				p1("config", ucfg.shortname)
+				indent(2)			
+				for k,v in pairs(ucfg) do
+					if v and premake.fields[k] then
+						local level = Print.fieldLevel[k] or 5
+						if type(v) == 'table' then
+							if #v > 0 then
+								p(level, k, v)
+							end
+						else
 							p(level, k, v)
 						end
-					else
-						p(level, k, v)
 					end
 				end
+				indent(-2)
 			end
 		indent(-2)
 
@@ -187,8 +191,12 @@
 		indent(2)
 		p1('solution', prj.solution.name)
 		for cfg in project.eachconfig(prj) do
+			p0('config', cfg.shortname)
+			indent(2)
+
 			p1('kind', cfg.kind)
-			local cfg2 = keyedblocks.getfield2(prj, cfg.filter, nil, {})
+			local cfg2 = keyedblocks.getfield2(prj, cfg.filter or {}, nil, {})
+			p1('usefeature', cfg.usefeature)
 			p1('uses', cfg.uses)
 			p1('alwaysuses', cfg.alwaysuses)
 			local usesconfig = {}
@@ -202,8 +210,6 @@
 			p5('usesconfig', usesconfig)
 			p1('compiledepends', cfg.compiledepends)
 			
-			p0('config', cfg.shortname)
-			indent(2)
 			if cfg.toolset then
 				local toolset = premake.tools[cfg.toolset]
 				p2('toolset ' .. cfg.toolset)

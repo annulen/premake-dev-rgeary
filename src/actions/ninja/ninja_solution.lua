@@ -6,14 +6,19 @@ local ninja = premake.actions.ninja
 local solution = premake.solution
 local project = premake5.project
 local config = premake5.config
+local targets = premake5.targets
+
 local ninjaVarLevel = 2		-- higher = use more ninja build vars
 local toolsetDef = {}
 ninja.helpMsg = {}
+local exported = {}
 
 local function mergeTargets(dest, src)
-	for k,v in pairs(src or {}) do
-		local v = dest[k] or {}
-		dest[k] = concat(v, src[k])
+	for cfgName,targets in pairs(src or {}) do
+		if cfgName ~= 'All' then
+			local v = dest[cfgName] or {}
+			dest[cfgName] = concat(v, targets)
+		end
 	end
 end
 
@@ -47,11 +52,6 @@ function ninja.generateSolution(sln, scope)
 	local slnPrjTargets = {}
 	for _,prj in ipairs(sln.projects) do
 		
-		if not prj.isUsage then
-			local cfgs = project.getConfigs(prj)
-			ninja.writeToolsets(cfgs, scope)
-		end
-		
 		if first then
 			_p('#############################################')
 			_p('# Solution ' .. sln.name)
@@ -62,6 +62,11 @@ function ninja.generateSolution(sln, scope)
 	
 		local prjTargets = ninja.generateProject(prj, scope)
 		mergeTargets(slnPrjTargets, prjTargets)
+	end
+	
+	-- Also export any remaining dependent projects
+	for _,prj in pairs(targets.prjToExport) do
+		ninja.generateProject(prj, scope)
 	end
 	
 	local slnTargets = {}
@@ -151,11 +156,18 @@ function ninja.writeDefaultTargets(targetsByCfg)
 end
 
 function ninja.generateProject(prj, scope)
-	if not prj.isUsage then
+	if exported[prj] then return exported[prj] end
+	
+	if not prj.isUsage and prj.isbaked then
+	
 		_p('# Project ' .. prj.name)
 		_p('##############################')
 		_p('')
-		return ninja.writeProjectTargets(prj, scope)
+		ninja.writeToolsets(prj, scope)
+
+		local buildTargets = ninja.writeProjectTargets(prj, scope)
+		exported[prj] = buildTargets
+		return buildTargets
 	else
 		return nil
 	end
@@ -226,9 +238,13 @@ function ninja.writeProjectTargets(prj, scope)
 	
 	local cfgs = {}
 	local prjTargets = {}
-	local isSourceGen = false
+	local isCommandProject = prj.isCommandProject		-- a command project has only one configuration (& output) which is equivalent to all variants
 	local prjTargetName = prj.name
-	
+	local defaultconfiguration = prj.defaultconfiguration or (prj.solution or {}).defaultconfiguration
+	if defaultconfiguration then
+		defaultconfiguration = ninja.replaceSpecialChars(defaultconfiguration)
+	end
+		
 	-- Validate
 	for cfg in project.eachconfig(prj) do
 		if not cfg.toolset then
@@ -236,7 +252,7 @@ function ninja.writeProjectTargets(prj, scope)
 		end
 		
 		local linkTool,linkOverrides = ninja.getLinkTool(cfg, scope)
-		if linkTool and not isSourceGen then 
+		if linkTool and not isCommandProject then 
 			if not cfg.kind then
 				error("Malformed project '"..prj.name.."', has no kind specified")
 			end 
@@ -252,10 +268,10 @@ function ninja.writeProjectTargets(prj, scope)
 		
 		-- Only build source gen & command once
 		if cfg.kind == 'SourceGen' or cfg.kind == 'Command' then
-			if isSourceGen then
+			if isCommandProject then
 				buildThis = false
 			end
-			isSourceGen = true
+			isCommandProject = true
 		end
 		
 		if cfg.kind == 'Command' then
@@ -266,7 +282,7 @@ function ninja.writeProjectTargets(prj, scope)
 			-- Put the default configuration first. 
 			-- This fixes a problem where auto-generated header files put in the src folders are incorrectly updated
 			--  as the script name includes the name of the first cfg processed
-			if cfg.buildcfg == prj.defaultconfiguration then 
+			if cfg.buildcfg == defaultconfiguration then 
 				table.insert(cfgs, 1, cfg)
 			else
 				table.insert(cfgs, cfg)
@@ -288,15 +304,17 @@ function ninja.writeProjectTargets(prj, scope)
 		-- List of all files in this config
 		local filesInCfg = filesPerConfig[cfg]
 		local srcdirFull = prj.basedir
-		local hasObjdir = iif( isSourceGen, false, true )
-		local srcdir = string.replace(srcdirFull, repoRoot, ninja.rootVar)
+		local hasObjdir = iif( isCommandProject, false, true )
+		local srcdir = path.asRoot(srcdirFull)
 		local objdir = ''
 		local targetdir = ''
 		if hasObjdir then
-			objdir = string.replace(cfg.objdir, repoRoot, ninja.rootVar)
-			targetdir = string.replace(cfg.targetdir, repoRoot, ninja.rootVar)
+			objdir = path.asRoot(cfg.objdir)
+			targetdir = path.asRoot(cfg.targetdir)
 		end
-		local cfgname = string.replace(cfg.shortname, '_', '.')
+
+		-- Replace disallowed special characters
+		local cfgname = ninja.replaceSpecialChars(cfg.shortname)
 		
 		local numFilesToCompile = #(filesInCfg['Compile'] or {}) 
 		local verboseComments = numFilesToCompile > 5
@@ -347,13 +365,13 @@ function ninja.writeProjectTargets(prj, scope)
 				local outputFile
 				
 				local extraTargets = ninja.writeBuildRule(cfg, 'compile', fileName, scope)
-				if not isSourceGen then
+				if not isCommandProject then
 					-- SourceGen projects can have no compile dependencies, otherwise we end up in a loop
 					table.insertflat( extraTargets, cfg.compiledepends )
 				end
 				
 				-- See if it's worth creating extra build vars
-				makeShorterBuildVars(scope, extraTargets, numFilesToCompile, 'src')
+				makeShorterBuildVars(scope, extraTargets, numFilesToCompile, 'cdeps')
 				
 				-- Check if we need to override the compile tool based on the extension
 				local fileExt = fileCfg.extension
@@ -466,7 +484,7 @@ function ninja.writeProjectTargets(prj, scope)
 					if cfg.buildtarget then 
 						local buildCmd = 'phony '..table.concat(allLinkInputs, ' ')
 						local linkTargetN = targetdirN..'/'..cfg.buildtarget.name
-						if isSourceGen then
+						if isCommandProject then
 							linkTargetN = prjTargetName
 						end
 						addBuildEdge(linkTargetN, buildCmd)
@@ -501,7 +519,7 @@ function ninja.writeProjectTargets(prj, scope)
 				local implicitDepStr = nil
 				if #implicitDeps > 0 then
 					implicitDepStr = table.concat(implicitDeps, ' ')
-					implicitDepStr = implicitDepStr:replace(repoRoot, ninja.rootVar)
+					implicitDepStr = path.asRoot(implicitDepStr)
 
 					if ninjaVarLevel >= 2 then
 						local varName, alreadyExists = scope:getName(implicitDepStr, 'deps')
@@ -589,11 +607,11 @@ function ninja.writeProjectTargets(prj, scope)
 timer.stop(tmr)
 	
 	local defaultTarget = 'donothing'
-	if prj.defaultconfiguration and prj.configs and prj.configs[prj.defaultconfiguration] then
+	if defaultconfiguration and (prj.configs or {})[defaultconfiguration] then
 		
-		local cfg = prj.configs[prj.defaultconfiguration]
+		local cfg = prj.configs[defaultconfiguration]
 		if cfg.buildwhen ~= 'explicit' then
-			defaultTarget = prj.name..'.'..prj.defaultconfiguration:lower()
+			defaultTarget = prj.name..'.'..cfg.shortname
 			prjTargets[''] = { prj.name }
 		end
 	end
@@ -643,10 +661,10 @@ function ninja.writeBuildRule(cfg, stage, inputs, scope)
 				
 				if buildrule.language then
 					-- Write the command to a file, and execute it
-					local script = cmd:replace(ninja.rootVar, repoRoot)
+					local script = cmd:replace("$root", repoRootPlain)
 					local scriptFilename = cfg.targetdir..'/'..buildTarget..'.'..buildrule.language
-					scriptFilename = scriptFilename:replace(repoRoot, ninja.rootVar)
-					local scriptFilenameFull = scriptFilename:replace(ninja.rootVar, repoRoot)
+					scriptFilename = path.asRoot(scriptFilename)
+					local scriptFilenameFull = scriptFilename:replace("$root", repoRootPlain)
 					
 					-- Test if contents are different before writing
 					local writeToFile = true
@@ -746,7 +764,7 @@ end
 -- Define any toolsets which are not yet defined
 --  Run for each config, for each project
 --
-function ninja.writeToolsets(cfgs, scope)
+function ninja.writeToolsets(prj, scope)
 
 local tmr = timer.start('ninja.writeToolsets')
 
@@ -755,9 +773,7 @@ local tmr = timer.start('ninja.writeToolsets')
 		_p(str)  
 	end
 	
-	for _,cfg in cfgs
-		:each() 
-	do
+	for cfg in project.eachconfig(prj) do
 		local toolsetName = cfg.toolset
 		
 		if not toolsetName or toolsetName == '' then
@@ -808,8 +824,8 @@ local tmr = timer.start('ninja.writeToolsets')
 			    	
 			    	-- Write build variable default value
 			    	if v ~= '' then
-			    		-- Substitute $root
-		    			v = string.replace(v, repoRoot, ninja.rootVar)
+			    		-- Substitute repoRoot as $root
+		    			v = path.asRoot(v)
 			    		
 				    	local varName,found = scope:set(varName, v)
 				    	if not found then

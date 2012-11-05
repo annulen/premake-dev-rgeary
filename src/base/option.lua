@@ -111,7 +111,7 @@
 			local opt = premake.option.get(key)
 			-- does it need a value?
 			if (opt.value and string.sub(opt.value,1,1) ~= '[' and value == "") then
-				return false, "no value specified for option '" .. key .. "'"
+				return false, "no value specified for option '" .. key .. "', expected --"..key .. opt.value
 			end
 			
 			-- is the value allowed?

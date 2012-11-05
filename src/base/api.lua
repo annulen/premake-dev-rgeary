@@ -19,8 +19,8 @@
 -- and will be going away as soon as I have a chance to port them.
 --
 
--- isList 			true if it's an list of objects (unordered, unless allowDuplicates=true) 
--- allowDuplicates	Allow duplicate values, order dependent
+-- isList 			true if it's an list of unique objects (unordered)
+-- allowDuplicates	(obsolete) Allow duplicate values, order dependent
 -- isKeyedTable 	Values are in a keyed table. Multiple tables with the same key will overwrite the value.
 
 --	kind			Description						Comments
@@ -250,25 +250,24 @@
 				-- if you have a keyed table, eg. flags, convert it in to a table in the form key = "key=value"
 				useValue = {}
 				for k,v in pairs(value) do
-					v = v:lower()
-					if premake.fieldAliases[v] then
-						v = premake.fieldAliases[v]
+					if premake.fieldAliases[v:lower()] then
+						v = premake.fieldAliases[v:lower()]
 					end
 					
 					if type(k) == 'number' then
 						table.insert(useValue, tostring(v))
 					else
-						k = k:lower()
-						useValue[k] = k..'='..tostring(v)
+						useValue[k:lower()] = k..'='..tostring(v)
 					end
 				end
 			else
 				if premake.fieldAliases[value] then
 					value = premake.fieldAliases[value]
 				end
-				useValue = { [field.name] = value:lower() }
+				useValue = { [field.name] = value }
 			end
 			
+			config.registerkey(field.name, useValue)
 			api.callback(premake.fields['usesconfig'], useValue)
 		end
 
@@ -501,7 +500,9 @@
 			end
 		else
 			-- make absolute later if it starts with %
-			value = iif( value:startswith('%'), value, path.getabsolute(value)) 
+			value = iif( value:startswith('%'), value, path.getabsolute(value))
+			value = path.asRoot(value)
+			
 			target[name] = value
 		end
 	end
@@ -609,14 +610,12 @@
 --
 
 	function api.setpath(target, name, field, value)
-		if repoRoot then
-			value = value:replace('$root/', repoRoot)
-		end	
 		api.setstring(target, name, field, value)
 		
 		-- don't convert in to absolute if it's tokenised
 		if not target[name]:startswith('%') then
 			target[name] = path.getabsolute(target[name])
+			target[name] = path.asRoot(target[name])
 		end 
 	end
 
@@ -799,8 +798,9 @@
 		kind = "string",
 		isList = true,
 		setter = function(target, name, field, value)
-			config.registerkey("buildcfg", value)
+			config.registerkey("buildcfg", value, true)
 			-- always overwrite
+			if type(value) == 'string' then value = { value } end
 			target[name] = value
 		end
 	}
@@ -1052,7 +1052,7 @@
 			
 			-- Ouput is a header or source file, usually a compile dependency for another project
 			--  This only gets built once for one configuration, as the output files are in the source tree
-			"SourceGen",
+			--"SourceGen",
 			
 			-- Input files are script files to be executed
 			"Command",
@@ -1208,9 +1208,10 @@
 		kind = "string",
 		isList = true,
 		setter = function(target, name, field, value)
-			config.registerkey("platform", value)
+			config.registerkey("platform", value, true)
 			-- always overwrite
-			target[name] = value
+			target[name] = {}
+			table.insertflat(target[name], value)
 		end
 	}
 
@@ -1392,7 +1393,7 @@
 		allowed = function() return getSubTableNames(premake.tools); end 
 	}
 	
-	-- Enable a feature declared with "feature" 
+	-- Enable a feature declared with "buildfeature" 
 	api.register {
 		name = "usefeature",
 		scope = "config",
@@ -1853,6 +1854,8 @@
 --
 -- Google protocol buffers
 --  Example usage in a project section : protobuf { cppRoot = "..", javaRoot = ".." }
+--  as per protoc, cppRoot/javaRoot/pythonRoot are relative to the solution root path
+--  protoPath defaults to repoRoot
 --
 	function api.protobuf(t)
 	
@@ -1860,14 +1863,23 @@
 		
 		-- Some alternative quick inputs. eg. protobuf "*.protobuf" or protobuf "cpp"
 		if type(t) == 'string' then
-			if t:contains('proto') then 		t = { files = t }
-			elseif t:startswith("cpp") then 	t = { cppRoot = protoPath }
-			elseif t:startswith("java") then 	t = { javaRoot = protoPath }
-			elseif t:startswith("python") then 	t = { pythonRoot = protoPath }
-			else
-				error("unknown protobuf argument "..t)
+			local parts = toSet(t:split(" "))
+			t = {}
+			
+			for v,_ in pairs(parts) do
+				if v:contains('.proto') then
+					t.files = t.files or {}
+					table.insert( t.files, v )
+				end
+			end
+			if parts["cpp"] then 		t.cppRoot = protoPath end
+			if parts["java"] then 		t.javaRoot = protoPath end
+			if parts["python"] then 	t.pythonRoot = protoPath end
+			if table.isempty(t) then
+				error("unknown protobuf argument in \""..mkstring(getKeys(parts), " ").."\"")
 			end
 		end
+		t.protoPath = t.protoPath or protoPath
 
 		if not protoPath then
 			error("protoPath is nil")
@@ -1900,17 +1912,18 @@
 		local protoCPPFiles = Seq:new(protoFiles.files):select(function(v) return v:gsub('%.proto$','%.pb%.cc') end):toTable()
 		
 		if #protoCPPFiles == 0 then
-			error("Could not find any *.proto files")
+			error("Could not find any *.proto files in "..os.getcwd().."/"..mkstring(inputFilePattern))
 		end
 		
+		-- Create a protobuf project to convert the .proto files in to .pb.cc
 		api.scopepush()
 		project(prjName)
+			configurations("All")			-- Only output one configuration, the special "All" configuration
 			language("protobuf")
 			toolset("protobuf")
-			kind("SourceGen")
 			files(inputFilePattern)
 			protobufout(outputs)
-			compiledepends(prjName)  -- if you use this project, it should be propagated as a compile dependency
+			compiledepends(prjName)  -- if you use this protobuf project, it should be propagated as a compile dependency
 			alwaysuse("system/protobuf")	-- any derived project should always include the protobuf includes
 			
 			-- add the protobuf project to the usage requirements for the active solution
@@ -1918,7 +1931,7 @@
 			uses(prjName)
 			
 		api.scopepop()
-		-- add files to outer project
+		-- add C files to active outer project
 		files(protoCPPFiles)
 	end
 
@@ -2042,11 +2055,12 @@ end
 --*************************************************************************************
 -- Features
 --  Features are build configurations which are enabled by a dependent project 
---  So you can define a feature in your common project, and enable that feature if you 
---  use it in a derived project
+--  This command defines a new feature configuration. You can define a feature
+--  in your common project, and enable that feature if you use it in a 
+--  derived project with "usefeature"
 --*************************************************************************************
 
-function api.feature(featureName)
+function api.buildfeature(featureName)
 	if not featureName or featureName == '' then
 		-- exit the feature block
 		configuration {} 
@@ -2056,12 +2070,19 @@ function api.feature(featureName)
 		error("Expected feature <featureName>")
 	end
 	
-	-- Keeping track of supported features is necessary in order to decide if 
-	-- we need to add a separate build configuration for a requested feature
-	--  supportedfeatures is always propagated to the usage requirements 
+	local featureNameL = featureName:lower()
+	if premake.fields[featureNameL] or premake.fieldAliases[featureNameL] then
+		error("Invalid feature name : \""..featureName.."\", this is a keyword")
+	end
+	
+	-- Register this configuration keyword as a propagated feature
+	config.registerkey(featureName, featureName, true)
+	
+	-- Keeping track of a project's supported features is necessary in order to decide if 
+	-- we need to add a separate build configuration for a requested feature.
+	--   supportedfeatures is always propagated to the usage requirements 
 	supportedfeatures(featureName)
 	
 	-- Start a new configuration block for this feature
 	configuration(featureName)
-		buildwhen "used"
 end

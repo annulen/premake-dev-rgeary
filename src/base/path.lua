@@ -41,6 +41,7 @@
 				p = p..'/'
 			end
 			repoRoot = p
+			repoRootPlain = p:sub(1,#p-1)
 		end
 		return repoRoot
 	end
@@ -71,8 +72,8 @@ local absPathCache = {}
 			return result
 		end
 		
-		if p:startswith('$root/') then
-			p = p:replace('$root/', repoRoot)
+		if p:startswith('$root') then
+			p = p:replace('$root', repoRootPlain)
 		end
 		
 		-- normalize the target path
@@ -444,4 +445,15 @@ timer.stop(tmr)
 		pattern = pattern:gsub("\001", ".*")
 		pattern = pattern:gsub("\002", "[^/]*")
 		return pattern
+	end
+
+--
+-- Convert repoRoot to $root
+--
+	function path.asRoot(p)
+		if not p then return '' end
+		if p == repoRootPlain then
+			return "$root"
+		end
+		return p:replace(repoRoot, "$root/")
 	end

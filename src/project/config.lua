@@ -13,34 +13,33 @@
 --
 -- Create a unique name from the build configuration / platform / features
 --
-	local ignoreKey = toSet({ 'buildcfg', 'platform', 'action', 'system', 'architecture', 'kind' })
-	function config.getBuildName(buildFeatures, platformSeparator)
+	function config.getBuildName(buildVariant, platformSeparator)
 		platformSeparator = platformSeparator or '_'
-		local cfgName = (buildFeatures.buildcfg or "*")
-		if buildFeatures.platform and buildFeatures.platform ~= '' then
-			cfgName = cfgName .. platformSeparator .. buildFeatures.platform
+		local cfgName = config.getcasedvalue(buildVariant.buildcfg or "All")
+		if buildVariant.platform and buildVariant.platform ~= '' then
+			cfgName = cfgName .. platformSeparator .. config.getcasedvalue(buildVariant.platform)
 		end
-		for k,v in pairs(buildFeatures.usefeature or {}) do
-			if not ignoreKey[k] then
-				cfgName = cfgName..'.'..v
+		for k,v in pairs(buildVariant) do
+			if k ~= 'buildcfg' and k ~= 'platform' then
+				cfgName = cfgName..'.'..config.getcasedvalue(v)
 			end
 		end
-		return cfgName:lower()
+		
+		return cfgName
 	end
 
 --
 -- Add a configuration to a usage project, propagate fields from the real project
+--  buildVariant is a hash table of all the propagated features (eg. buildcfg, platform, custom features)
 --
-	function config.addUsageConfig(realProj, usageProj, buildFeatures)
-		local buildcfg = buildFeatures.buildcfg
-		local platform = buildFeatures.platform
-		local realCfg = project.getconfig2(realProj, buildFeatures)
+	function config.addUsageConfig(realProj, usageProj, buildVariant)
+		local realCfg = project.getconfig2(realProj, buildVariant)
 		
 		if not usageProj.hasBakedUsage then
 			globalContainer.bakeUsageProject(usageProj)
 		end
 
-		local usageKB = keyedblocks.createblock(usageProj.keyedblocks, buildFeatures)
+		local usageKB = keyedblocks.createblock(usageProj.keyedblocks, buildVariant)
 
 		-- To use a library project, you need to link to its target
 		--  Copy the build target from the real proj
@@ -54,10 +53,10 @@
 				oven.mergefield(usageKB, "linkAsStatic", { realTargetPath })
 			end
 		end
-		if realCfg.kind == 'SourceGen' then
+		if not realCfg.kind then
 			oven.mergefield(usageKB, "compiledepends", { realProj.name })
-		elseif not realCfg.kind then
-			error("Can't use target, missing cfg.kind")
+		--elseif not realCfg.kind then
+			--error("Can't use target, missing cfg.kind")
 		end
 		
 		-- Propagate fields
@@ -91,17 +90,17 @@
 --
 
 	function config.bake(cfg)
-		if not cfg.buildFeatures then
-			cfg.buildFeatures = {
+		if not cfg.buildVariant then
+			cfg.buildVariant = {
 				buildcfg = cfg.buildcfg,
 				platform = cfg.platform,
 			}
 		end
 		
 		-- assign human-readable names
-		cfg.longname = config.getBuildName(cfg.buildFeatures, '|')
-		cfg.shortname = config.getBuildName(cfg.buildFeatures, '_')
-		cfg.shortname = cfg.shortname:gsub(" ", "_"):lower()
+		cfg.longname = config.getBuildName(cfg.buildVariant, '|')
+		cfg.shortname = config.getBuildName(cfg.buildVariant, '_')
+		cfg.shortname = cfg.shortname:gsub(" ", "_")
 
 		if cfg.project and cfg.kind and cfg.kind ~= 'None' then
 			cfg.buildtarget = config.gettargetinfo(cfg)
@@ -284,7 +283,7 @@
 --
 
 	function config.getlookupkey(cfg)
-		return (cfg.buildcfg or "*") .. (cfg.platform or "")
+		return (cfg.buildcfg or "All") .. (cfg.platform or "")
 	end
 
 
@@ -430,25 +429,65 @@
 --
 -- Register a key/value pair, eg. buildcfg=Debug
 --
-	config.cfgValueToKey = {}
-	function config.registerkey(cfgKey, cfgValues)
+	config.cfgValues = {}
+	function config.registerkey(cfgKey, cfgValues, isPropagated)
 		if type(cfgValues) == 'string' then cfgValues = { cfgValues } end
 		
-		for _,v in ipairs(cfgValues) do 
-			config.cfgValueToKey[v] = cfgKey
+		for _,v in ipairs(cfgValues) do
+			if type(v) == 'table' then 
+				config.registerkey(cfgKey, v, isPropagated)
+			else 
+				local vlower = v:lower()
+				config.cfgValues[v] = {
+					v = v,
+					vlower = vlower,
+					key = cfgKey,
+					isPropagated = isPropagated,				
+				}
+				config.cfgValues[vlower] = config.cfgValues[v]
+			end
 		end
+	end
+	
+--
+-- Restore the Normal Case from a lower cased form of value
+--
+	function config.getcasedvalue(cfgValue)
+		local cfgValueT = config.cfgValues[cfgValue]
+		if cfgValueT then
+			cfgValue = cfgValueT.v
+		end	
+		return cfgValue
 	end
 	
 --
 -- Given a value (eg. "Release"), find the category (ie. buildcfg)
 --
-	function config.getkeyvalue(cfgValue)
-		cfgValue = cfgValue:lower()
-		if cfgValue:contains("=") then
-			local key = cfgValue:match("[^=]*")
-			local value = cfgValue:match(".*=(.*)")
-			return key,value
+	function config.getkeyvalue(v)
+		if v:contains("=") then
+			v = v:lower()
+			local key = v:match("[^=]*")
+			local value = v:match(".*=(.*)")
+			return key,config.getcasedvalue(value)
+		else
+			local cfgValue = config.cfgValues[v]
+			if cfgValue then
+				return cfgValue.key, cfgValue.v
+			else
+				return v, v
+			end
 		end
-		return (config.cfgValueToKey[cfgValue] or cfgValue), cfgValue
 	end
 	
+--
+-- Returns list of keywords that are propagated
+--
+	function config.getPropagated(filter)
+		local rv = {}
+		for k,v in pairs(filter) do
+			if (config.cfgValues[v] or {}).isPropagated then
+				rv[k] = v
+			end
+		end
+		return rv			
+	end

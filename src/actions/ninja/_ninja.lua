@@ -17,8 +17,6 @@
 	local slnDone = {}
 	local globalScope = {}
 	
-	ninja.rootVar = "$root/"
-	
 --
 -- The Ninja build action. Currently only tested with C++
 --
@@ -52,6 +50,10 @@
 		onSolution = function(sln)
 			ninja.onSolution(sln.name)
 		end,
+
+		onProject = function(sln)
+			ninja.onProject(sln.name)
+		end,
 		
 		onEnd = function()
 			ninja.onEnd()
@@ -62,7 +64,7 @@
 		end,
 		
 		oncleansolution = function(sln)
-			clean.file(sln, ninja.getSolutionBuildFilename(sln))
+			--clean.file(sln, ninja.getSolutionBuildFilename(sln))
 			clean.file(sln, path.join(sln.basedir, 'build.ninja'))
 			ninja.setNinjaBuildDir(sln)
 			clean.file(sln, path.join(ninja.builddir, 'buildedges.ninja'))
@@ -73,7 +75,7 @@
 	function ninja.onSolution(slnName)
 		local sln = targets.solution[slnName]
 		if not sln then
-			print('Could not find solution '..slnName)
+			print('Could not find solution '..tostring(slnName))
 			return
 		end
 		
@@ -86,7 +88,6 @@
 			end
 
 			ninja.setNinjaBuildDir(sln)
-			
 			ninja.openFile(path.join(ninja.builddir, 'buildedges.ninja'))
 			ninja.generateSolution(sln, globalScope)
 
@@ -98,8 +99,19 @@
 		end
 	end
 	
+	function ninja.onProject(prjName)
+		local prj = project.getRealProject(prjName)
+		if not prj then
+			print("Warning : Could not find project "..prjName)
+		else
+			local sln = prj.solution
+			ninja.onSolution(sln.name)
+		end
+	end
+	
 	-- After the last solution
 	function ninja.onEnd()
+		if not ninja.builddir then return end
 		local f = ninja.openFile(path.join(ninja.builddir, 'buildedges.ninja'))
 		ninja.writeFooter(globalScope)
 		ninja.closeFile(f)
@@ -155,7 +167,7 @@
 		-- builddir is where the build log & main ninja file is placed
 		if (not ninja.builddir) then
 			ninja.builddir = iif( sln.ninjaBuildDir, sln.ninjaBuildDir, repoRoot)
-			ninja.builddir = ninja.builddir:replace(ninja.rootVar,repoRoot)
+			ninja.builddir = ninja.builddir:replace("$root",repoRootPlain)
 			ninja.checkIgnoreFiles(ninja.builddir)
 		end
 		ninja.builddir = path.getabsolute(ninja.builddir)
@@ -329,12 +341,13 @@ timer.stop(tmr)
 		if #varName == 0 then
 			return varName
 		end
-    	if true or string.find(varName, ".", 1, true) then
-    		varName = '${' .. varName .. '}'
-    	else
-    	   	varName = '$' .. varName
-    	end
+   		varName = '${' .. varName .. '}'
     	return varName
+	end
+	
+	-- Prepare a string to be a variable name
+	function ninja.replaceSpecialChars(s)
+		return s:gsub("[=!\"£$%^&*()+{}%[%];:'@,<>/?|\\]","_")
 	end
 	
 -- Returns (newVarName, found) 
@@ -440,7 +453,7 @@ timer.stop(tmr)
 		
 		local tmr = timer.start('ninja.getBest')
 		-- try $root first
-		v = string.replace(v, repoRoot, ninja.rootVar)
+		v = string.replace(v, repoRoot, "$root/")
 		local bestV = self.valueToName[v]
 		--[[
 		local bestV = v
@@ -484,7 +497,7 @@ timer.stop(tmr)
 			if v ~= '' and not v:startswith('$') then
 			
 				if v:find(repoRoot,1,true) then
-					v = string.replace(v, repoRoot, ninja.rootVar)
+					v = string.replace(v, repoRoot, "$root/")
 					inputs[k] = v
 				end
 			

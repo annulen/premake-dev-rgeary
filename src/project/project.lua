@@ -16,8 +16,6 @@
 --   project.bake must be recursive, as if A depends on B, we need to bake B first. 
 
 	function project.bake(prj)
-		-- make sure I've got the actual project, and not the root configurations
-		prj = prj.project or prj
 		local sln = prj.solution
 		
 		keyedblocks.create(prj, sln)
@@ -36,30 +34,32 @@
 		-- prevent any default system setting from influencing configurations
 		prj.system = nil
 		
-		-- apply any mappings to the project's configuration set
-		prj.buildFeaturesList = {}
+		-- Inherit sln.configurations, for ease of access
+		prj.configurations = prj.configurations or sln.configurations
 
-		local cfglist = project.bakeconfigmap(prj)
-		for _,cfgpair in ipairs(cfglist) do
-			local buildFeatures = {
-				buildcfg = cfgpair[1],
-				platform = cfgpair[2],				
-			}
-			project.addconfig(prj, buildFeatures)
-		end
-				
+		-- A command project has only one configuration (& output) which is equivalent to all variants
+		if #prj.configurations == 1 and prj.configurations[1] == 'All' then
+			prj.isCommandProject = true
+		end 
+		
+		-- apply any mappings to the project's configuration set
+		prj.buildVariantList = {}
+		
+		-- add this to the export list
+		targets.prjToExport[prj.name] = prj
+
 		timer.stop(tmr)
 		return prj
 	end
 	
 --
 -- Add a baked configuration to the project.
---  buildFeatures is a keyed table of keywords (buildcfg, platform, <featureName> = <featureName>) 
+--  buildVariant is a keyed table of keywords (buildcfg, platform, <featureName> = <featureName>) 
 --   describing the config
 -- 
 	local inProgress = {}
-	function project.addconfig(prj, buildFeatures)
-		if not prj or ptype(prj) == 'solution' then return end
+	function project.addconfig(prj, buildVariant)
+		if not prj or ptype(prj) ~= 'project' then return end
 		if prj.isUsage then
 			prj = project.getRealProject(prj.name, prj.namespaces)
 		end		
@@ -70,12 +70,21 @@
 		end
 		
 		prj.configs = prj.configs or {}
-		prj.buildFeaturesList = prj.buildFeaturesList or {}
+		prj.buildVariantList = prj.buildVariantList or {}
 		
-		local cfgName = config.getBuildName(buildFeatures)
+		-- If this is a source generating project, map all configurations to this one
+		-- TODO : better config mapping
+		local cfgName
+		if prj.isCommandProject then
+			buildVariant = { }
+		end
+		cfgName = config.getBuildName(buildVariant)
+		
 		if prj.configs[cfgName] then
 			return prj.configs[cfgName]
 		end
+		
+		--printDebug("Bake "..prj.name..':'..cfgName)
 		
 if inProgress[prj] then
 	error("Recursive dependency with "..prj.name.." : "..table.concat(inProgress, (' ')))
@@ -86,18 +95,18 @@ table.insert(inProgress, prj.name)
 		-- Add null configuration to avoid re-adding if there is a circular dependency
 		prj.configs[cfgName] = {}
 		
-		local cfg = project.bakeconfig(prj, buildFeatures)
+		local cfg = project.bakeconfig(prj, buildVariant)
 				
 		-- make sure this config is supported by the action; skip if not
 		if cfg and premake.action.supportsconfig(cfg) then
 			prj.configs[cfgName] = cfg
 		end
 		
-		table.insert( prj.buildFeaturesList, buildFeatures )
+		table.insert( prj.buildVariantList, buildVariant )
 		
 		-- Add usage requirements for the new configuration
 		local uProj = project.getUsageProject(prj.name)
-		config.addUsageConfig(prj, uProj, buildFeatures)
+		config.addUsageConfig(prj, uProj, buildVariant)
 		
 inProgress[prj] = nil
 table.remove(inProgress, table.indexof(inProgress, prj.name))
@@ -109,12 +118,11 @@ table.remove(inProgress, table.indexof(inProgress, prj.name))
 -- platform pairing, and returns the result.
 --
 
-	function project.bakeconfig(prj, buildFeatures)
+	function project.bakeconfig(prj, buildVariant)
 		local system
 		local architecture
 local tmr1 = timer.start('bakeconfig1')
-		local buildcfg = buildFeatures.buildcfg
-		local platform = buildFeatures.platform
+		local platform = buildVariant.platform
 
 		-- for backward compatibility with the old platforms API, use platform
 		-- as the default system or architecture if it would be a valid value.
@@ -131,23 +139,23 @@ local tmr1 = timer.start('bakeconfig1')
 		
 		system = system or premake.action.current().os or os.get()
 		filter = { 
-			buildcfg = buildcfg,
+			buildcfg = buildVariant.buildcfg or 'All',
 			action = _ACTION, 
 			system = system, 
 			architecture = architecture,
 		}
 		
 		-- Insert platform & features in to filter
-		for k,v in pairs(buildFeatures) do
+		for k,v in pairs(buildVariant) do
 			filter[k] = v
 		end		
 		
 		cfg = keyedblocks.getfield(prj, filter)
 		cfg.system = cfg.system or system
-	
-		cfg.buildcfg = buildcfg
-		cfg.platform = platform
-		cfg.buildFeatures = table.shallowcopy(buildFeatures)
+		
+		cfg.buildcfg = filter.buildcfg
+		cfg.platform = filter.platform
+		cfg.buildVariant = table.shallowcopy(buildVariant)
 		cfg.action = _ACTION
 		cfg.solution = prj.solution
 		cfg.project = prj
@@ -156,7 +164,7 @@ local tmr1 = timer.start('bakeconfig1')
 		cfg.isUsage = prj.isUsage
 		cfg.platform = cfg.platform or ''		-- should supply '' as you could ask for %{cfg.platform} in a token
 		cfg.flags = cfg.flags or {}
-				
+
 		-- Move any links in to linkAsStatic or linkAsShared
 		if cfg.links then
 			for _,linkName in ipairs(cfg.links) do
@@ -256,21 +264,18 @@ timer.stop(tmr3)
 			--prj = project.bake(prj)
 		end
 
-		local buildFeaturesList = prj.buildFeaturesList
-		local count = #buildFeaturesList
+		local buildVariantList = prj.buildVariantList
+		local count = #buildVariantList
 		
 		local i = 0
 		return function ()
 			i = i + 1
 			if i <= count then
-				return project.getconfig2(prj, buildFeaturesList[i])
+				return project.getconfig2(prj, buildVariantList[i])
 			end
 		end
 	end
-
-	function project.getConfigs(prj)
-		return Seq:new(project.eachconfig(prj))
-	end
+	
 -- 
 -- Locate a project by name; case insensitive.
 --
@@ -516,13 +521,13 @@ timer.stop(tmr3)
 	function project.getconfig(prj, buildcfg, platform)
 		if type(buildcfg) == 'table' then
 			-- alias
-			local buildFeatures = buildcfg
-			return project.getconfig2(prj, buildFeatures)
+			local buildVariant = buildcfg
+			return project.getconfig2(prj, buildVariant)
 		end
 		return project.getconfig(prj, { buildcfg = buildcfg, platform = platform })
 	end
 	
-	function project.getconfig2(prj, buildFeatures)
+	function project.getconfig2(prj, buildVariant)
 		-- to make testing a little easier, allow this function to
 		-- accept an unbaked project, and fix it on the fly
 		if not prj.isbaked then
@@ -532,18 +537,17 @@ timer.stop(tmr3)
 		-- if no build configuration is specified, return the "root" project
 		-- configurations, which includes all configuration values that
 		-- weren't set with a specific configuration filter
-		if not buildFeatures.buildcfg then
-			return prj
+		if prj.isCommandProject or not buildVariant.buildcfg then
+			return prj.configs['All']
 		end
 		
 		-- apply any configuration mappings. TODO : Improve to support features
-		local pairing = project.mapconfig(prj, buildFeatures.buildcfg, buildFeatures.platform)
-		buildFeatures.buildcfg = pairing[1]
-		buildFeatures.platform = pairing[2]
+		local pairing = project.mapconfig(prj, buildVariant.buildcfg, buildVariant.platform)
+		buildVariant.buildcfg = pairing[1]
+		buildVariant.platform = pairing[2]
 
 		-- look up and return the associated config		
-		--local key = (buildcfg or "*") .. (platform or "")
-		local key = config.getBuildName(buildFeatures)
+		local key = config.getBuildName(buildVariant)
 		return prj.configs[key]
 	end
 

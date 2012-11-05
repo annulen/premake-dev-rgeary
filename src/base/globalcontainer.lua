@@ -10,8 +10,9 @@
 	local keyedblocks = premake.keyedblocks  
 	local targets = premake5.targets
 	local config = premake5.config
-	targets.prjToBuild = {}
-	targets.slnToBuild = {}
+	targets.prjToBuild = {}		-- prjToBuild[prjName] = prj
+	targets.slnToBuild = {}		-- slnToBuild[slnName] = sln
+	targets.prjToExport = {}	-- prjToExport[prjName] = prj
 	
 --
 -- Apply any command line target filters
@@ -19,26 +20,36 @@
 	function globalContainer.filterTargets()
 		local prjToBuild = targets.prjToBuild
 		local slnToBuild = targets.slnToBuild
+		
 		for _,v in ipairs(_ARGS) do
-			if v:endswith('/') then v = v:sub(1,#v-1) end 
+			if v:endswith('/') then v = v:sub(1,#v-1) end
+			 
 			if not premake.action.get(v) then
+				
+				-- Check if any command line arguments are solutions
 				local sln = targets.solution[v] 
 				if sln then
-					table.insert( slnToBuild, sln )
+					slnToBuild[sln.name] = sln
 					for _,v2 in ipairs(sln.projects) do
-						table.insert( prjToBuild, v2 )
+						prjToBuild[v2.name] = project.getRealProject(v2.name)
 					end
 				end
+				
+				-- Check if any command line arguments are projects
 				local prj = project.getRealProject(v)
 				if prj then
-					table.insert( prjToBuild, prj )
+					prjToBuild[prj.name] = prj
 				end
 			end
 		end
 		
-		if #targets.slnToBuild == 0 and #targets.prjToBuild == 0 then
-			targets.slnToBuild = targets.solution
-			targets.prjToBuild = targets.allReal
+		if table.isempty(slnToBuild) and table.isempty(prjToBuild) then
+			for _,sln in ipairs(targets.solution) do
+				slnToBuild[sln.name] = sln
+			end
+			for _,prj in pairs(targets.allReal) do
+				prjToBuild[prj.name] = prj
+			end
 		end		
 	end
 
@@ -62,12 +73,33 @@
 		-- Filter targets to bake
 		globalContainer.filterTargets()
 		
-		local toBake = targets.prjToBuild
+		local toBake = table.shallowcopy(targets.prjToBuild)
 				
 		-- Bake all real projects, but don't resolve usages		
 		local tmr = timer.start('Bake projects')
 		for prjName,prj in pairs(toBake) do
 			project.bake(prj)
+
+			-- Add default configurations
+						
+			local cfglist = project.bakeconfigmap(prj)
+			for _,cfgpair in ipairs(cfglist) do
+				local buildVariant = {
+					buildcfg = cfgpair[1],
+					platform = cfgpair[2],				
+				}
+				
+				-- Add any command-line variants
+				if _OPTIONS['define'] then
+					local defines = _OPTIONS['define']:split(' ')
+					for _,v in ipairs(defines) do
+						buildVariant[v] = v
+					end
+				end
+				
+				project.addconfig(prj, buildVariant)
+			end
+			
 		end
 		timer.stop(tmr)
 		
@@ -110,9 +142,9 @@
 			project.bake(realProj)
 			
 			-- Set up the usage target defaults from RP
-			for _,buildFeatures in ipairs(realProj.buildFeaturesList) do
+			for _,buildVariant in ipairs(realProj.buildVariantList) do
 
-				config.addUsageConfig(realProj, usageProj, buildFeatures)
+				config.addUsageConfig(realProj, usageProj, buildVariant)
 
 			end
 		end -- realProj
@@ -131,7 +163,7 @@
 --   [4] -> [3] + the platform name
 --
 
-	function globalContainer.bakeobjdirs(allProjects)
+--[[	function globalContainer.bakeobjdirs(allProjects)
 		
 		if premake.fullySpecifiedObjdirs then
 			-- Assume user has assiged unique objdirs
@@ -195,4 +227,5 @@
 			end
 		end
 	end
+]]
 

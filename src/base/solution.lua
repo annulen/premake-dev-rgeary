@@ -224,17 +224,6 @@
 			end
 		end
 	end
-	
-	function solution.getConfigs(sln)
-		-- to make testing a little easier, allow this function to
-		-- accept an unbaked solution, and fix it on the fly
-		if not sln.isbaked then
-			sln = solution.bake(sln)
-		end
-
-		return Seq:new(sln.configs)	
-	end
-
 
 --
 -- Iterate over the projects of a solution.

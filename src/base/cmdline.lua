@@ -127,4 +127,10 @@
 		description = "Don't build the project, just generate the build scripts",
 		aliases		= { "n" },
 	}
-	
+
+	newoption {
+		trigger		= "define",
+		value		= "=\"Define1 Define2 ...\"",
+		description = 'Build all projects with variant define { "Define1", "Define2", ... }',
+		aliases 	= { "d" },
+	}
