@@ -71,13 +71,12 @@
 		
 		prj.configs = prj.configs or {}
 		prj.buildVariantList = prj.buildVariantList or {}
+
+		-- Remove/ignore unsupported build variants
+		buildVariant = project.applyConfigMap(prj, buildVariant)
 		
 		-- If this is a source generating project, map all configurations to this one
-		-- TODO : better config mapping
 		local cfgName
-		if prj.isCommandProject then
-			buildVariant = { }
-		end
 		cfgName = config.getBuildName(buildVariant)
 		
 		if prj.configs[cfgName] then
@@ -85,12 +84,6 @@
 		end
 		
 		--printDebug("Bake "..prj.name..':'..cfgName)
-		
-if inProgress[prj] then
-	error("Recursive dependency with "..prj.name.." : "..table.concat(inProgress, (' ')))
-end 
-inProgress[prj] = prj
-table.insert(inProgress, prj.name)
 		
 		-- Add null configuration to avoid re-adding if there is a circular dependency
 		prj.configs[cfgName] = {}
@@ -108,9 +101,29 @@ table.insert(inProgress, prj.name)
 		local uProj = project.getUsageProject(prj.name)
 		config.addUsageConfig(prj, uProj, buildVariant)
 		
-inProgress[prj] = nil
-table.remove(inProgress, table.indexof(inProgress, prj.name))
 		return cfg
+	end
+	
+	function project.applyConfigMap(prj, buildVariant)
+		prj.configmap = prj.configmap or {}
+		
+		if prj.isCommandProject then
+			return {}
+		end
+
+		-- strip out unsupported buildfeatures
+		local supportedfeatures = Seq:new(prj.supportedfeatures):concat(prj.solution.supportedfeatures):toSet()
+		supportedfeatures['buildcfg'] = 'buildcfg'
+		supportedfeatures['platform'] = 'platform'
+		
+		local rv = {}
+		for k,v in pairs(buildVariant) do
+			if supportedfeatures[k] then
+				rv[k] = v
+			end
+		end
+		
+		return rv
 	end
 	
 --
@@ -534,6 +547,8 @@ timer.stop(tmr3)
 			prj = project.bake(prj)
 		end
 	
+		buildVariant = project.applyConfigMap(prj, buildVariant)
+	
 		-- if no build configuration is specified, return the "root" project
 		-- configurations, which includes all configuration values that
 		-- weren't set with a specific configuration filter
@@ -541,11 +556,6 @@ timer.stop(tmr3)
 			return prj.configs['All']
 		end
 		
-		-- apply any configuration mappings. TODO : Improve to support features
-		local pairing = project.mapconfig(prj, buildVariant.buildcfg, buildVariant.platform)
-		buildVariant.buildcfg = pairing[1]
-		buildVariant.platform = pairing[2]
-
 		-- look up and return the associated config		
 		local key = config.getBuildName(buildVariant)
 		return prj.configs[key]

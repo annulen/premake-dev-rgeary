@@ -263,7 +263,7 @@
 					end
 					p5('objdir       ', cfg.objdir)
 					local files = {}
-					for _,v in ipairs(cfg.files) do
+					for _,v in ipairs(cfg.files or {}) do
 						table.insert( files, path.getrelative(repoRoot, v) )
 					end
 					p5('files', files)

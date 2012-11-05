@@ -71,7 +71,7 @@ function keyedblocks.create(obj, parent)
 	
 	local tmr = timer.start('keyedblocks.create')
 	for _,block in ipairs(obj.blocks or {}) do
-		local terms = block.keywords
+		local terms = block.terms
 		
 		-- expand ors. { "debug, "a or b" } turns in to { { "debug", "a" }, { "debug", "b" } }
 		local expTerms = keyedblocks.expandTerms(terms)

@@ -98,6 +98,9 @@
 				_G["remove" .. n] = function(value)
 					return api.remove(field, value)
 				end
+				for _,n2 in ipairs(field.namealiases or {}) do
+					_G["remove" .. n2] = _G["remove"..n]
+				end
 			end
 			
 			-- all fields get a usage function, which allows you to quickly specify usage requirements
