@@ -104,12 +104,7 @@
 		trigger 	= "quiet",
 		description = "Don't print status messages",
 	}
-	
-	newoption {
-		trigger 	= "tests",
-		description = "Run self tests on Premake. Specify with an action.",
-	}
-	
+		
 	newoption {
 		trigger		= "interactive",
 		description = "Interactive Lua shell with Premake loaded. Press Ctrl-C to exit.",
