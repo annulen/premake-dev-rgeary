@@ -293,7 +293,7 @@ int process_option(lua_State* L, const char* arg, int singleHyphen)
 	}
 
 	/* Set verbose debug error messages */
-	verboseErrors |= (strcmp(key, "debug") == 0);
+	verboseErrors = 1; /* |= (strcmp(key, "debug") == 0);*/
 
 	return OKAY;
 }
