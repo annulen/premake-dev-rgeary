@@ -79,8 +79,12 @@
     	return false
 	end
 	
-
+	local debuggerIsAttached = false
 	function attachDebugger()
+	
+		if debuggerIsAttached then 
+			return true 
+		end
 
 		local ok,err
 		if(_OPTIONS["attach"] ) then
@@ -90,6 +94,7 @@
 			local connection = require("debugger")
 			connection(debuggerIP,10000, nil, 100)
 			print('Connected to debugger')
+			debuggerIsAttached = true
 		elseif(_OPTIONS["attachNoWait"] ) then
 			local debuggerIP = _OPTIONS["attachNoWait"]
 			if(debuggerIP=='') then debuggerIP = '127.0.0.1'; end
@@ -98,9 +103,11 @@
 			ok, err = xpcall(function() connection(debuggerIP,10000, nil, 0); end, function(errobj) end)
 			if ok then
 				print('Connected to debugger')
+				debuggerIsAttached = true
 			end
 		end
-			
+		
+		return debuggerIsAttached
 	end	
 	
 --
