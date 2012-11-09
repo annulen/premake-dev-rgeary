@@ -239,6 +239,13 @@ local tmr=timer.start('oven.expandvalue')
 			-- run it and return the result
 			local err, result = pcall(func)
 			if not err or not result then
+				-- If it's an unset premake field, expand to blank
+				local fieldName = token:match("[^.]*.([^.]*)")
+				if fieldName and premake.fields[fieldName] then
+					return ''
+				end
+				
+				-- Error. Probably a spelling mistake
 				return nil, "Invalid token '" .. token .. "'"
 			end
 			if type(result) == 'table' then

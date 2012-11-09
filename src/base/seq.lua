@@ -573,8 +573,11 @@ function Seq:flatten()
 	return s
 end
 
--- alias
-	Seq.selectMany = Seq.flatten
+function Seq:selectMany(selector)
+	local selection = self:select(selector)
+	return selection:flatten()
+end
+
 
 --
 -- Return sequence of unique values
@@ -621,7 +624,7 @@ function Seq:count()
 		return self.__count
 	end
 	local c = 0
-	for k,v in self.iterate() do
+	for k,v in self:each() do
 		c = c + 1
 	end
 	self.__count = c
@@ -643,7 +646,7 @@ end
 function Seq:max()
 	local hasValues = false 
 	local maxValue = -9e99
-	for k,v in self.iterate() do
+	for k,v in self:each() do
 		hasValues = true
 		if type(v) == 'number' then
 			maxValue = math.max(maxValue, v)
@@ -657,6 +660,25 @@ function Seq:max()
 	return maxValue
 end
 
+--
+-- Return the sum of values in a sequence, assume #value for non number types
+--
+function Seq:sum()
+	local hasValues = false 
+	local sumValue = 0
+	for k,v in self:each() do
+		hasValues = true
+		if type(v) == 'number' then
+			sumValue = sumValue + v
+		elseif v ~= nil then
+			sumValue = sumValue + #v
+		end
+	end
+	if not hasValues then
+		return 0
+	end
+	return sumValue
+end
 --
 -- Create all permutations of elements in the 2d table 
 --  eg. for { {a,b}, {c,d,e} }, return { a_c, a_d, a_e, b_c, b_d, b_e } 

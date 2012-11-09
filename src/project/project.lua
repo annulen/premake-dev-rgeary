@@ -42,8 +42,8 @@
 			prj.isCommandProject = true
 		end 
 		
-		-- apply any mappings to the project's configuration set
-		prj.buildVariantList = {}
+		-- initial build variant -> final build variant name 
+		prj.buildVariantMap = {}
 		
 		-- add this to the export list
 		targets.prjToExport[prj.name] = prj
@@ -58,7 +58,7 @@
 --   describing the config
 -- 
 	local inProgress = {}
-	function project.addconfig(prj, buildVariant)
+	function project.addconfig(prj, initialBuildVariant)
 		if not prj or ptype(prj) ~= 'project' then return end
 		if prj.isUsage then
 			prj = project.getRealProject(prj.name, prj.namespaces)
@@ -68,148 +68,76 @@
 		if not prj.isbaked then
 			project.bake(prj)
 		end
+
+		local tmr = timer.start('project.addconfig')
 		
 		prj.configs = prj.configs or {}
-		prj.buildVariantList = prj.buildVariantList or {}
+		
+		-- The buildVariantMap maps requested build variants to final build variants.
+		--  Some build variants may be ignored by this project, the final build variant will exclude these. 
+		
+		local initialBuildName = config.getBuildName(initialBuildVariant)
+		
+		-- Check if a mapping already exists
+		local finalBuildVariant = project.applyBuildVariantMap(prj, initialBuildVariant)
+		local finalBuildName = config.getBuildName(finalBuildVariant)
 
-		-- Remove/ignore unsupported build variants
-		buildVariant = project.applyConfigMap(prj, buildVariant)
-		
-		-- If this is a source generating project, map all configurations to this one
-		local cfgName
-		cfgName = config.getBuildName(buildVariant)
-		
-		if prj.configs[cfgName] then
-			return prj.configs[cfgName]
+		-- Return the config if it's already baked
+		if prj.configs[finalBuildName] then
+			return prj.configs[finalBuildName]
 		end
-		
-		--printDebug("Bake "..prj.name..':'..cfgName)
-		
-		-- Add null configuration to avoid re-adding if there is a circular dependency
-		prj.configs[cfgName] = {}
-		
-		local cfg = project.bakeconfig(prj, buildVariant)
-				
-		-- make sure this config is supported by the action; skip if not
-		if cfg and premake.action.supportsconfig(cfg) then
-			prj.configs[cfgName] = cfg
-		end
-		
-		table.insert( prj.buildVariantList, buildVariant )
-		
-		-- Add usage requirements for the new configuration
-		local uProj = project.getUsageProject(prj.name)
-		config.addUsageConfig(prj, uProj, buildVariant)
-		
-		return cfg
-	end
-	
-	function project.applyConfigMap(prj, buildVariant)
-		prj.configmap = prj.configmap or {}
-		
-		if prj.isCommandProject then
+
+		-- Return blank if we've called addConfig recursively
+		if table.isempty(finalBuildVariant) then 
 			return {}
 		end
+		-- Placeholders to test for recursion
+		prj.buildVariantMap[initialBuildName] = finalBuildVariant		
+		prj.buildVariantMap[finalBuildName] = {}
+		
+		--printDebug("Baking "..prj.name..':'..finalBuildName)
+		
+		-- Get the config filter for this build variant
+		local filter = keyedblocks.getfilter(prj, finalBuildVariant)
 
-		-- strip out unsupported buildfeatures
-		local supportedfeatures = Seq:new(prj.supportedfeatures):concat(prj.solution.supportedfeatures):toSet()
-		supportedfeatures['buildcfg'] = 'buildcfg'
-		supportedfeatures['platform'] = 'platform'
+		-- Get the config
+		local cfg = config.bake(prj, filter)
+
+		-- Now we've evaluated the blocks, we can get the real final build variant
+		finalBuildVariant = cfg.buildVariant
+		finalBuildName = config.getBuildName(finalBuildVariant)
+
+		-- Add to the list of configs		
+		prj.configs[finalBuildName] = cfg
 		
-		local rv = {}
-		for k,v in pairs(buildVariant) do
-			if supportedfeatures[k] then
-				rv[k] = v
-			end
-		end
+		--printDebug("Baked "..prj.name..':'..finalBuildName)
 		
-		return rv
+		-- Add the build variants to the map
+		prj.buildVariantMap[initialBuildName] = finalBuildVariant
+		prj.buildVariantMap[finalBuildName] = finalBuildVariant
+				
+		-- Add usage requirements for the new configuration
+		local uProj = project.getUsageProject(prj.name)
+		config.addUsageConfig(prj, uProj, finalBuildVariant)
+		
+		timer.stop(tmr)
+		
+		return cfg
 	end
 	
---
--- Flattens out the build settings for a particular build configuration and
--- platform pairing, and returns the result.
---
-
-	function project.bakeconfig(prj, buildVariant)
-		local system
-		local architecture
-local tmr1 = timer.start('bakeconfig1')
-		local platform = buildVariant.platform
-
-		-- for backward compatibility with the old platforms API, use platform
-		-- as the default system or architecture if it would be a valid value.
-		if platform then
-			system = premake.api.checkvalue(platform, premake.fields.system.allowed)
-			architecture = premake.api.checkvalue(platform, premake.fields.architecture.allowed)
+	function project.applyBuildVariantMap(prj, buildVariant)
+	
+		local buildName = config.getBuildName(buildVariant)
+		if prj.buildVariantMap[buildName] then
+			return prj.buildVariantMap[buildName]
 		end
-		if architecture == nil and os.is64bit() then
-			architecture = 'x86_64'
-		end
-
-		-- figure out the target operating environment for this configuration
-		local filter, cfg
-		
-		system = system or premake.action.current().os or os.get()
-		filter = { 
-			buildcfg = buildVariant.buildcfg or 'All',
-			action = _ACTION, 
-			system = system, 
-			architecture = architecture,
-		}
-		
-		-- Insert platform & features in to filter
-		for k,v in pairs(buildVariant) do
-			filter[k] = v
-		end		
-		
-		cfg = keyedblocks.getfield(prj, filter)
-		cfg.system = cfg.system or system
-		
-		cfg.buildcfg = filter.buildcfg
-		cfg.platform = filter.platform
-		cfg.buildVariant = table.shallowcopy(buildVariant)
-		cfg.action = _ACTION
-		cfg.solution = prj.solution
-		cfg.project = prj
-		cfg.system = cfg.system
-		cfg.architecture = cfg.architecture or architecture
-		cfg.isUsage = prj.isUsage
-		cfg.platform = cfg.platform or ''		-- should supply '' as you could ask for %{cfg.platform} in a token
-		cfg.flags = cfg.flags or {}
-
-		-- Move any links in to linkAsStatic or linkAsShared
-		if cfg.links then
-			for _,linkName in ipairs(cfg.links) do
-				local linkPrj = project.getRealProject(linkName)
-				local linkKind 
-				
-				if linkPrj then 
-					linkKind = linkPrj.kind
-				else 
-					-- must be a system lib
-					linkKind = cfg.kind
-				end
-				
-				if linkKind == premake.STATICLIB then
-					oven.mergefield(cfg, 'linkAsStatic', linkName)
-				else
-					oven.mergefield(cfg, 'linkAsShared', linkName)
-				end
-			end
-			cfg.links = nil
+	
+		if prj.isCommandProject then
+			-- Create special "All" buildcfg variant, all other variants ignored
+			return config.createBuildVariant('All')
 		end
 		
-		-- Remove any libraries in linkAsStatic that have also been defined in linkAsShared
-		oven.removefromfield(cfg.linkAsStatic, cfg.linkAsShared) 
-					
-		ptypeSet( cfg, 'configprj' )
-timer.stop(tmr1)
-local tmr3 = timer.start('bakeconfig3')
-		-- fill in any calculated values
-		config.bake(cfg)
-timer.stop(tmr3)
-		return cfg
+		return buildVariant
 	end
 
 --
@@ -270,23 +198,11 @@ timer.stop(tmr3)
 --
 
 	function project.eachconfig(prj)
-		-- to make testing a little easier, allow this function to
-		-- accept an unbaked project, and fix it on the fly
 		if not prj.isbaked then
 			error('Project "'..prj.name..'" is not baked')
-			--prj = project.bake(prj)
 		end
 
-		local buildVariantList = prj.buildVariantList
-		local count = #buildVariantList
-		
-		local i = 0
-		return function ()
-			i = i + 1
-			if i <= count then
-				return project.getconfig2(prj, buildVariantList[i])
-			end
-		end
+		return Seq:new(prj.configs):getValues():each()
 	end
 	
 -- 
@@ -489,22 +405,6 @@ timer.stop(tmr3)
 		prj.blocks         = { }
 		prj.isUsage		   = isUsage;
 		
-		if isUsage then
-			prj.getRealProject = function(self) 
-				local realProj = project.getRealProject(self.name, self.namespaces)
-				self.getRealProject = function(s) return realProj end
-				return realProj 
-			end
-			prj.getUsageProject = function(self) return self end
-		else
-			prj.getRealProject = function(self) return self end 
-			prj.getUsageProject = function(self) 
-				local uProj = project.getUsageProject(self.name, self.namespaces)
-				self.getUsageProject = function(s) return uProj end
-				return uProj 
-			end
-		end
-		
 		-- Create a default usage project if there isn't one
 		if (not isUsage) and (not project.getUsageProject(prj.name, namespaces)) then
 			if not name:startswith(sln.projectprefix) then
@@ -547,15 +447,8 @@ timer.stop(tmr3)
 			prj = project.bake(prj)
 		end
 	
-		buildVariant = project.applyConfigMap(prj, buildVariant)
+		buildVariant = project.applyBuildVariantMap(prj, buildVariant)
 	
-		-- if no build configuration is specified, return the "root" project
-		-- configurations, which includes all configuration values that
-		-- weren't set with a specific configuration filter
-		if prj.isCommandProject or not buildVariant.buildcfg then
-			return prj.configs['All']
-		end
-		
 		-- look up and return the associated config		
 		local key = config.getBuildName(buildVariant)
 		return prj.configs[key]

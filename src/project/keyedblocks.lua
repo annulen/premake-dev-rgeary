@@ -111,7 +111,7 @@ function keyedblocks.create(obj, parent)
 				if kb.__name then
 					kbcfg[term].__name = term ..':'.. kb.__name
 				end
-
+				
 				-- recurse kb
 				kb = kbcfg[term]
 			end
@@ -214,9 +214,9 @@ function keyedblocks.getUsage(name, namespaces)
 end
 
 function keyedblocks.bake(usage, filter)
-	local usefeatures = config.getPropagated(filter)
-	if not table.isempty(usefeatures) then
-		project.addconfig(usage, usefeatures)
+	local buildVariant = config.getBuildVariant(filter)
+	if not table.isempty(buildVariant) then
+		project.addconfig(usage, buildVariant)
 	end
 	if not usage.keyedblocks then
 		if ptype(usage) == 'project' then
@@ -243,47 +243,28 @@ function keyedblocks.merge(dest, src)
 	end
 end
 
-
 --
--- Returns a field from the keyedblocks
---   eg. keyedblocks.getfield(cfg, { buildcfg="debug"}, 'kind')
--- May have to create the usage & bake the project if it's not already created 
+-- Given a build variant, this returns the keyword filter
 --
-function keyedblocks.getfield(obj, keywords, fieldName, dest)
-	dest = dest or {}
-	
-	local tmr = timer.start('keyedblocks.getfield')
-	local tmr2 = timer.start('keyedblocks.getfilter')
-	
-	local function getKeywordSet(ws)
-		local rv = {}
-		for k,v in pairs(ws) do
+function keyedblocks.getfilter(obj, buildVariant)
+	local tmr = timer.start('keyedblocks.getfilter')
 
-			-- convert flags to hash set, eg. { "Threading=Multi" } -> { Threading = "Multi" }
-			--  eg : configuration "flags=Symbols" will be aliased to configuration "Symbols", useconfig "flags=symbols" will be aliased to "symbols"
-			if v and type(v) == 'string' and v ~= '' then
-				v = v:lower()
-				
-				if v:find('not ') then
-					error("keyword 'not' not supported as a filter")
-				end
-				if v:find(' or ') then
-					error("keyword 'or' not supported as a filter")
-				end
-				
-				if type(k) == 'number' then
-					local k,v = config.getkeyvalue(v)
-					rv[k] = v
-				else
-					rv[k:lower()] = v
-				end
-			end
-		end
-		return rv
-	end
-	local filter = getKeywordSet(keywords)
+	-- check if we've already found the filter
+	local kb = obj.keyedblocks
 	
-	-- repeat until the filter is stable
+	-- Start with the buildVariant keywords
+	local filter = table.shallowcopy(buildVariant)
+	
+	-- Set some defaults
+	local defaultArchitecture = iif( os.is64bit(), "x64", nil )
+	
+	filter.buildcfg		= filter.buildcfg or 'All'
+	filter.platform		= filter.platform or nil
+	filter.architecture = filter.architecture or defaultArchitecture
+	filter.action 		= filter.action or _ACTION
+	filter.system		= filter.system or premake.action.current().os or os.get()
+	
+	-- Apply usesconfig, repeat until the filter is stable
 	local loop = 0
 	local loopMax = 10
 	local origFilter
@@ -294,17 +275,16 @@ function keyedblocks.getfield(obj, keywords, fieldName, dest)
 		
 		origFilter = table.shallowcopy(filter)
 		table.insert(filterList, origFilter)
-		local usesconfig = keyedblocks.getfield2(obj, filter, "usesconfig", {})
+		local usesconfig = keyedblocks.getconfig(obj, filter, "usesconfig", {})
 
-		-- usesconfig adds/mutates to the filter
+		-- usesconfig adds/mutates the filter
 		if usesconfig then
 			local filter2 = {}
 			for k,v in Seq:new(filter):concat(usesconfig):each() do
 				-- .usesconfig & filter is of the form { debug, "threading=multi", }
 				-- ie. set the filter on the key, match blocks on the value
 				if type(k) ~= 'number' then
-					v = v:lower()
-					filter2[k:lower()] = v
+					filter2[k:lower()] = v:lower()
 				end
 			end
 			filter = filter2
@@ -322,26 +302,31 @@ function keyedblocks.getfield(obj, keywords, fieldName, dest)
 		end
 		error("Please change your configuration, you've defined an unstable loop")
 	end
-	timer.stop(tmr2)
 	
-	-- Now we've got the final filter, get the correct values
-	local rv = keyedblocks.getfield2(obj, filter, fieldName, dest)
-
 	timer.stop(tmr)
 
-	return rv
+	return filter
 end
 
-function keyedblocks.getfield2(obj, filter, fieldName, dest)
+--
+-- Returns a full config from the keyedblocks
+--   eg. keyedblocks.getconfig(cfg, filter, 'kind', {})
+-- May have to create the usage & bake the project if it's not already created 
+--
+function keyedblocks.getconfig(obj, filter, fieldName, dest)
 	local rv = dest
 	if not obj.keyedblocks then
 		return nil
 	end
+
+	local tmr = timer.start('keyedblocks.getconfig')
 	local kbBase = obj.keyedblocks
 
 	-- Find the values & .removes structures which apply to 'keywords'
 	local accessedBlocks = {}
 	local foundBlocks = {}
+	foundBlocks.cfgs = {}
+	-- Set of all separate configurations
 
 	local function findBlocks(kb)
 		
@@ -351,14 +336,6 @@ function keyedblocks.getfield2(obj, filter, fieldName, dest)
 			return nil
 		end
 		accessedBlocks[kb] = kb
-		
-		if kb.usefeature then
-			filter = table.shallowcopy(filter)
-			for _,feature in ipairs(kb.usefeature) do
-				local k,v = config.getkeyvalue(feature) 
-				filter[k] = v
-			end 
-		end
 		
 		-- Apply parent before block
 		if kb.__parent then
@@ -401,6 +378,7 @@ function keyedblocks.getfield2(obj, filter, fieldName, dest)
 			for _,term in pairs(filter) do
 				-- check if this combination of terms has been specified
 				if kb.__config[term] then
+					foundBlocks.cfgs[term] = term
 					findBlocks(kb.__config[term], filter)
 				end
 			end
@@ -412,6 +390,7 @@ function keyedblocks.getfield2(obj, filter, fieldName, dest)
 				local match = false
 				for _,term in pairs(filter) do
 					if term == notTerm then
+						foundBlocks.cfgs[term] = term
 						match = true
 						break
 					end
@@ -480,15 +459,26 @@ function keyedblocks.getfield2(obj, filter, fieldName, dest)
 		end
 	end
 	
-	if rv.compiledepends then
-		local usefeatures = config.getPropagated(filter)
-		for _,v in ipairs(rv.compiledepends) do
-			local prj = project.getRealProject(v)
-			project.addconfig(prj, usefeatures)
+	if not fieldName then
+	
+		-- Add the build variant to the output
+		-- but filter out any build variants which we didn't use
+		rv.buildVariant = {}
+		for k,v in pairs(config.getBuildVariant(filter)) do
+			if k == 'buildcfg' or k == 'platform' or foundBlocks.cfgs[v] then
+				rv.buildVariant[k] = v
+			end
+		end
+		
+		if rv.compiledepends then
+			for _,v in ipairs(rv.compiledepends) do
+				local prj = project.getRealProject(v)
+				project.addconfig(prj, rv.buildVariant)
+			end
 		end
 	end
 			
-	timer.stop()
+	timer.stop(tmr)
 	
 	if isEmpty then
 		return nil
@@ -500,19 +490,17 @@ function keyedblocks.getfield2(obj, filter, fieldName, dest)
 end
 
 -- return or create the nested keyedblock for the given term
-function keyedblocks.createblock(kb, terms)
-	for _,v in pairs(terms) do
+function keyedblocks.createblock(kb, buildVariant)
+	
+	for k,v in pairs(buildVariant) do
 		v = v:lower()
-		if v:find('not ') then
-			error("keyword 'not' not supported as a filter")
+		if k == 'buildcfg' and v == 'all' then
+			-- ignore
+		else
+			kb.__config = kb.__config or {}
+			kb.__config[v] = kb.__config[v] or {}
+			kb = kb.__config[v]
 		end
-		if v:find(' or ') then
-			error("keyword 'or' not supported as a filter")
-		end
-		
-		kb.__config = kb.__config or {}
-		kb.__config[v] = kb.__config[v] or {}
-		kb = kb.__config[v]
 	end
 	
 	return kb
@@ -551,9 +539,9 @@ function keyedblocks.test()
 	local testUsage = keyedblocks.create(targets.allUsage["testUsage"])
 	local testRecursion = keyedblocks.create(targets.allUsage["testRecursion"])
 	local testBase = keyedblocks.create(targets.allUsage["testBase"])
-	local xU = keyedblocks.getfield(testUsage, { 'release', 'debug' }, nil)
-	local xB = keyedblocks.getfield(testBase, { 'release', 'debug' }, nil)
-	local xR = keyedblocks.getfield(testRecursion, { 'release', 'debug' }, nil)
+	local xU = keyedblocks.getconfig(testUsage, { 'release', 'debug' }, nil)
+	local xB = keyedblocks.getconfig(testBase, { 'release', 'debug' }, nil)
+	local xR = keyedblocks.getconfig(testRecursion, { 'release', 'debug' }, nil)
 	
 	Print.print('kbU = ', xU)
 	Print.print('kbB = ', xB)

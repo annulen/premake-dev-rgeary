@@ -389,6 +389,7 @@
 --
 
 	function os.rmdirParentsIfEmpty(p)
+		p = path.getabsolute(p)
 		if repoRoot then
 			p = p:replace('$root/', repoRoot)
 		end

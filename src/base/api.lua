@@ -212,6 +212,7 @@
 			solution 			 = api.scope.solution,
 			project 			 = api.scope.project,
 			configuration 		 = api.scope.configuration,
+			alsoPushToUsage		 = api.scope.alsoPushToUsage,
 			currentContainer 	 = premake.CurrentContainer,
 			currentConfiguration = premake.CurrentConfiguration,  			
 		}
@@ -293,6 +294,14 @@
 			local setter = api["set" .. field.kind]
 			setter(target, field.name, field, value)
 		end
+		
+		if api.scope.alsoApplyToUsage then
+			api.scopepush()
+				local scopeObj = api.scope.project or api.scope.solution
+				usage(scopeObj.name)
+				api.callback(field, value)
+			api.scopepop()
+		end			
 	end
 
 
@@ -551,7 +560,7 @@
 		
 		for k,v in pairs(values) do
 			if type(k) == 'number' then
-				table.insert(target, v)
+				target[v] = v
 			else
 				target[k] = v
 			end
@@ -685,6 +694,7 @@
 			"x32",
 			"x64",
 		},
+		isConfigurationKeyword = true,
 	}
 
 	api.register {
@@ -1328,10 +1338,10 @@
 		usagePropagation = "WhenSharedOrStaticLib",
 	}
 	
-	-- list of all features supported by the project
-	-- This is set by the api.feature command 
+	-- list of all variants supported by the project
+	-- This is set by the api.buildvariant command 
 	api.register {
-		name = "supportedfeatures",
+		name = "supportedvariants",
 		scope = "project",
 		kind = "string",
 		isList = true,
@@ -1394,14 +1404,6 @@
 		isConfigurationKeyword = true,		-- use this as a keyword for configurations
 		-- set allowed to a function so it will be evaluated later when all the toolsets have been loaded
 		allowed = function() return getSubTableNames(premake.tools); end 
-	}
-	
-	-- Enable a feature declared with "buildfeature" 
-	api.register {
-		name = "usefeature",
-		scope = "config",
-		kind = "string",
-		isList = true,
 	}
 	
 	-- Specifies a project/usage that this project configuration depends upon
@@ -1676,6 +1678,9 @@
 		-- this is the new place for storing scoped objects
 		api.scope.configuration = cfg
 		
+		-- used for build variants, default = off
+		api.scope.alsoPushToUsage = false
+		
 		return cfg
 	end
 
@@ -1684,13 +1689,11 @@
 	--  If a real project of the same name does not exist, this is a pure "usage project", a set of fields to copy to anything that uses it
 	function api.usage(name)
 		if (not name) then
-			--Only return usage projects.
-			if(ptype(premake.CurrentContainer) ~= "project") then return nil end
-			if(premake.CurrentContainer.isUsage) then 
-				return premake.CurrentContainer
-			else
-				return api.usage(premake.CurrentContainer.name)
+			local parent = api.scope.project or api.scope.solution
+			if not parent then
+				error("Invalid usage() : There is no active project or solution", 2)
 			end
+			name = parent.name
 		elseif type(name) ~= 'string' then
 			error('Invalid parameter for usage, must be a string')
 		elseif name == '_GLOBAL_CONTAINER' then
@@ -1798,7 +1801,6 @@
 		
 		return premake.CurrentContainer
 	end
-
 
 --
 -- Creates a reference to an external, non-Premake generated project.
@@ -1927,11 +1929,14 @@
 			files(inputFilePattern)
 			protobufout(outputs)
 			compiledepends(prjName)  -- if you use this protobuf project, it should be propagated as a compile dependency
-			alwaysuse("system/protobuf")	-- any derived project should always include the protobuf includes
 			
-			-- add the protobuf project to the usage requirements for the active solution
+			-- add the protobuf project to the usage requirements for the active solution. It must be executed before compiling any project
 		solution(api.scope.solution.name)
-			uses(prjName)
+			alwaysuse("system/protobuf")	-- any derived project should always include the protobuf includes
+			compiledepends(prjName)
+		usage(api.scope.solution.name)
+			alwaysuse("system/protobuf")
+			compiledepends(prjName)
 			
 		api.scopepop()
 		-- add C files to active outer project
@@ -2056,36 +2061,52 @@ function release(t, t2)
 end
 
 --*************************************************************************************
--- Features
---  Features are build configurations which are enabled by a dependent project 
---  This command defines a new feature configuration. You can define a feature
---  in your common project, and enable that feature if you use it in a 
---  derived project with "usefeature"
+-- Variants
+--  Build variants are build configurations that propagate. 
+--  When you include a configuration keyword in your current configuration with usesconfig, it normally applies only to the current project
+--  For buildvariants, the usesconfig will also propagate to any dependent projects. 
+--  Buildvariants are specified by a core (parent) project, and usually enabled by a dependent (child) project. 
+--  Define a variant with buildvariant
+--  Use the variant with useconfig
 --*************************************************************************************
 
-function api.buildfeature(featureName)
-	if not featureName or featureName == '' then
-		-- exit the feature block
+function api.buildvariant(variantName)
+	if not variantName or variantName == '' then
+		-- exit the variant configuration block
 		configuration {} 
 		return
 	end
-	if type(featureName) ~= 'string' then
-		error("Expected feature <featureName>")
+	if type(variantName) ~= 'string' then
+		error("Expected buildvariant <variantName>")
 	end
 	
-	local featureNameL = featureName:lower()
-	if premake.fields[featureNameL] or premake.fieldAliases[featureNameL] then
-		error("Invalid feature name : \""..featureName.."\", this is a keyword")
+	local variantNameL = variantName:lower()
+	if premake.fields[variantNameL] or premake.fieldAliases[variantNameL] then
+		error("Invalid variant name : \""..variantName.."\", this is a premake keyword")
 	end
 	
-	-- Register this configuration keyword as a propagated feature
-	config.registerkey(featureName, featureName, true)
+	-- Register this configuration keyword as a propagated variant
+	config.registerkey(variantName, variantName, true)
 	
-	-- Keeping track of a project's supported features is necessary in order to decide if 
-	-- we need to add a separate build configuration for a requested feature.
-	--   supportedfeatures is always propagated to the usage requirements 
-	supportedfeatures(featureName)
+	-- Keeping track of a project's supported variants is necessary in order to decide if 
+	-- we need to add a separate build configuration for a requested variant.
+	--   supportedvariants is always propagated to the usage requirements 
+	supportedvariants(variantName)
 	
-	-- Start a new configuration block for this feature
-	configuration(featureName)
+	-- Apply the variant definition to the usage requirements
+	local active = api.scope.project or api.scope.solution
+	if not active then
+		error("Can't apply variant "..variantName..", no active project or solution", 2)
+	end
+	usage(active.name)
+	
+	-- Start a new configuration block for this variant
+	configuration(variantName)
+	
+	-- everything in the variant block applies to both this project & its usage requirements
+	api.scope.alsoPushToUsage = true
+end
+
+function api.usevariant(variantName)
+	useconfig(variantName)
 end

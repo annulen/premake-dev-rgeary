@@ -458,7 +458,7 @@ function ninja.writeProjectTargets(prj, scope)
 		for _,fileFullpath in ipairs(implicitDepInputFiles) do
 			table.insert( implicitDeps, fileFullpath )
 		end
-		local libs = Seq:ipairs(cfg.linkAsStatic):concat(Seq:ipairs(cfg.linkAsShared))
+		local libs = Seq:ipairs(cfg.linkAsStatic):iconcat(cfg.linkAsShared)
 		for _,lib in libs:each() do
 			if path.containsSlash(lib) then
 				table.insert( implicitDeps, lib )
@@ -607,8 +607,11 @@ function ninja.writeProjectTargets(prj, scope)
 timer.stop(tmr)
 	
 	local defaultTarget = 'donothing'
-	if defaultconfiguration and (prj.configs or {})[defaultconfiguration] then
+	if not defaultconfiguration or not (prj.configs or {})[defaultconfiguration] then
+		defaultconfiguration = 'All'
+	end
 		
+	if (prj.configs or {})[defaultconfiguration] then
 		local cfg = prj.configs[defaultconfiguration]
 		if cfg.buildwhen ~= 'explicit' then
 			defaultTarget = prj.name..'.'..cfg.shortname

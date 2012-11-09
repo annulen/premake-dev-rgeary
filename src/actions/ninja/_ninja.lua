@@ -45,6 +45,10 @@
 			else 
 				printDebug('Building solution : '..slnList:select('name'):mkstring(', '))
 			end
+			local prjs = Seq:new(targets.prjToBuild)
+			local numProjs = prjs:count()
+			local numCfgs = prjs:selectMany('configs'):count() 
+			printDebug("#Prjs = "..tostring(numProjs).."  #Prj cfgs : "..tostring(numCfgs))
 		end,
 		
 		onSolution = function(sln)
@@ -182,29 +186,11 @@
 			if _OPTIONS['threads'] then
 				cmd = cmd .. ' -j'..tostring(_OPTIONS['threads'])
 			end
-			
-			if os.isfile('build.ninja') then
-				print('Building with ninja...')
-			else
 
-				local dir = os.getcwd()
-				while dir ~= '/' do
-					if os.isfile(path.join(dir,'build.ninja')) then
-						break
-					end
-					dir = path.getdirectory(dir)
-				end
-				if dir == '/' then
-					print('Unknown build, no solution found in current directory or its parents')
-					return
-				end
-				
-				local ninjadir = path.getrelative(os.getcwd(), dir)
-				if ninjadir:startswith('..') then ninjadir = dir end					
-				print('Running ninja on '..ninjadir)
-				
-				cmd = cmd .. ' -q -C ' .. dir
-			end
+			local dir = os.getcwd()
+			os.chdir(repoRoot)
+			
+			print('Building with ninja...')
 			
 			if _OS == 'windows' then
 				cmd = "IS_RUNNING_PREMAKE=TRUE && "..cmd
@@ -212,6 +198,8 @@
 				cmd = "export IS_RUNNING_PREMAKE=TRUE && "..cmd
 			end
 			local rv = os.executef(cmd)
+			os.chdir(dir)
+			
 			if rv ~= 0 then
 				os.exit(rv)
 			end

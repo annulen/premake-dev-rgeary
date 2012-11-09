@@ -10,6 +10,17 @@
 	local keyedblocks = premake.keyedblocks
 	local globalContainer = premake5.globalContainer
 
+	local bvignoreSet = toSet({ 'buildcfg', 'platform' })
+	
+	function config.createBuildVariant(buildcfg, platform, variants)
+		local buildVariant = { buildcfg = buildcfg, platform = platform }
+		for k,v in pairs(variants or {}) do
+			if not bvignoreSet[k] then
+				buildVariant[k] = v
+			end
+		end
+		return buildVariant
+	end
 --
 -- Create a unique name from the build configuration / platform / features
 --
@@ -19,10 +30,15 @@
 		if buildVariant.platform and buildVariant.platform ~= '' then
 			cfgName = cfgName .. platformSeparator .. config.getcasedvalue(buildVariant.platform)
 		end
+		local parts = {}
 		for k,v in pairs(buildVariant) do
-			if k ~= 'buildcfg' and k ~= 'platform' then
-				cfgName = cfgName..'.'..config.getcasedvalue(v)
+			if not bvignoreSet[k] then
+				table.insert(parts, config.getcasedvalue(v))
 			end
+		end
+		table.sort(parts)
+		if #parts > 0 then
+			cfgName = cfgName..'.'..table.concat(parts,'.')
 		end
 		
 		return cfgName
@@ -89,13 +105,47 @@
 -- Doesn't bake per se, just fills in some calculated values.
 --
 
-	function config.bake(cfg)
-		if not cfg.buildVariant then
-			cfg.buildVariant = {
-				buildcfg = cfg.buildcfg,
-				platform = cfg.platform,
-			}
+	function config.bake(prj, filter)
+		
+		local cfg = keyedblocks.getconfig(prj, filter, nil, {})
+
+		cfg.buildcfg = cfg.buildcfg or filter.buildcfg
+		cfg.platform = cfg.platform or filter.platform
+		cfg.system = cfg.system or filter.system
+		cfg.architecture = cfg.architecture or filter.architecture
+		cfg.solution = prj.solution
+		cfg.project = prj
+		cfg.isUsage = prj.isUsage
+		cfg.flags = cfg.flags or {}
+		
+		-- Move any links in to linkAsStatic or linkAsShared
+		if cfg.links then
+			for _,linkName in ipairs(cfg.links) do
+				local linkPrj = project.getRealProject(linkName)
+				local linkKind 
+				
+				if linkPrj then 
+					linkKind = linkPrj.kind
+				else 
+					-- must be a system lib
+					linkKind = cfg.kind
+				end
+				
+				if linkKind == premake.STATICLIB then
+					oven.mergefield(cfg, 'linkAsStatic', linkName)
+				else
+					oven.mergefield(cfg, 'linkAsShared', linkName)
+				end
+			end
+			cfg.links = nil
 		end
+		
+		-- Remove any libraries in linkAsStatic that have also been defined in linkAsShared
+		oven.removefromfield(cfg.linkAsStatic, cfg.linkAsShared) 
+					
+		ptypeSet( cfg, 'config' )
+
+		-- fill in any calculated values
 		
 		-- assign human-readable names
 		cfg.longname = config.getBuildName(cfg.buildVariant, '|')
@@ -110,7 +160,9 @@
 		end
 		
 		oven.expandtokens(cfg, "config")
-		
+
+		return cfg
+				
 	end
 
 
@@ -482,7 +534,7 @@
 --
 -- Returns list of keywords that are propagated
 --
-	function config.getPropagated(filter)
+	function config.getBuildVariant(filter)
 		local rv = {}
 		for k,v in pairs(filter) do
 			if (config.cfgValues[v] or {}).isPropagated then

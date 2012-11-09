@@ -100,22 +100,16 @@
 			return sln
 		end
 	
-		-- start by copying all field values into the baked result
-		local result = oven.merge({}, sln)
-		result.isbaked = true
+		sln.isbaked = true
 		
 		-- Set the defaultconfiguration if there's only one configuration
 		if #sln.configurations == 1 and not sln.defaultconfiguration then 
 			sln.defaultconfiguration = sln.configurations[1]
 		end 
 		
-		-- keep a reference to the original configuration blocks, in
-		-- case additional filtering (i.e. for files) is needed later
-		result.blocks = sln.blocks
-		
 		-- Resolve baked projects
 		local prjList = {}	
-		for i,prj in ipairs(result.projects) do
+		for i,prj in ipairs(sln.projects) do
 			local realProj = project.getRealProject(prj.name)
 			
 			if realProj and not prjList[realProj.name] then
@@ -123,13 +117,13 @@
 				prjList[realProj.name] = realProj
 			end				
 		end
-		result.projects = prjList
+		sln.projects = prjList
 		
 		-- expand all tokens
-		oven.expandtokens(result, "project")
+		oven.expandtokens(sln, "project")
 
 		-- build a master list of solution-level configuration/platform pairs
-		result.configs = solution.bakeconfigs(result)
+		sln.configs = solution.bakeconfigs(sln)
 		
 		-- flatten includesolution
 		if sln.includesolution then
@@ -145,10 +139,10 @@
 					table.insert( includeList, child )
 				end
 			end
-			result.includesolution = includeList
+			sln.includesolution = includeList
 		end
 		
-		return result
+		return sln
 	end
 	
 --
@@ -156,25 +150,14 @@
 --
 
 	function solution.bakeconfigs(sln)
-		local buildcfgs = sln.configurations or {}
-		local platforms = sln.platforms or {}
-		
 		local configs = {}
-		for _, buildcfg in ipairs(buildcfgs) do
-			if #platforms > 0 then
-				for _, platform in ipairs(platforms) do
-					table.insert(configs, { ["buildcfg"] = buildcfg, ["platform"] = platform })
-				end
-			else
-				table.insert(configs, { ["buildcfg"] = buildcfg })
+		for _,prj in pairs(sln.projects) do
+			for cfgName,cfg in pairs(prj.configs or {}) do
+				local bakedCfg = config.bake(sln, cfg.buildVariant )
+				configs[cfgName] = bakedCfg
 			end
 		end
-
-		-- fill in any calculated values
-		for _, cfg in ipairs(configs) do
-			config.bake(cfg)
-			ptypeSet( cfg, 'configs' )
-		end
+		
 		oven.expandtokens(sln, "solution", nil, "ninjaBuildDir", false)
 		
 		return configs
@@ -371,7 +354,7 @@
 		-- to make testing a little easier, allow this function to
 		-- accept an unbaked solution, and fix it on the fly
 		if not sln.isbaked then
-			sln = solution.bake(sln)
+			solution.bake(sln)
 		end
 		return sln.projects[idx]
 	end

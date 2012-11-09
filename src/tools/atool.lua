@@ -173,7 +173,7 @@ function tool:hasDependencyFileOutput(cfg)
 end
 
 function tool:decorateInput(category, input, alwaysReturnString)
-	local str = ''
+	local str
 	local inputList = toList(input)
 
 	--[[if self.cache[input] then
@@ -196,15 +196,18 @@ function tool:decorateInput(category, input, alwaysReturnString)
 		local prefix = self.prefixes[category] or ''
 		local suffix = self.suffixes[category]
 		
+		local rv = {}
 		for _,v in ipairs(inputList) do
 			if prefix then
-				v = prefix .. v
+				table.insert(rv, prefix)
 			end
+			table.insert(rv, v)
 			if suffix then
-				v = v .. suffix
+				table.insert(rv, suffix)
 			end
-			str = str .. v .. ' '
+			table.insert(rv, ' ')
 		end
+		str = table.concat(rv)
 	elseif alwaysReturnString then
 		str = table.concat(inputList, ' ')
 	else

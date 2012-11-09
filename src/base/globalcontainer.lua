@@ -27,11 +27,12 @@
 			if not premake.action.get(v) then
 				
 				-- Check if any command line arguments are solutions
-				local sln = targets.solution[v] 
-				if sln then
-					slnToBuild[sln.name] = sln
-					for _,v2 in ipairs(sln.projects) do
-						prjToBuild[v2.name] = project.getRealProject(v2.name)
+				for _,sln in pairs(targets.solution) do
+					if sln.name == v or sln.name:startswith(v..'/') then
+						slnToBuild[sln.name] = sln
+						for _,v2 in ipairs(sln.projects) do
+							prjToBuild[v2.name] = project.getRealProject(v2.name)
+						end
 					end
 				end
 				
@@ -142,9 +143,11 @@
 			project.bake(realProj)
 			
 			-- Set up the usage target defaults from RP
-			for _,buildVariant in ipairs(realProj.buildVariantList) do
+			for _,cfg in pairs(realProj.configs) do
 
-				config.addUsageConfig(realProj, usageProj, buildVariant)
+				if cfg.buildVariant then
+					config.addUsageConfig(realProj, usageProj, cfg.buildVariant)
+				end
 
 			end
 		end -- realProj

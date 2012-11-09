@@ -164,7 +164,9 @@
 		indent(2)
 			globalContainer.bakeUsageProject(uProj)
 			project.bake(uProj)
-			for ucfg in project.eachconfig(uProj) do
+			for _,realCfg in pairs(prj.configs) do
+				local filter = keyedblocks.getfilter(uProj, realCfg.buildVariant)
+				local ucfg = config.bake(uProj, filter)
 				p1("config", ucfg.shortname)
 				indent(2)			
 				for k,v in pairs(ucfg) do
@@ -195,12 +197,12 @@
 			indent(2)
 
 			p1('kind', cfg.kind)
-			local cfg2 = keyedblocks.getfield2(prj, cfg.filter or {}, nil, {})
-			p1('usefeature', cfg.usefeature)
+			local cfg2 = keyedblocks.getconfig(prj, cfg.filter or {}, nil, {})
+			p1('usevariant', cfg.usevariant)
 			p1('uses', cfg.uses)
 			p1('alwaysuses', cfg.alwaysuses)
 			local usesconfig = {}
-			for k,v in pairs(cfg.usesconfig) do
+			for k,v in pairs(cfg.usesconfig or {}) do
 				if k == v then
 					table.insert( usesconfig, k )
 				else 
@@ -212,7 +214,7 @@
 			
 			if cfg.toolset then
 				local toolset = premake.tools[cfg.toolset]
-				p2('toolset ' .. cfg.toolset)
+				p1('toolset ', cfg.toolset)
 				indent(2)
 					local function flattenArgs(t)
 						local t2 = {}
@@ -271,7 +273,9 @@
 						p5('link cmd     ', linkTool:getCommandLine(linkCmdArgsFlat))
 						p5('link flags   ', linkTool:getsysflags(cfg), ' ')
 						for k,v in pairs(linkCmdArgs) do
-						 p5(' .' .. tostring(k) ..' = '..v)
+							if k ~= 'includedirs' then
+						 		p5(' .' .. tostring(k) ..' = '..v)
+						 	end
 						end				
 					end
 					if (cfg.linktarget or {}).name then
