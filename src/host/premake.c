@@ -8,6 +8,8 @@
 #include <string.h>
 #include "premake.h"
 #include "lua.h"
+#include "lfs.h"
+#include "luasocket.h"
 
 #if PLATFORM_MACOSX
 #include <CoreFoundation/CFBundle.h>
@@ -91,6 +93,15 @@ int main(int argc, const char** argv)
 	luaL_register(L, "os",     os_functions);
 	luaL_register(L, "string", string_functions);
 	luaL_register(L, "debug",  debug_functions);
+
+	/* Register built-in modules */
+	lua_getglobal(L, "package");
+	lua_getfield(L, -1, "preload");
+	lua_pushcfunction(L, luaopen_socket_core);
+	lua_setfield(L, -2, "socket.core");
+	lua_pushcfunction(L, luaopen_lfs);
+	lua_setfield(L, -2, "lfs");
+	lua_pop(L, 2);
 
 	/* push the location of the Premake executable */
 	find_premake_executable(L, argv[0]);

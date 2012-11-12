@@ -36,6 +36,7 @@ newoption {
 		end
 		
 		location ( _OPTIONS["to"] )
+		includedirs { "luasocket/src", "luasocket/lfs/src" }
 	
 	project "Premake4"
 		targetname  "premake4"
@@ -48,6 +49,7 @@ newoption {
 		{
 			"*.txt", "**.lua", 
 			"src/**.h", "src/**.c",
+			"luasocket/**.h", "luasocket/**.c",
 			"src/host/scripts.c"
 		}
 
@@ -59,6 +61,18 @@ newoption {
 			"src/host/lua-5.1.4/**.lua",
 			"src/host/lua-5.1.4/etc/*.c"
 		}
+
+		if os.is("windows") then
+			excludes {
+				"luasocket/src/usocket.c",
+				"luasocket/src/usocket.h"
+			}
+		else
+			excludes {
+				"luasocket/src/wsocket.c",
+				"luasocket/src/wsocket.h"
+			}
+		end
 			
 		configuration "Debug"
 			includedirs { "src/host/lua-5.1.4/src" }
@@ -120,7 +134,7 @@ newoption {
 			includedirs { "src/host/luajit-2.0/src" }
 			libdirs { "src/host/luajit-2.0/src" }
 			links { "lua51" }			
-			define "LUAJIT"
+			defines { "LUAJIT" }
 
 		configuration { "DebugJIT or ReleaseJIT", "vs*" }
 			prebuildcommands
