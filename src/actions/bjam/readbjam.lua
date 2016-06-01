@@ -1,4 +1,4 @@
---
+-- See comment below
 --  Read bjam files, output premake
 --
 premake.actions.convertbjam = {}
